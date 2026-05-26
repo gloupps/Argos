@@ -1,0 +1,64 @@
+<div class="p-6 space-y-6">
+    <div class="glass p-5 rounded-xl border-l-4 border-blue-500">
+        <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+                <p class="text-[10px] text-slate-400 uppercase font-bold mb-1">Case en cours</p>
+                <h1 class="text-2xl font-bold">{{ case_name }}</h1>
+                <p class="text-sm text-slate-400 mt-2">{{ search_message }}</p>
+            </div>
+            <div class="text-right text-[10px] text-slate-500 uppercase tracking-[0.2em]">
+                ID: {{ case_id }}
+            </div>
+        </div>
+    </div>
+
+    {% if root_indicator %}
+    <div class="glass p-5 rounded-xl border-l-4 border-green-500">
+        <p class="text-[10px] text-slate-500 uppercase font-bold mb-1">Indicateur racine</p>
+        <h2 class="text-xl font-bold mono">{{ root_indicator }}</h2>
+    </div>
+    {% endif %}
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="glass p-4 rounded-xl border-l-4 border-red-500">
+            <p class="text-[10px] text-slate-500 uppercase font-bold mb-1">Indicateur Actif</p>
+            <h2 class="text-xl font-bold mono">{{ root_indicator or 'Aucun indicateur sélectionné' }}</h2>
+            <div class="flex gap-2 mt-2">
+                <span class="bg-red-500/20 text-red-400 text-[9px] px-2 py-0.5 rounded border border-red-500/30">{{ source_mode|upper }}</span>
+                <span class="bg-slate-800 text-slate-400 text-[9px] px-2 py-0.5 rounded border border-slate-700">Case</span>
+            </div>
+        </div>
+        <div class="glass p-4 rounded-xl">
+            <p class="text-[10px] text-slate-500 uppercase font-bold mb-1">Interne (OpenCTI/MISP)</p>
+            <div class="text-sm">
+                <p class="text-orange-400 font-semibold italic">Données en cours de collecte</p>
+                <p class="text-[10px] text-slate-400 mt-1">Lancez l'analyse des sources pour remplir ce panneau.</p>
+            </div>
+        </div>
+        <div class="glass p-4 rounded-xl">
+            <p class="text-[10px] text-slate-500 uppercase font-bold mb-1">Externe (VT/Shodan)</p>
+            <div class="flex items-center gap-4 mt-2">
+                <div class="text-center">
+                    <p class="text-lg font-bold text-red-500">--</p>
+                    <p class="text-[8px] text-slate-500 uppercase">Detections</p>
+                </div>
+                <div class="h-8 w-px bg-slate-800"></div>
+                <div>
+                    <p class="text-xs text-slate-300">Aucune donnée externe chargée</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="glass rounded-xl p-4">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-sm font-bold flex items-center gap-2"><i data-lucide="network" class="w-4 h-4 text-blue-500"></i> Graphe de Corrélation</h3>
+            <div class="flex gap-4 text-[10px] text-slate-500">
+                <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-red-500"></span> Root</span>
+                <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-500"></span> Pivot</span>
+                <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-blue-500"></span> Corrélé</span>
+            </div>
+        </div>
+        <div id="cy"></div>
+    </div>
+</div>

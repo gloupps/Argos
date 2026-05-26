@@ -1,0 +1,11 @@
+# Python
+__pycache__/
+
+# Virtual env
+env/
+
+# workspace
+workspace/
+
+# DB
+*.db

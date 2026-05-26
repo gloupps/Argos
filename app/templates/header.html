@@ -1,0 +1,17 @@
+<header class="h-14 flex items-center justify-between px-6 border-b border-slate-800 glass z-50">
+    <div class="flex items-center gap-3">
+        <img class="logo h-20 w-auto object-contain" src="{{ url_for('static', filename='images/logo.gif') }}" alt="Logo" class="logo">
+    </div>
+    <div class="flex gap-4">
+        <div class="flex items-center gap-2 text-xs bg-slate-900 px-3 py-1.5 rounded-full border border-slate-700">
+            <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+            <span>API Status: Ready</span>
+        </div>
+        <button
+            id="open-settings"
+            class="p-2 hover:bg-slate-700 rounded-full transition"
+            data-action="open-settings">
+            <i data-lucide="settings" class="w-4 h-4"></i>
+        </button>
+    </div>
+</header>
