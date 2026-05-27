@@ -1,105 +1,318 @@
 window.Modules = {
 
+    // ── registry FLAT { key → modDef }
     registry: {},
+
+    // ── données groupées brutes du backend
+    _grouped: null,
+
+    // ── état ON/OFF enrichissement par module (persisté)
+    state: { enabled: {} },
+
+    // ── état ON/OFF corrélation par module (persisté)
+    _correlateEnabled: {},
+
+    // ── config corrélation par module (valeurs des sliders)
     _correlationState: {},
 
+    // ══════════════════════════════════════════
+    // INIT
+    // ══════════════════════════════════════════
     async init() {
         console.log("[Modules] init");
-        const raw = localStorage.getItem("pivotlens_correlation");
-        if (raw) this._correlationState = JSON.parse(raw);
+        try {
+            const se = localStorage.getItem("pivotlens_enrich_enabled");
+            if (se) this.state.enabled = JSON.parse(se);
+            const sc = localStorage.getItem("pivotlens_correlate_enabled");
+            if (sc) this._correlateEnabled = JSON.parse(sc);
+            const ss = localStorage.getItem("pivotlens_correlation");
+            if (ss) this._correlationState = JSON.parse(ss);
+        } catch (_) {}
 
-        await this.loadRegistry();
-
-        document.addEventListener("settings:updated", () => {
-            this.renderSidebar();
-            this.renderSettingsKeys();
-        });
+        await this._load();
     },
 
-    // ── Registry ──────────────────────────────────────────
-
-    async loadRegistry() {
+    async _load() {
         try {
-            const res = await fetch("/api/run", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: "get_modules" }),
+            const res     = await fetch("/api/modules");
+            this._grouped = await res.json();
+
+            this.registry = {};
+            Object.values(this._grouped).forEach(list => {
+                list.forEach(mod => {
+                    this.registry[mod.key] = mod;
+                    if (this.state.enabled[mod.key]     === undefined) this.state.enabled[mod.key]     = true;
+                    if (this._correlateEnabled[mod.key] === undefined) this._correlateEnabled[mod.key] = true;
+                });
             });
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            this.registry = await res.json();
-            console.log("[Modules] registry loaded:", Object.keys(this.registry));
+
+            console.log("[Modules] registry:", Object.keys(this.registry));
+
+            await this._loadCorrelationSchema();
             this.renderSidebar();
-            this.renderCorrelationPanel();
-            // Don't render settings keys here — only when modal opens
+
         } catch (err) {
-            console.error("[Modules] loadRegistry error", err);
+            console.error("[Modules] load error", err);
         }
     },
 
-    // ── Sidebar ───────────────────────────────────────────
+    async _loadCorrelationSchema() {
+        try {
+            const res    = await fetch("/api/modules/correlation");
+            const schema = await res.json();
 
+            Object.entries(schema).forEach(([modKey, mod]) => {
+                if (!this._correlationState[modKey]) this._correlationState[modKey] = {};
+                (mod.fields || []).forEach(f => {
+                    if (this._correlationState[modKey][f.key] === undefined)
+                        this._correlationState[modKey][f.key] = f.default;
+                });
+            });
+
+            this._renderCorrelationPanel(schema);
+        } catch (err) {
+            console.error("[Modules] correlation schema error", err);
+        }
+    },
+
+    // ══════════════════════════════════════════
+    // SIDEBAR — toggle enrichissement ON/OFF
+    // ══════════════════════════════════════════
     renderSidebar() {
-        const containers = {
-            internal: document.getElementById("modules-internal"),
-            external: document.getElementById("modules-external"),
-            siem:     document.getElementById("modules-siem"),
-        };
-        Object.values(containers).forEach(el => { if (el) el.innerHTML = ""; });
+        if (!this._grouped) return;
 
-        Object.values(this.registry).forEach(mod => {
-            const target = containers[mod.type] || containers.external;
-            if (!target) return;
-            target.appendChild(this._buildModuleItem(mod));
+        const internalEl = document.getElementById("modules-internal");
+        const externalEl = document.getElementById("modules-external");
+        if (internalEl) internalEl.innerHTML = "";
+        if (externalEl) externalEl.innerHTML = "";
+
+        Object.entries(this._grouped).forEach(([group, modules]) => {
+            const isInternal = group.toLowerCase().includes("internal");
+            const container  = isInternal ? internalEl : externalEl;
+            if (!container) return;
+
+            modules.forEach(mod => {
+                const hasKey = SecretStore?.has?.(mod.key) ?? false;
+                const on     = hasKey && (this.state.enabled[mod.key] !== false);
+                container.appendChild(this._buildSidebarItem(mod, hasKey, on));
+            });
         });
 
         lucide.createIcons();
         document.dispatchEvent(new Event("modules:rendered"));
     },
 
-    // ── Correlation panel ─────────────────────────────────
+    _buildSidebarItem(mod, hasKey, on) {
+        const wrap = document.createElement("div");
+        wrap.className = "flex items-center justify-between px-2 py-1.5 rounded transition group " +
+                         (hasKey ? "hover:bg-slate-800" : "opacity-30");
+        wrap.title = mod.description || mod.name;
 
-    renderCorrelationPanel() {
+        // Label + icon (cliquable pour lancer enrichissement si ON)
+        const labelSpan = document.createElement("span");
+        labelSpan.className = "flex items-center gap-2 flex-1 min-w-0 " +
+                              (hasKey && on ? "cursor-pointer" : "cursor-default");
+        labelSpan.innerHTML = `
+            <i data-lucide="${mod.icon}" class="w-4 h-4 text-slate-300 shrink-0"></i>
+            <span class="text-sm truncate ${on ? "" : "text-slate-500"}">${mod.name}</span>
+
+        `;
+        if (hasKey && on) {
+            labelSpan.addEventListener("click", () => {
+                const tabId  = App?.state?.activeTab;
+                const caseId = tabId ? App?.state?.tabs[tabId]?.caseId : null;
+                if (!caseId) { JobLog?.push?.({ message: "⚠ Open a case first", status: "running" }); return; }
+                this._runModule(mod, caseId);
+            });
+        }
+
+        wrap.appendChild(labelSpan);
+
+        if (!hasKey) {
+            // Juste un badge NO KEY, pas de toggle
+            const badge = document.createElement("span");
+            badge.className = "text-[10px] px-2 py-0.5 rounded bg-red-500/10 text-red-500 shrink-0";
+            badge.textContent = "NO KEY";
+            wrap.appendChild(badge);
+            return wrap;
+        }
+
+        // Toggle switch pill
+        const toggleLabel = document.createElement("label");
+        toggleLabel.className = "relative shrink-0 ml-2 cursor-pointer";
+        toggleLabel.title = on ? "Enabled — click to disable" : "Disabled — click to enable";
+        toggleLabel.innerHTML = `
+            <input type="checkbox" class="sr-only peer" ${on ? "checked" : ""}>
+            <div class="w-9 h-5 bg-slate-700 rounded-full transition-colors
+                        peer-checked:bg-blue-500"></div>
+            <div class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow
+                        transition-transform peer-checked:translate-x-4"></div>
+        `;
+        toggleLabel.querySelector("input").addEventListener("change", e => {
+            this._setEnrichEnabled(mod.key, e.target.checked);
+            // Refresh just this item
+            const newOn = e.target.checked;
+            const nameEl = wrap.querySelector("span.text-sm");
+            if (nameEl) nameEl.className = `text-sm truncate ${newOn ? "" : "text-slate-500"}`;
+            toggleLabel.title = newOn ? "Enabled — click to disable" : "Disabled — click to enable";
+            // Reconnect click handler on label
+            labelSpan.className = "flex items-center gap-2 flex-1 min-w-0 " +
+                                  (newOn ? "cursor-pointer" : "cursor-default");
+        });
+
+        wrap.appendChild(toggleLabel);
+        return wrap;
+    },
+
+    // ══════════════════════════════════════════
+    // CORRELATION PANEL
+    // Checkbox par module → affiche/masque les paramètres
+    // Modules sans clé API : section absente
+    // ══════════════════════════════════════════
+    _renderCorrelationPanel(schema) {
         const container = document.getElementById("correlation-container");
         if (!container) return;
         container.innerHTML = "";
 
-        const withCorr = Object.values(this.registry).filter(m => m.correlation?.length);
-        if (!withCorr.length) {
+        const entries = Object.entries(schema);
+        if (!entries.length) {
             container.innerHTML = `<p class="text-slate-600 text-xs italic">No correlation modules.</p>`;
             return;
         }
 
-        withCorr.forEach(mod => {
+        // Un bloc par module de corrélation
+        entries.forEach(([modKey, mod]) => {
+            // Ne pas afficher si pas de clé API
+            const hasKey = SecretStore?.has?.(modKey) ?? false;
+            if (!hasKey) return;
+
+            const isOn = this._correlateEnabled[modKey] !== false;
+
             const block = document.createElement("div");
-            block.className = "bg-slate-900/50 p-3 rounded-lg border border-slate-800 space-y-3";
-            block.innerHTML = `
-                <div class="text-xs font-bold text-amber-400 flex items-center gap-2">
-                    <i data-lucide="${mod.icon}" class="w-4 h-4"></i> ${mod.name}
-                </div>`;
-            mod.correlation.forEach(field => {
-                const val = this._getCorrelationValue(mod.key, field.key, field.default);
-                block.appendChild(this._buildCorrelationField(mod.key, field, val));
+            block.className = "border border-slate-800 rounded-lg overflow-hidden";
+
+            // ── Header avec checkbox ──
+            const header = document.createElement("label");
+            header.className = "flex items-center justify-between px-3 py-2.5 cursor-pointer " +
+                               "bg-slate-900/60 hover:bg-slate-900 transition select-none";
+            header.innerHTML = `
+                <span class="flex items-center gap-2 text-xs font-bold text-amber-400">
+                    <i data-lucide="${mod.icon}" class="w-3.5 h-3.5"></i>
+                    ${mod.name}
+                </span>
+                <div class="relative shrink-0">
+                    <input type="checkbox" class="sr-only peer" ${isOn ? "checked" : ""}>
+                    <div class="w-8 h-4 bg-slate-700 rounded-full peer-checked:bg-amber-500 transition-colors"></div>
+                    <div class="absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full shadow-sm
+                                transition-transform peer-checked:translate-x-4"></div>
+                </div>
+            `;
+
+            // ── Params body (hidden si OFF) ──
+            const body = document.createElement("div");
+            body.className = "px-3 pb-3 pt-2 space-y-3 bg-slate-900/30 " +
+                             (isOn ? "" : "hidden");
+
+            const fields = mod.fields || [];
+            if (fields.length) {
+                fields.forEach(field => {
+                    const value = this._correlationState[modKey]?.[field.key] ?? field.default;
+                    const id    = `corr_${modKey}_${field.key}`;
+
+                    const fieldEl = document.createElement("div");
+
+                    if (field.type === "range") {
+                        fieldEl.innerHTML = `
+                            <div class="flex justify-between text-[10px] mb-1">
+                                <span class="text-slate-400">${field.label}</span>
+                                <span class="text-amber-500 font-bold" id="${id}_val">${value}</span>
+                            </div>
+                            <input type="range" id="${id}"
+                                   min="${field.min}" max="${field.max}" value="${value}"
+                                   class="w-full accent-amber-500">
+                        `;
+                        fieldEl.querySelector("input[type=range]").addEventListener("input", e => {
+                            document.getElementById(`${id}_val`).textContent = e.target.value;
+                            this.setCorrelationConfig(modKey, field.key, +e.target.value);
+                        });
+                    }
+
+                    if (field.type === "checkbox") {
+                        fieldEl.innerHTML = `
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" ${value ? "checked" : ""} class="accent-amber-500">
+                                <span class="text-[10px] text-slate-300">${field.label}</span>
+                            </label>
+                        `;
+                        fieldEl.querySelector("input[type=checkbox]").addEventListener("change", e => {
+                            this.setCorrelationConfig(modKey, field.key, e.target.checked);
+                        });
+                    }
+
+                    body.appendChild(fieldEl);
+                });
+            } else {
+                body.innerHTML = `<p class="text-[10px] text-slate-600 italic">No configurable parameters.</p>`;
+            }
+
+            // Toggle checkbox → show/hide body
+            header.querySelector("input[type=checkbox]").addEventListener("change", e => {
+                this._setCorrelateEnabled(modKey, e.target.checked);
+                if (e.target.checked) body.classList.remove("hidden");
+                else                  body.classList.add("hidden");
             });
+
+            block.appendChild(header);
+            block.appendChild(body);
             container.appendChild(block);
         });
+
         lucide.createIcons();
     },
 
-    // ── Settings keys + quotas ────────────────────────────
+    // ══════════════════════════════════════════
+    // API PUBLIQUE
+    // ══════════════════════════════════════════
+    setCorrelationConfig(modKey, field, value) {
+        if (!this._correlationState[modKey]) this._correlationState[modKey] = {};
+        this._correlationState[modKey][field] = value;
+        localStorage.setItem("pivotlens_correlation", JSON.stringify(this._correlationState));
+    },
 
+    getCorrelationConfig(modKey) {
+        return this._correlationState[modKey] || {};
+    },
+
+    isAvailable(key)        { return SecretStore?.has?.(key) ?? false; },
+    isEnabled(key)          { return this.state.enabled[key] !== false; },
+    isCorrelateEnabled(key) { return this._correlateEnabled[key] !== false; },
+
+    getEnabledEnrichKeys()    { return Object.keys(this.registry).filter(k => this.isEnabled(k)); },
+    getEnabledCorrelateKeys() { return Object.keys(this.registry).filter(k => this.isCorrelateEnabled(k)); },
+
+    collectExtraConfig() {
+        const extra = {};
+        Object.values(this.registry).forEach(mod => {
+            (mod.settings_fields || []).forEach(sf => {
+                const val = SecretStore?.get(`extra_${sf.key}`);
+                if (val) extra[sf.key] = val;
+            });
+        });
+        return extra;
+    },
+
+
+    // ══════════════════════════════════════════
+    // SETTINGS — API keys + extra fields
+    // ══════════════════════════════════════════
     renderSettingsKeys() {
         const container = document.getElementById("settings-keys");
         if (!container) return;
         container.innerHTML = "";
 
-        const groups = {};
-        Object.values(this.registry).forEach(mod => {
-            const g = mod.type || "external";
-            if (!groups[g]) groups[g] = [];
-            groups[g].push(mod);
-        });
+        if (!this._grouped) return;
 
-        Object.entries(groups).forEach(([group, modules]) => {
+        Object.entries(this._grouped).forEach(([group, modules]) => {
             const title = document.createElement("p");
             title.className = "text-[10px] text-slate-500 uppercase tracking-wider mt-4 mb-2 font-semibold";
             title.textContent = group;
@@ -109,15 +322,31 @@ window.Modules = {
                 const current = SecretStore?.get(mod.key) || "";
                 const isSet   = !!current;
                 const row     = document.createElement("div");
-                row.className = "space-y-2";
+                row.className = "space-y-2 mb-3";
+
+                // Extra fields (e.g. OpenCTI URL)
+                const extraHtml = (mod.settings_fields || []).map(sf => {
+                    const stored = SecretStore?.get(`extra_${sf.key}`) || "";
+                    return `
+                        <div class="ml-36 mt-1">
+                            <label class="text-[10px] text-slate-500 block mb-1">${sf.label}</label>
+                            <input type="${sf.type === 'url' ? 'url' : 'text'}"
+                                   id="extra-input-${sf.key}"
+                                   data-extra-key="${sf.key}"
+                                   value="${stored}"
+                                   placeholder="${sf.placeholder || ''}"
+                                   class="w-full bg-slate-900 border border-slate-700 rounded
+                                          p-2 text-sm font-mono
+                                          focus:outline-none focus:ring-1 focus:ring-blue-500">
+                        </div>`;
+                }).join("");
+
                 row.innerHTML = `
-                    <!-- Key row -->
                     <div class="flex items-center gap-3">
                         <div class="w-32 text-sm flex items-center gap-2 shrink-0">
                             <i data-lucide="${mod.icon}" class="w-4 h-4 text-slate-400"></i>
                             <span class="font-medium">${mod.name}</span>
                         </div>
-
                         <div class="relative flex-1">
                             <input type="password"
                                    id="key-input-${mod.key}"
@@ -127,45 +356,33 @@ window.Modules = {
                                    class="w-full bg-slate-900 border border-slate-700 rounded
                                           p-2 pr-8 text-sm font-mono
                                           focus:outline-none focus:ring-1 focus:ring-blue-500">
-                            <!-- Toggle visibility -->
                             <button type="button"
                                     onclick="Modules._toggleKeyVisibility('${mod.key}')"
                                     class="absolute right-2 top-1/2 -translate-y-1/2
                                            text-slate-500 hover:text-slate-300 transition"
-                                    title="Show / hide key">
-                                <i data-lucide="eye" class="w-3.5 h-3.5"
-                                   id="eye-icon-${mod.key}"></i>
+                                    title="Show / hide">
+                                <i data-lucide="eye" class="w-3.5 h-3.5" id="eye-icon-${mod.key}"></i>
                             </button>
                         </div>
-
                         <span class="text-[10px] px-2 py-1 rounded shrink-0
-                                     ${isSet
-                                        ? 'bg-green-500/20 text-green-400'
-                                        : 'bg-red-500/20 text-red-400'}">
+                                     ${isSet ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}">
                             ${isSet ? "SET" : "MISSING"}
                         </span>
-
                         ${isSet ? `
                         <button type="button"
                                 onclick="Modules._fetchQuota('${mod.key}')"
                                 class="shrink-0 text-slate-500 hover:text-blue-400 transition"
                                 title="Check quota">
-                            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"
-                               id="quota-spin-${mod.key}"></i>
+                            <i data-lucide="refresh-cw" class="w-3.5 h-3.5" id="quota-spin-${mod.key}"></i>
                         </button>` : ""}
                     </div>
-
-                    <!-- Quota row (hidden until fetched) -->
-                    <div id="quota-row-${mod.key}" class="hidden ml-36 px-3 py-2
-                         bg-slate-900/60 border border-slate-800 rounded text-xs space-y-1">
-                    </div>
+                    ${extraHtml}
+                    <div id="quota-row-${mod.key}"
+                         class="hidden ml-36 px-3 py-2 bg-slate-900/60 border border-slate-800
+                                rounded text-xs space-y-1"></div>
                 `;
                 container.appendChild(row);
-
-                // Auto-fetch quota if key already set
-                if (isSet) {
-                    this._fetchQuota(mod.key);
-                }
+                if (isSet) this._fetchQuota(mod.key);
             });
         });
 
@@ -173,29 +390,23 @@ window.Modules = {
     },
 
     // ── Quota fetch ───────────────────────────────────────
-
     async _fetchQuota(modKey) {
         const apiKey = SecretStore?.get(modKey);
         if (!apiKey) return;
-
         const spinEl = document.getElementById(`quota-spin-${modKey}`);
         spinEl?.classList.add("animate-spin");
-
-        // check_quotas is synchronous — returns { modKey: {plan_type, remaining, limit} }
         const result = await App.runAction({
-            action:   "check_quotas",
+            action: "check_quotas",
             api_keys: { [modKey]: apiKey },
+            extra_config: this.collectExtraConfig(),
         });
-
         spinEl?.classList.remove("animate-spin");
-
         const row = document.getElementById(`quota-row-${modKey}`);
         if (!row) return;
-
         if (result?.[modKey]) {
             this._renderQuota(row, result[modKey]);
         } else {
-            row.innerHTML = `<span class="text-slate-500 italic">No quota data available.</span>`;
+            row.innerHTML = `<span class="text-slate-500 italic">No quota data.</span>`;
             row.classList.remove("hidden");
         }
     },
@@ -206,13 +417,22 @@ window.Modules = {
             row.classList.remove("hidden");
             return;
         }
-
-        const planColor = quota.plan_type === "pro+"
-            ? "text-green-400"
-            : quota.plan_type === "pro"
-            ? "text-blue-400"
-            : "text-slate-400";
-
+        if (quota.plan_type === "internal") {
+            row.innerHTML = `
+                <div class="flex items-center justify-between">
+                    <span class="text-slate-400">Type</span>
+                    <span class="text-violet-400 font-semibold">Internal</span>
+                </div>
+                ${quota.version ? `<div class="flex items-center justify-between">
+                    <span class="text-slate-400">Version</span>
+                    <span class="text-white font-mono">${quota.version}</span>
+                </div>` : ""}`;
+            row.classList.remove("hidden");
+            return;
+        }
+        const planColor = quota.plan_type === "pro+" ? "text-green-400"
+                        : quota.plan_type === "pro"  ? "text-blue-400"
+                        : "text-slate-400";
         row.innerHTML = `
             <div class="flex items-center justify-between">
                 <span class="text-slate-400">Plan</span>
@@ -220,127 +440,56 @@ window.Modules = {
             </div>
             ${quota.limit != null ? `
             <div class="flex items-center justify-between">
-                <span class="text-slate-400">Credits remaining</span>
+                <span class="text-slate-400">Remaining</span>
                 <span class="text-white font-mono">${quota.remaining ?? "–"} / ${quota.limit}</span>
             </div>
             <div class="w-full bg-slate-800 rounded-full h-1 mt-1">
-                <div class="h-1 rounded-full bg-blue-500 transition-all"
-                     style="width:${quota.limit > 0 ? Math.round((quota.remaining / quota.limit) * 100) : 0}%">
-                </div>
-            </div>` : ""}
-        `;
+                <div class="h-1 rounded-full bg-blue-500"
+                     style="width:${quota.limit > 0 ? Math.round((quota.remaining/quota.limit)*100) : 0}%"></div>
+            </div>` : ""}`;
         row.classList.remove("hidden");
     },
 
-    // ── Toggle key visibility ─────────────────────────────
-
     _toggleKeyVisibility(modKey) {
-        const input   = document.getElementById(`key-input-${modKey}`);
-        const icon    = document.getElementById(`eye-icon-${modKey}`);
+        const input = document.getElementById(`key-input-${modKey}`);
+        const icon  = document.getElementById(`eye-icon-${modKey}`);
         if (!input) return;
-        const isHidden = input.type === "password";
-        input.type = isHidden ? "text" : "password";
-        // Swap icon
+        const hidden = input.type === "password";
+        input.type = hidden ? "text" : "password";
         if (icon) {
-            icon.setAttribute("data-lucide", isHidden ? "eye-off" : "eye");
+            icon.setAttribute("data-lucide", hidden ? "eye-off" : "eye");
             lucide.createIcons({ nodes: [icon.parentElement] });
         }
     },
 
-    // ── Correlation state ─────────────────────────────────
-
-    _getCorrelationValue(modKey, fieldKey, def) {
-        return this._correlationState[modKey]?.[fieldKey] ?? def;
+    // ── Persist ───────────────────────────────────────────
+    _setEnrichEnabled(key, val) {
+        this.state.enabled[key] = val;
+        localStorage.setItem("pivotlens_enrich_enabled", JSON.stringify(this.state.enabled));
+    },
+    _setCorrelateEnabled(key, val) {
+        this._correlateEnabled[key] = val;
+        localStorage.setItem("pivotlens_correlate_enabled", JSON.stringify(this._correlateEnabled));
     },
 
-    _setCorrelationValue(modKey, fieldKey, value) {
-        if (!this._correlationState[modKey]) this._correlationState[modKey] = {};
-        this._correlationState[modKey][fieldKey] = value;
-        localStorage.setItem("pivotlens_correlation", JSON.stringify(this._correlationState));
-    },
-
-    getCorrelationConfig(modKey) {
-        return this._correlationState[modKey] || {};
-    },
-
-    // ── Module sidebar item ───────────────────────────────
-
-    _buildModuleItem(mod) {
-        const hasKey = SecretStore?.has?.(mod.key) ?? false;
-        const item   = document.createElement("div");
-        item.className = `flex items-center justify-between p-2 rounded transition
-            ${hasKey ? "hover:bg-slate-800 cursor-pointer" : "opacity-40 cursor-not-allowed"}`;
-        item.dataset.moduleKey = mod.key;
-        item.title = `${mod.description || ""}\nSupports: ${(mod.supported_types || []).join(", ")}`;
-        item.innerHTML = `
-            <span class="flex items-center gap-2 text-sm">
-                <i data-lucide="${mod.icon}" class="w-4 h-4 text-slate-300"></i>
-                <span>${mod.name}</span>
-            </span>
-            <span class="module-badge text-[10px] px-2 py-0.5 rounded
-                         ${hasKey ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}">
-                ${hasKey ? "READY" : "NO KEY"}
-            </span>`;
-        item.addEventListener("click", () => {
-            if (!hasKey) return;
-            const tabId  = App?.state?.activeTab;
-            const caseId = tabId ? App?.state?.tabs[tabId]?.caseId : null;
-            if (!caseId) {
-                JobLog?.push?.({ message: "⚠ Open a case first", status: "running" });
-                return;
-            }
-            this._runModule(mod, caseId);
-        });
-        return item;
-    },
-
-    // ── Correlation field ─────────────────────────────────
-
-    _buildCorrelationField(modKey, field, value) {
-        const wrap = document.createElement("div");
-        const id   = `corr_${modKey}_${field.key}`;
-        if (field.type === "range") {
-            wrap.innerHTML = `
-                <div>
-                    <div class="flex justify-between text-[10px] mb-1">
-                        <span class="text-slate-400">${field.label}</span>
-                        <span class="text-amber-500 font-bold" id="${id}_val">${value}</span>
-                    </div>
-                    <input type="range" id="${id}" min="${field.min}" max="${field.max}"
-                           value="${value}" class="w-full accent-amber-500">
-                </div>`;
-            wrap.querySelector("input").addEventListener("input", e => {
-                document.getElementById(`${id}_val`).textContent = e.target.value;
-                this._setCorrelationValue(modKey, field.key, Number(e.target.value));
-            });
-        }
-        if (field.type === "checkbox") {
-            wrap.innerHTML = `
-                <label class="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" id="${id}" ${value ? "checked" : ""}
-                           class="accent-amber-500">
-                    <span class="text-[10px] text-slate-300">${field.label}</span>
-                </label>`;
-            wrap.querySelector("input").addEventListener("change", e => {
-                this._setCorrelationValue(modKey, field.key, e.target.checked);
-            });
-        }
-        return wrap;
-    },
-
-    // ── Run module ────────────────────────────────────────
-
+    // ── Run module (click sidebar label) ─────────────────
     _runModule(mod, caseId) {
-        const apiKeys = App._collectApiKeys();
-        App.runAction({ action: "enrich", case_id: caseId, api_keys: apiKeys })
-            .then(r => {
-                if (r?.job_id)
-                    JobLog?.push?.({ message: `[${mod.name}] Enrichment started`, status: "running" });
-            });
-        if (mod.correlation?.length) {
+        const apiKeys   = App._collectApiKeys(false);
+        const extraConf = this.collectExtraConfig();
+
+        App.runAction({
+            action: "enrich", case_id: caseId,
+            api_keys: apiKeys, extra_config: extraConf,
+        }).then(r => {
+            if (r?.job_id)
+                JobLog?.push?.({ message: `[${mod.name}] Enrichment started`, status: "running" });
+        });
+
+        if (this.isCorrelateEnabled(mod.key)) {
+            const corrKeys = App._collectApiKeys(true);
             App.runAction({
                 action: "correlate", case_id: caseId,
-                api_keys: apiKeys,
+                api_keys: corrKeys, extra_config: extraConf,
                 correlation_config: this.getCorrelationConfig(mod.key),
             }).then(r => {
                 if (r?.job_id)

@@ -1,7 +1,7 @@
 <div class="p-6 space-y-4 relative">
 
     <!-- ══════════════════════════════════════════════════ -->
-    <!-- ROW 1 : Active Case + Add Root Indicator side-by-side -->
+    <!-- ROW 1 : Active Case + Add Root Indicator           -->
     <!-- ══════════════════════════════════════════════════ -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
@@ -9,7 +9,6 @@
         <div class="lg:col-span-2 glass p-5 rounded-xl border-l-4 border-blue-500">
             <p class="text-[10px] text-slate-400 uppercase font-bold mb-2 tracking-widest">Active case</p>
 
-            <!-- Editable title -->
             <div class="flex items-center gap-2 mb-2">
                 <h1 id="case-name-display"
                     class="text-xl font-bold cursor-pointer hover:text-blue-300 transition"
@@ -42,30 +41,25 @@
             <p id="case-id-value" class="text-[10px] text-slate-600 mono mb-4"
                data-case-id="{{ case_id }}">{{ case_id }}</p>
 
-            <!-- Action buttons -->
             <div class="flex flex-wrap gap-2">
-
                 <button onclick="CaseActions.undo('{{ case_id }}')"
                         class="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700
                                px-3 py-1.5 rounded text-xs font-medium transition"
                         title="Undo last correlation">
                     <i data-lucide="undo-2" class="w-3.5 h-3.5"></i> Undo
                 </button>
-
                 <button onclick="CaseActions.exportStix('{{ case_id }}')"
                         class="flex items-center gap-1.5 bg-slate-800 hover:bg-green-700
                                px-3 py-1.5 rounded text-xs font-medium transition"
                         title="Export as STIX 2.1">
                     <i data-lucide="download" class="w-3.5 h-3.5"></i> Export STIX
                 </button>
-
                 <button onclick="CaseActions.deleteCase('{{ case_id }}')"
                         class="flex items-center gap-1.5 bg-slate-800 hover:bg-red-700
                                px-3 py-1.5 rounded text-xs font-medium transition text-red-400 hover:text-white"
                         title="Delete this case">
                     <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Delete
                 </button>
-
             </div>
         </div>
 
@@ -91,22 +85,7 @@
     </div>
 
     <!-- ══════════════════════════════════════════════════ -->
-    <!-- ROW 2 : Qualification                             -->
-    <!-- ══════════════════════════════════════════════════ -->
-    <div class="glass rounded-xl p-4">
-        <h3 class="text-sm font-bold flex items-center gap-2 mb-3">
-            <i data-lucide="crosshair" class="w-4 h-4 text-green-400"></i> Qualification
-        </h3>
-
-        <div id="qualif-header" class="mb-2">
-            <p class="text-slate-600 text-xs italic">Click a node to qualify it.</p>
-        </div>
-
-        <div id="qualif-panel" class="space-y-1 text-sm"></div>
-    </div>
-
-    <!-- ══════════════════════════════════════════════════ -->
-    <!-- ROW 3 : Correlation Graph                         -->
+    <!-- ROW 2 : Correlation Graph                         -->
     <!-- ══════════════════════════════════════════════════ -->
     <div class="glass rounded-xl p-4">
         <div class="flex justify-between items-center mb-3">
@@ -126,6 +105,29 @@
             </div>
         </div>
         <div id="cy"></div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════ -->
+    <!-- ROW 3 : Enrichment (ex Qualification)             -->
+    <!-- ══════════════════════════════════════════════════ -->
+    <div class="glass rounded-xl p-4">
+        <h3 class="text-sm font-bold flex items-center gap-2 mb-3">
+            <i data-lucide="zap" class="w-4 h-4 text-green-400"></i> Enrichment
+        </h3>
+
+        <div id="qualif-header" class="mb-2">
+            <p class="text-slate-600 text-xs italic">Right-click a node to enrich it.</p>
+        </div>
+
+        <div id="qualif-panel" class="space-y-1 text-sm"></div>
+
+        <!-- Internal Intelligence (OpenCTI etc.) -->
+        <div id="internal-intel-section" class="hidden mt-4 pt-4 border-t border-violet-900/30">
+            <h4 class="text-xs font-bold text-violet-400 flex items-center gap-2 mb-3 uppercase tracking-widest">
+                <i data-lucide="database" class="w-3.5 h-3.5"></i> Internal Intelligence
+            </h4>
+            <div id="internal-intel-panel" class="space-y-3"></div>
+        </div>
     </div>
 
     <!-- Job log -->

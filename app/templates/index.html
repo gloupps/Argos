@@ -18,16 +18,15 @@
         input[type="datetime-local"]::-webkit-calendar-picker-indicator { filter: invert(1); }
     </style>
 </head>
-<body class="h-screen flex flex-col overflow-hidden">
+<body class="h-screen flex overflow-hidden">
 
-    {% include 'header.html' %}
     {% include 'settings.html' %}
 
     <div class="flex flex-1 overflow-hidden">
         {% include 'left_navbar.html' %}
-        <main class="flex-1 flex flex-col min-w-0 bg-slate-950/50 overflow-y-auto">
+        <main class="flex-1 flex flex-col min-w-0 bg-slate-950/50 overflow-hidden">
             {% include 'tabs.html' %}
-            <div id="case-container"></div>
+            <div id="case-container" class="flex-1 overflow-y-auto"></div>
         </main>
         {% include 'right_navbar.html' %}
     </div>

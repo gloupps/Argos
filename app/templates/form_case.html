@@ -15,24 +15,11 @@
                           focus:outline-none focus:ring-1 focus:ring-blue-500">
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-                <label class="text-xs text-slate-400">Start Date</label>
-                <input name="date_from" type="datetime-local"
-                       class="w-full mt-1 p-2 rounded bg-slate-900 border border-slate-700 text-sm">
-            </div>
-            <div>
-                <label class="text-xs text-slate-400">End Date</label>
-                <input name="date_to" type="datetime-local"
-                       class="w-full mt-1 p-2 rounded bg-slate-900 border border-slate-700 text-sm">
-            </div>
-        </div>
-
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
             <label class="flex items-center justify-between text-xs bg-slate-900 p-3 rounded
                           border border-slate-800 cursor-pointer hover:border-slate-600 transition">
                 <span class="flex items-center gap-1.5">
-                    <i data-lucide="zap" class="w-3 h-3 text-purple-400"></i> Auto Analysis
+                    <i data-lucide="zap" class="w-3 h-3 text-purple-400"></i> Auto Qualify Root IOCs
                 </span>
                 <input type="checkbox" name="auto_enrich" checked class="accent-purple-500">
             </label>

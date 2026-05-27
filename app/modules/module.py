@@ -11,6 +11,11 @@ class Module(ABC):
     icon:            str  = "box"
     url:             str  = ""
 
+    # Optional extra settings fields (non-key config, e.g. instance URLs).
+    # Each entry: { key, type, label, placeholder }
+    # Supported types: "url", "text"
+    settings_fields: list = []
+
     @abstractmethod
     async def get_info(self, indicator: str, context: Dict[str, Any]) -> List[Dict[str, Any]]:
         pass
@@ -33,6 +38,7 @@ class Module(ABC):
             "url":             self.url,
             "supported_types": self.supported_types,
             "correlation":     self.get_correlation_fields(),
+            "settings_fields": self.settings_fields,
         }
 
     def get_correlation_fields(self) -> List[Dict[str, Any]]:

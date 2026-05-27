@@ -5,8 +5,7 @@ const App = {
     socket:    null,
 
     // ═══════════════════════════════════════════════════════
-    // INIT — Modules.init() is awaited first so the registry
-    // is populated before any action that needs api_keys.
+    // INIT
     // ═══════════════════════════════════════════════════════
     async init() {
         console.log("[APP] init");
@@ -17,7 +16,7 @@ const App = {
         this._initSocket();
         this._bindGlobalEvents();
 
-        // 1. Load module registry first — everything else depends on it
+        // 1. Load module registry first
         await Modules?.init?.();
 
         // 2. Boot the rest synchronously
@@ -26,7 +25,7 @@ const App = {
         SIEMModule?.init?.();
         CorrelationModule?.init?.();
         GraphModule?.init?.();
-        Tabs?.init?.();          // triggers ensureTab → CaseModule.init via loadView
+        Tabs?.init?.();
         CaseModule?.init?.();
 
         console.log("[APP] ready");
@@ -93,25 +92,26 @@ const App = {
     },
 
     _onViewLoaded(url) {
-        // bindForm is handled by CaseModule's own view:loaded listener
         if (url.includes("/view/case/")) {
             const caseId = url.split("/view/case/")[1];
             this.socket?.emit("subscribe_case", { case_id: caseId });
             GraphModule?.loadCase?.(this.state.activeTab, caseId);
             IocInput?.init?.();
-            QualifPanel?.clear?.();
+            EnrichPanel?.clear?.();
             Modules?.renderSidebar?.();
         }
     },
 
     // ── Action runner ─────────────────────────────────────
-    // api_keys are always collected from SecretStore using the
-    // loaded registry — no static fallback needed since we await
-    // Modules.init() before any user action can fire.
 
     async runAction(payload) {
         if (!payload.api_keys) {
-            payload = { ...payload, api_keys: this._collectApiKeys() };
+            const forCorr = payload.action === "correlate";
+            payload = { ...payload, api_keys: this._collectApiKeys(forCorr) };
+        }
+        // Always inject extra_config (e.g. opencti_url) unless caller set it explicitly
+        if (!payload.extra_config) {
+            payload = { ...payload, extra_config: this._collectExtraConfig() };
         }
         try {
             const res  = await fetch("/api/run", {
@@ -128,14 +128,20 @@ const App = {
         }
     },
 
-    // Collects all keys from SecretStore using the registry keys.
-    // Registry is guaranteed to be loaded when this is called.
-    _collectApiKeys() {
+    _collectApiKeys(forCorrelation = false) {
         const keys = {};
         Object.keys(Modules?.registry || {}).forEach(k => {
-            if (SecretStore?.has?.(k)) keys[k] = SecretStore.get(k);
+            const enabled = forCorrelation
+                ? Modules?.isCorrelateEnabled?.(k) !== false
+                : Modules?.isEnabled?.(k) !== false;
+            if (enabled && SecretStore?.has?.(k)) keys[k] = SecretStore.get(k);
         });
         return keys;
+    },
+
+    /** Collect non-key settings (e.g. opencti_url) via Modules. */
+    _collectExtraConfig() {
+        return Modules?.collectExtraConfig?.() || {};
     },
 
     // ── Global events ─────────────────────────────────────

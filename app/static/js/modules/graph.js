@@ -21,20 +21,25 @@ window.GraphModule = {
 
         this.instances[tabId] = { cy, caseId };
 
+        // Clic gauche → sélectionner uniquement
         cy.on("tap", "node", evt => {
-            ContextMenu.hide();
             const data = evt.target.data();
             this._selectNode(tabId, data.id);
-            // Don't open qualif panel for synthetic pivot nodes
-            if (!data.synthetic) QualifPanel?.load?.(data, caseId);
         });
+
+        // Clic sur fond → désélectionner + vider panel enrichissement
         cy.on("tap", evt => {
-            if (evt.target === cy) { ContextMenu.hide(); QualifPanel?.clear?.(); }
+            if (evt.target === cy) {
+                inst.cy?.elements().removeClass("selected-node");
+                EnrichPanel?.clear?.();
+            }
         });
+
+        // Clic droit → menu contextuel actions (pivot, enrich) SANS auto-qualif
         cy.on("cxttap", "node", evt => {
             evt.originalEvent.preventDefault();
             const data = evt.target.data();
-            if (data.synthetic) return;   // no context menu on pivot label nodes
+            if (data.synthetic) return;
             this._selectNode(tabId, data.id);
             ContextMenu.show(data, caseId, evt.originalEvent.clientX, evt.originalEvent.clientY);
         });
@@ -53,18 +58,6 @@ window.GraphModule = {
         }
     },
 
-    // ═══════════════════════════════════════════════════════
-    // RENDER
-    //
-    // The `pivot` column in the correlation table is TEXT and
-    // contains the pivot reason (e.g. "shared banner hash 123…").
-    // We materialise each unique pivot string as an intermediate
-    // node on the graph :
-    //
-    //   src ──► [pivot label node] ──► tgt
-    //
-    // This makes the pivot mechanism visible in the graph.
-    // ═══════════════════════════════════════════════════════
     render(tabId, data) {
         const inst = this.instances[tabId];
         if (!inst) return;
@@ -72,7 +65,7 @@ window.GraphModule = {
         cy.elements().remove();
 
         const elements  = [];
-        const nodeIndex = new Set();   // track which IDs we added
+        const nodeIndex = new Set();
 
         // ── 1. Real indicator nodes ───────────────────────
         (data.nodes || []).forEach(n => {
@@ -91,52 +84,41 @@ window.GraphModule = {
             });
         });
 
-        // ── 2. Edges → materialise pivot label nodes ──────
+        // ── 2. Edges → pivot label nodes ──────────────────
         (data.edges || []).forEach(e => {
             const src = String(e.src_indicator_id || e.src_value  || e.source);
             const tgt = String(e.tgt_indicator_id || e.tgt_value  || e.target);
 
             if (!nodeIndex.has(src) || !nodeIndex.has(tgt)) return;
 
-            const pivotText = e.pivot;   // TEXT column — may be null/empty
+            const pivotText = e.pivot;
 
             if (pivotText && pivotText !== "true" && pivotText !== "True") {
-                // Synthesise a pivot node per (src, pivotText) pair
                 const pivotId = `pivot::${src}::${pivotText}`;
 
                 if (!nodeIndex.has(pivotId)) {
                     nodeIndex.add(pivotId);
-                    // Truncate long pivot labels for display
-                    const display = pivotText.length > 40
-                        ? pivotText.slice(0, 37) + "…"
-                        : pivotText;
+                    const display = pivotText.length > 40 ? pivotText.slice(0, 37) + "…" : pivotText;
                     elements.push({
                         group:   "nodes",
                         data:    {
-                            id:        pivotId,
-                            label:     display,
-                            type:      "pivot",
-                            nodeType:  "pivot",
-                            synthetic: true,   // not a real indicator
-                            fullLabel: pivotText,
+                            id: pivotId, label: display,
+                            type: "pivot", nodeType: "pivot",
+                            synthetic: true, fullLabel: pivotText,
                         },
                         classes: "pivot",
                     });
                 }
 
-                // src → pivot node
                 elements.push({
                     group: "edges",
                     data:  { id: `${src}__${pivotId}`, source: src, target: pivotId, module: e.module || "" },
                 });
-                // pivot node → tgt
                 elements.push({
                     group: "edges",
                     data:  { id: `${pivotId}__${tgt}`, source: pivotId, target: tgt, module: e.module || "" },
                 });
-
             } else {
-                // No pivot text — direct edge
                 elements.push({
                     group: "edges",
                     data:  { id: `${src}__${tgt}`, source: src, target: tgt, module: e.module || "" },
@@ -145,7 +127,6 @@ window.GraphModule = {
         });
 
         if (elements.length === 0) return;
-
         cy.add(elements);
         this._runLayout(cy, elements.length);
     },
@@ -176,7 +157,7 @@ window.GraphModule = {
                     nodeRepulsion: () => 8000, idealEdgeLength: () => 100,
                     gravity: 0.4, numIter: 500,
                 });
-            } catch (e) {
+            } catch (_) {
                 layout = cy.layout({ name: "grid", fit: true, padding: 40 });
             }
         }
@@ -198,8 +179,7 @@ window.GraphModule = {
             { selector: "node.pivot", style: {
                 "background-color": "#f59e0b", "border-color": "#78350f",
                 "width": 34, "height": 34, "font-size": 8,
-                "color": "#fef3c7",
-                "shape": "diamond",
+                "color": "#fef3c7", "shape": "diamond",
             }},
             { selector: "node.correlated", style: {
                 "background-color": "#8b5cf6", "border-color": "#4c1d95",
@@ -217,10 +197,10 @@ window.GraphModule = {
     },
 };
 
-
-// ═══════════════════════════════════════════════════════════
-// CONTEXT MENU
-// ═══════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════
+// CONTEXT MENU — clic droit : actions sur un nœud
+// Pas d'auto-qualif ici, uniquement les actions manuelles
+// ══════════════════════════════════════════════════════════
 window.ContextMenu = {
 
     _el: null,
@@ -242,7 +222,6 @@ window.ContextMenu = {
             document.addEventListener("click", this._onOutsideClick, { once: true });
         }, 0);
 
-        // Prevent overflow
         const rect = menu.getBoundingClientRect();
         if (rect.right  > window.innerWidth)  menu.style.left = `${x - rect.width}px`;
         if (rect.bottom > window.innerHeight) menu.style.top  = `${y - rect.height}px`;
@@ -285,7 +264,7 @@ window.ContextMenu = {
             App.socket?.on?.("job_update", function handler(d) {
                 if (d.job_id === result.job_id && d.status === "done") {
                     App.socket.off("job_update", handler);
-                    QualifPanel?.load?.(nodeData, caseId);
+                    EnrichPanel?.load?.(nodeData, caseId);
                 }
             });
         }
@@ -317,7 +296,7 @@ window.ContextMenu = {
             App.socket?.on?.("job_update", function handler(d) {
                 if (d.job_id === result.job_id && d.status === "done") {
                     App.socket.off("job_update", handler);
-                    QualifPanel?.load?.(nodeData, caseId);
+                    EnrichPanel?.load?.(nodeData, caseId);
                 }
             });
         }
