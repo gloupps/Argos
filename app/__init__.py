@@ -1,39 +1,32 @@
-# Import webserver
-from flask import Flask  # Frontend->Backend
-from flask_socketio import SocketIO  # Backend->Frontend
+from flask import Flask
+from flask_socketio import SocketIO
 
-# Import local Class
-from .services.routes import register_routes  # webserver endpoints
-from .services.services import Services  # Services
-from .services.job_manager import JobManager  # Manage services tasks
-from .services.requester import Requester  # Handle API requests
-from .services.database import Database  # Handle DB connection
+from .services.routes import register_routes
+from .services.services import Services
+from .services.job_manager import JobManager
+from .services.requester import Requester
+from .services.database import Database
 
 
 class PivotLenApp:
 
     def __init__(self):
-        """
-        Init the app
-        """
-        self.app = Flask(__name__)  # Init web server
-        self.socketio = SocketIO(self.app, cors_allowed_origins="*")  # Init socket IO
+        self.app      = Flask(__name__)
+        self.socketio = SocketIO(self.app, cors_allowed_origins="*")
         self.app.socketio = self.socketio
 
-        self.job_manager = JobManager(self.socketio)  # Init Job Manager
+        self.job_manager = JobManager(self.socketio)
+        self.database    = Database()
+        self.requester   = Requester()
 
-        self.database = Database()  # Init DB
-        self.requester = Requester()  # Init requester
-
-        # Init services
         self.services = Services(
-            self.database, self.requester, self.job_manager, self.socketio
+            self.database,
+            self.requester,
+            self.job_manager,
+            self.socketio,
         )
 
-        self.configure_routes()  # Load webserver endpoints
+        self._configure_routes()
 
-    def configure_routes(self):
-        """
-        Configure endpoints to run Job for each tasks service
-        """
+    def _configure_routes(self):
         register_routes(self.app, self.services, self.job_manager)

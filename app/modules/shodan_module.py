@@ -1,19 +1,22 @@
 from typing import List, Dict, Any
+from .module import Module
 
 
 class ShodanModule(Module):
 
-    name = "Shodan"
-    type = "external"
-    supported_types = ["ip"]
-    url = "https://api.shodan.io"
+    name             = "Shodan"
+    description      = "IP intelligence — ports, vulns, orgs, pivots par hash de service"
+    src_type         = "external"
+    supported_types  = ["ip"]
+    icon             = "radar"
+    url              = "https://api.shodan.io"
 
     def __init__(self, requester):
         self.requester = requester
 
-    # -------------------------
-    # GET INFO
-    # -------------------------
+    # ─────────────────────────────────────────────
+    # get_info
+    # ─────────────────────────────────────────────
     async def get_info(self, indicator: str, context: Dict[str, Any]) -> List[Dict[str, Any]]:
 
         api_key = context.get("api_key")
@@ -22,127 +25,102 @@ class ShodanModule(Module):
 
         raw = await self.requester.get(
             f"{self.url}/shodan/host/{indicator}",
-            params={"key": api_key}
+            params={"key": api_key},
         )
 
-        if not raw:
+        if not raw or raw.get("error"):
             return []
 
         results = []
 
         if raw.get("org"):
-            results.append({
-                "indicator": indicator,
-                "indicator_type": "ip",
-                "field_name": "Organization",
-                "field_type": "label-capsule",
-                "value": raw["org"],
-                "icon": None,
-                "link": None,
-                "max": None
-            })
-
+            results.append(self._f(indicator, "Organization", "label-capsule", raw["org"]))
+        if raw.get("asn"):
+            results.append(self._f(indicator, "ASN", "label-capsule", raw["asn"]))
         if raw.get("os"):
-            results.append({
-                "indicator": indicator,
-                "indicator_type": "ip",
-                "field_name": "OS",
-                "field_type": "label-capsule",
-                "value": raw["os"],
-                "icon": None,
-                "link": None,
-                "max": None
-            })
+            results.append(self._f(indicator, "OS", "label-capsule", raw["os"]))
+        if raw.get("country_name"):
+            results.append(self._f(indicator, "Country", "label-capsule", raw["country_name"]))
 
         ports = raw.get("ports", [])
         if ports:
-            results.append({
-                "indicator": indicator,
-                "indicator_type": "ip",
-                "field_name": "Open Ports",
-                "field_type": "list",
-                "value": ports,
-                "icon": None,
-                "link": None,
-                "max": context.get("max_results", 5)
-            })
+            results.append(self._f(indicator, "Open Ports", "list", sorted(ports),
+                                   max_=context.get("max_results", 10)))
 
         hostnames = raw.get("hostnames", [])
         if hostnames:
-            results.append({
-                "indicator": indicator,
-                "indicator_type": "ip",
-                "field_name": "Hostnames",
-                "field_type": "list",
-                "value": hostnames,
-                "icon": None,
-                "link": None,
-                "max": 5
-            })
+            results.append(self._f(indicator, "Hostnames", "list", hostnames, max_=5))
 
-        vulns = raw.get("vulns", [])
+        domains = raw.get("domains", [])
+        if domains:
+            results.append(self._f(indicator, "Domains", "list", domains, max_=5))
+
+        vulns = list(raw.get("vulns", {}).keys()) if isinstance(raw.get("vulns"), dict) \
+                else list(raw.get("vulns", []))
         if vulns:
-            results.append({
-                "indicator": indicator,
-                "indicator_type": "ip",
-                "field_name": "Vulnerabilities",
-                "field_type": "list",
-                "value": list(vulns),
-                "icon": None,
-                "link": None,
-                "max": 5
-            })
+            results.append(self._f(indicator, "Vulnerabilities", "list", sorted(vulns), max_=10))
+
+        data_items = raw.get("data", [])
+        if data_items:
+            results.append(self._f(indicator, "Services", "label-capsule", str(len(data_items))))
+
+        tags = raw.get("tags", [])
+        if tags:
+            results.append(self._f(indicator, "Tags", "list", tags))
+
+        last_update = raw.get("last_update")
+        if last_update:
+            results.append(self._f(indicator, "Last Seen", "label-capsule", last_update[:10]))
 
         return results
 
-    # -------------------------
-    # CORRELATION
-    # -------------------------
+    # ─────────────────────────────────────────────
+    # get_correlation
+    # ─────────────────────────────────────────────
     async def get_correlation(self, indicator: str, context: Dict[str, Any]) -> List[Dict[str, Any]]:
 
-        api_key = context.get("api_key")
+        api_key    = context.get("api_key")
         if not api_key:
             return []
 
-        threshold = context.get("correlation_threshold", 5)
-        max_pivots = context.get("max_pivots", 5)
+        max_count  = int(context.get("correlation_threshold", 100))
+        max_pivots = int(context.get("max_pivots", 5))
 
         raw = await self.requester.get(
             f"{self.url}/shodan/host/{indicator}",
-            params={"key": api_key}
+            params={"key": api_key},
         )
 
-        if not raw:
+        if not raw or raw.get("error"):
             return []
 
-        results = []
-        seen = set()
+        results: List[Dict[str, Any]] = []
+        seen: set = set()
 
         for service in raw.get("data", []):
+
+            if len(results) >= max_pivots:
+                break
 
             hash_value = service.get("hash")
             if not hash_value:
                 continue
 
-            query = f"hash:{hash_value}"
-
             count_data = await self.requester.get(
                 f"{self.url}/shodan/host/count",
-                params={"key": api_key, "query": query}
+                params={"key": api_key, "query": f"hash:{hash_value}"},
             )
 
             if not count_data:
                 continue
 
             total = count_data.get("total", 0)
-
-            # filtre CTI
-            if total <= 1 or total > max_pivots:
+            if total <= 1 or total > max_count:
                 continue
 
             search_data = await self.requester.get(
                 f"{self.url}/shodan/host/search",
-                params={"key": api_key, "query": query}
+                params={"key": api_key, "query": f"hash:{hash_value}", "fields": "ip_str"},
             )
 
             if not search_data:
@@ -150,81 +128,70 @@ class ShodanModule(Module):
 
             for match in search_data.get("matches", []):
 
+                if len(results) >= max_pivots:
+                    break
+
                 ip = match.get("ip_str")
-
-                if not ip or ip == indicator:
-                    continue
-
-                if ip in seen:
+                if not ip or ip == indicator or ip in seen:
                     continue
 
                 seen.add(ip)
-
                 results.append({
                     "source_indicator": indicator,
-                    "source_type": "ip",
+                    "source_type":      "ip",
                     "target_indicator": ip,
-                    "target_type": "ip",
-                    "score": 1,
-                    "pivot": True
+                    "target_type":      "ip",
+                    "score":            1,
+                    "pivot":            True,
+                    "pivot_reason":     f"shared banner hash {hash_value} ({total} hosts)",
                 })
-
-                # limite globale
-                if len(results) >= threshold:
-                    return results
 
         return results
 
-    # -------------------------
-    # QUOTAS
-    # -------------------------
-    async def get_quotas(self, context: Dict[str, Any]):
+    # ─────────────────────────────────────────────
+    # get_quotas
+    # ─────────────────────────────────────────────
+    async def get_quotas(self, context: Dict[str, Any]) -> Dict[str, Any]:
 
         api_key = context.get("api_key")
         if not api_key:
-            return None
+            return {}
 
         data = await self.requester.get(
             f"{self.url}/account/profile",
-            params={"key": api_key}
+            params={"key": api_key},
         )
 
         if not data:
-            return None
+            return {}
 
         credits = int(data.get("credits", 0))
-        member = data.get("member", False)
+        member  = data.get("member", False)
+        plan    = "pro+" if (member and credits > 0) else ("pro" if member else "free")
 
-        if member and credits > 0:
-            plan = "pro+"
-        elif member:
-            plan = "pro"
-        else:
-            plan = "free"
+        return {"used": 0, "limit": credits, "remaining": credits, "plan_type": plan}
 
+    # ─────────────────────────────────────────────
+    # get_fields  (override pour ajouter la clé explicite)
+    # ─────────────────────────────────────────────
+    def get_fields(self) -> Dict[str, Any]:
+        base = super().get_fields()
+        base["key"] = "shodan"
+        return base
+
+    def get_correlation_fields(self):
+        return [
+            {"key": "correlation_threshold", "type": "range",
+             "label": "Max host count (pivot filter)", "min": 2, "max": 500, "default": 100},
+            {"key": "max_pivots", "type": "range",
+             "label": "Max pivots returned", "min": 1, "max": 20, "default": 5},
+        ]
+
+    # ─────────────────────────────────────────────
+    @staticmethod
+    def _f(indicator, name, field_type, value, max_=None) -> Dict[str, Any]:
         return {
-            "used": 0,
-            "limit": credits,
-            "remaining": credits,
-            "plan_type": plan
-        }
-
-    # -------------------------
-    # UI CONFIG
-    # -------------------------
-    def get_fields(self):
-        return {
-            "name": self.name,
-            "type": self.type,
-            "url": self.url,
-            "supported_types": self.supported_types,
-            "correlation": [
-                {
-                    "name": "correlation_threshold",
-                    "type": "number",
-                    "min": 1,
-                    "max": 20,
-                    "default": 5
-                },
-            ]
+            "indicator": indicator, "indicator_type": "ip",
+            "field_name": name, "field_type": field_type,
+            "value": value, "icon": None, "link": None, "max": max_,
         }

@@ -4,109 +4,60 @@ from typing import Optional, Dict, Any
 
 
 class Requester:
+    """
+    Stateless HTTP client — crée une session fraîche par appel.
+    On n'utilise PAS de session persistante car chaque job tourne
+    dans une nouvelle event loop (asyncio.run) et une session
+    aiohttp est liée à la loop qui l'a créée.
+    """
 
-    def __init__(
-        self,
-        base_url: str = "",
-        headers: Dict[str, str] = None,
-        rate_limit: int = 5,
-        timeout: int = 30,
-    ):
-        self.base_url = base_url.rstrip("/")
-        self.headers = headers or {}
-        self.timeout = aiohttp.ClientTimeout(total=timeout)
+    def __init__(self, base_url="", headers=None, rate_limit=5, timeout=30):
+        self.base_url  = base_url.rstrip("/")
+        self.headers   = headers or {}
+        self.timeout   = aiohttp.ClientTimeout(total=timeout)
+        self._sem_val  = rate_limit   # stocke la valeur, Semaphore créé par coroutine
 
-        self.semaphore = asyncio.Semaphore(rate_limit)
-        self.session: Optional[aiohttp.ClientSession] = None
-
-    # =========================
-    # 🔥 SESSION MANAGEMENT
-    # =========================
-    async def init(self):
-        if not self.session:
-            self.session = aiohttp.ClientSession(
-                timeout=self.timeout, headers=self.headers
-            )
-
-    async def close(self):
-        if self.session:
-            await self.session.close()
-
-    # =========================
-    # 🔥 CORE REQUEST
-    # =========================
     async def request(
-        self,
-        method: str,
-        endpoint: str = "",
-        params: Dict[str, Any] = None,
-        json: Dict[str, Any] = None,
-        data: Any = None,
-        headers: Dict[str, str] = None,
-        retries: int = 3,
-        return_json: bool = True,
+        self, method, endpoint="", params=None, json=None,
+        data=None, headers=None, retries=3, return_json=True,
     ) -> Optional[Any]:
 
-        await self.init()
-
-        url = f"{self.base_url}{endpoint}"
+        url    = f"{self.base_url}{endpoint}"
         params = params or {}
+        merged = {**self.headers, **(headers or {})}
 
-        merged_headers = {**self.headers, **(headers or {})}
+        # Session et Semaphore créés dans la loop courante
+        async with aiohttp.ClientSession(
+            timeout=self.timeout, headers=merged
+        ) as session:
+            sem = asyncio.Semaphore(self._sem_val)
 
-        for attempt in range(retries):
-            try:
-                async with self.semaphore:
-                    async with self.session.request(
-                        method=method.upper(),
-                        url=url,
-                        params=params,
-                        json=json,
-                        data=data,
-                        headers=merged_headers,
-                        ssl=False,
-                    ) as resp:
+            for attempt in range(retries):
+                try:
+                    async with sem:
+                        async with session.request(
+                            method=method.upper(), url=url,
+                            params=params, json=json, data=data,
+                            ssl=False,
+                        ) as resp:
+                            if resp.status == 204: return None
+                            if resp.status == 403: return None
+                            if resp.status >= 500:
+                                raise Exception(f"Server error {resp.status}")
+                            if not return_json:
+                                return await resp.text()
+                            if "application/json" not in resp.headers.get("Content-Type", ""):
+                                return None
+                            return await resp.json()
 
-                        # 🔥 HTTP handling
-                        if resp.status == 204:
-                            return None
-
-                        if resp.status == 403:
-                            return None
-
-                        if resp.status >= 500:
-                            raise Exception(f"Server error {resp.status}")
-
-                        # 🔥 Return raw si besoin
-                        if not return_json:
-                            return await resp.text()
-
-                        # 🔥 Sécurité JSON
-                        content_type = resp.headers.get("Content-Type", "")
-                        if "application/json" not in content_type:
-                            return None
-
-                        return await resp.json()
-
-            except (aiohttp.ClientError, asyncio.TimeoutError):
-                if attempt == retries - 1:
-                    return None
-
-                await asyncio.sleep(2**attempt)  # exponential backoff
+                except (aiohttp.ClientError, asyncio.TimeoutError):
+                    if attempt == retries - 1:
+                        return None
+                    await asyncio.sleep(2 ** attempt)
 
         return None
 
-    # =========================
-    # 🔥 SHORTCUTS
-    # =========================
-    async def get(self, endpoint="", **kwargs):
-        return await self.request("GET", endpoint, **kwargs)
-
-    async def post(self, endpoint="", **kwargs):
-        return await self.request("POST", endpoint, **kwargs)
-
-    async def put(self, endpoint="", **kwargs):
-        return await self.request("PUT", endpoint, **kwargs)
-
-    async def delete(self, endpoint="", **kwargs):
-        return await self.request("DELETE", endpoint, **kwargs)
+    async def get(self, endpoint="", **kw):    return await self.request("GET",    endpoint, **kw)
+    async def post(self, endpoint="", **kw):   return await self.request("POST",   endpoint, **kw)
+    async def put(self, endpoint="", **kw):    return await self.request("PUT",    endpoint, **kw)
+    async def delete(self, endpoint="", **kw): return await self.request("DELETE", endpoint, **kw)

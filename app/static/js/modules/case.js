@@ -1,89 +1,122 @@
 window.CaseModule = {
 
+    _formBound: false,
+
     init() {
         console.log("[Case] init");
-
-        this.bindEvents();
-
-        // IMPORTANT: ne pas load direct sans App ready
-        this.loadForm();
-    },
-
-    bindEvents() {
-        document.addEventListener("view:loaded", () => {
-            console.log("[Case] view loaded");
-            this.bindForm();
+        document.addEventListener("view:loaded", e => {
+            if (e.detail?.url?.includes("/view/new-case")) this.bindForm();
         });
-    },
-
-    loadForm() {
-        if (!window.App) {
-            console.warn("[Case] App not ready yet");
-            return;
-        }
-
-        App.loadView("/new_case_form");
+        App.loadView("/view/new-case");
     },
 
     bindForm() {
-        this.initModeSwitch();
-        this.bindFormSubmit();
+        this._formBound = false;
+        this._initModeSwitch();
+
+        const form = document.querySelector("form[data-case-form]");
+        if (!form) { console.warn("[Case] form not found"); return; }
+        if (this._formBound) return;
+        this._formBound = true;
+
+        form.addEventListener("submit", async e => {
+            e.preventDefault();
+            await this._handleSubmit(form);
+        });
     },
 
-    bindFormSubmit() {
-        const form = document.querySelector('form');
-        if (!form) {
+    async _handleSubmit(form) {
+        const fd         = new FormData(form);
+        const sourceMode = fd.get("source_mode") || "ioc";
+
+        const payload = {
+            action:        "create_case",
+            case_name:     fd.get("case_name")     || "",
+            source_mode:   sourceMode,
+            existing_case: fd.get("existing_case") || "",
+            source_url:    fd.get("source_url")    || "",
+            ioc_list:      fd.get("ioc_list")      || "",
+            auto_enrich:   form.querySelector('[name="auto_enrich"]')?.checked ?? false,
+            siem:          form.querySelector('[name="siem"]')?.checked         ?? false,
+            correlation:   form.querySelector('[name="correlation"]')?.checked  ?? false,
+        };
+
+        if (sourceMode !== "db" && !payload.case_name) {
+            this._showError(form, "Please enter a case name.");
             return;
         }
 
-        form.addEventListener('submit', async (event) => {
-            event.preventDefault();
+        const btn = form.querySelector("[data-action='new-case']");
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = `<i data-lucide="loader" class="w-4 h-4 animate-spin"></i> Creating…`;
+            lucide.createIcons();
+        }
+        this._clearError(form);
 
-            const formData = new FormData(form);
-            const response = await fetch('/create_case', {
-                method: 'POST',
-                body: formData,
-            });
+        const result = await App.runAction(payload);
 
-            if (!response.ok) {
-                console.error('[Case] create_case failed', response.statusText);
-                return;
-            }
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = `<i data-lucide="play" class="w-4 h-4"></i> Create Case`;
+            lucide.createIcons();
+        }
 
-            const html = await response.text();
-            const container = document.getElementById('case-container');
-            if (container) {
-                container.innerHTML = html;
-                lucide.createIcons();
-                document.dispatchEvent(new Event('view:loaded'));
-            }
-        });
+        if (!result?.case_id) {
+            this._showError(form, result?.error || "Failed to create case.");
+            return;
+        }
+
+        const tabId = App.state.activeTab;
+        if (tabId && App.state.tabs[tabId]) {
+            App.state.tabs[tabId].caseId = result.case_id;
+            App.state.tabs[tabId].name   = payload.case_name || "Case";
+            Tabs?.updateLabel?.(tabId, App.state.tabs[tabId].name);
+        }
+
+        await App.loadView(`/view/case/${result.case_id}`);
     },
 
-    initModeSwitch() {
-        const buttons = document.querySelectorAll('.mode-btn');
-        const sections = document.querySelectorAll('.form-section');
-        const modeInput = document.getElementById('source-mode');
-
-        console.log("[Case] binding form switch");
+    _initModeSwitch() {
+        const buttons     = document.querySelectorAll(".mode-btn");
+        const sections    = document.querySelectorAll(".form-section");
+        const input       = document.getElementById("source-mode");
+        const configSect  = document.getElementById("case-config-section");
+        const nameInput   = document.querySelector('[name="case_name"]');
+        if (!buttons.length) return;
 
         buttons.forEach(btn => {
-            btn.onclick = () => {
+            btn.addEventListener("click", () => {
+                const mode = btn.dataset.mode;
 
-                sections.forEach(s => s.classList.add('hidden'));
-                buttons.forEach(b => b.classList.remove('ring', 'ring-blue-500'));
+                sections.forEach(s => s.classList.add("hidden"));
+                buttons.forEach(b => {
+                    b.classList.remove("ring-2", "ring-blue-500", "bg-slate-700");
+                    b.classList.add("bg-slate-800");
+                });
 
-                const target = document.getElementById(`form-${btn.dataset.mode}`);
-                if (target) target.classList.remove('hidden');
+                document.getElementById(`form-${mode}`)?.classList.remove("hidden");
+                btn.classList.add("ring-2", "ring-blue-500", "bg-slate-700");
+                btn.classList.remove("bg-slate-800");
+                if (input) input.value = mode;
 
-                btn.classList.add('ring', 'ring-blue-500');
-                if (modeInput) {
-                    modeInput.value = btn.dataset.mode;
-                }
-            };
+                // Hide entire case config section for "existing" mode
+                if (configSect) configSect.style.display = mode === "db" ? "none" : "";
+                if (nameInput)  nameInput.required = mode !== "db";
+            });
         });
 
-        const defaultBtn = document.querySelector('[data-mode="ioc"]');
-        if (defaultBtn) defaultBtn.click();
-    }
+        document.querySelector('[data-mode="ioc"]')?.click();
+    },
+
+    _showError(form, msg) {
+        let el = form.querySelector(".case-error");
+        if (!el) {
+            el = document.createElement("p");
+            el.className = "case-error text-xs text-red-400 mt-3 px-1";
+            form.appendChild(el);
+        }
+        el.textContent = `⚠ ${msg}`;
+    },
+    _clearError(form) { form.querySelector(".case-error")?.remove(); },
 };

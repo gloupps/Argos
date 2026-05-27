@@ -1,135 +1,119 @@
-<form method="POST" action="/create_case" enctype="multipart/form-data" class="p-6 space-y-6">
+<form data-case-form class="p-6 space-y-6">
     <input type="hidden" name="source_mode" id="source-mode" value="ioc">
 
-    <!-- ========================= -->
-    <!-- CASE CONFIGURATION -->
-    <!-- ========================= -->
-    <div class="glass p-5 rounded-xl space-y-5 border-l-4 border-blue-500">
-
+    <!-- Case configuration — hidden when mode = "db" -->
+    <div id="case-config-section" class="glass p-5 rounded-xl space-y-5 border-l-4 border-blue-500">
         <h2 class="text-sm font-bold flex items-center gap-2">
-            <i data-lucide="briefcase" class="w-4 h-4 text-blue-500"></i>
-            Case Configuration
+            <i data-lucide="briefcase" class="w-4 h-4 text-blue-500"></i> Case Configuration
         </h2>
 
-        <!-- NAME -->
-        <div>
+        <div id="case-name-wrap">
             <label class="text-xs text-slate-400">Case Name</label>
             <input name="case_name" type="text" required
-                   placeholder="Ex: Infra phishing - Mai 2026"
-                   class="w-full mt-1 p-2 rounded bg-slate-900 border border-slate-700 text-sm">
+                   placeholder="Ex: Phishing infra — May 2026"
+                   class="w-full mt-1 p-2 rounded bg-slate-900 border border-slate-700 text-sm
+                          focus:outline-none focus:ring-1 focus:ring-blue-500">
         </div>
 
-        <!-- TIME WINDOW -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-
             <div>
                 <label class="text-xs text-slate-400">Start Date</label>
                 <input name="date_from" type="datetime-local"
                        class="w-full mt-1 p-2 rounded bg-slate-900 border border-slate-700 text-sm">
             </div>
-
             <div>
                 <label class="text-xs text-slate-400">End Date</label>
                 <input name="date_to" type="datetime-local"
                        class="w-full mt-1 p-2 rounded bg-slate-900 border border-slate-700 text-sm">
             </div>
-
         </div>
 
-        <!-- OPTIONS -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-
-            <label class="flex items-center justify-between text-xs bg-slate-900 p-3 rounded border border-slate-800">
-                Automatic Analysis of root indicators
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+            <label class="flex items-center justify-between text-xs bg-slate-900 p-3 rounded
+                          border border-slate-800 cursor-pointer hover:border-slate-600 transition">
+                <span class="flex items-center gap-1.5">
+                    <i data-lucide="zap" class="w-3 h-3 text-purple-400"></i> Auto Analysis
+                </span>
                 <input type="checkbox" name="auto_enrich" checked class="accent-purple-500">
             </label>
-
-            <label class="flex items-center justify-between text-xs bg-slate-900 p-3 rounded border border-slate-800">
-                SIEM Investigation
+            <label class="flex items-center justify-between text-xs bg-slate-900 p-3 rounded
+                          border border-slate-800 cursor-pointer hover:border-slate-600 transition">
+                <span class="flex items-center gap-1.5">
+                    <i data-lucide="database" class="w-3 h-3 text-blue-400"></i> SIEM
+                </span>
                 <input type="checkbox" name="siem" class="accent-blue-500">
             </label>
-
-            <label class="flex items-center justify-between text-xs bg-slate-900 p-3 rounded border border-slate-800">
-                Automatic Correlation & Pivot on root indicators
+            <label class="flex items-center justify-between text-xs bg-slate-900 p-3 rounded
+                          border border-slate-800 cursor-pointer hover:border-slate-600 transition">
+                <span class="flex items-center gap-1.5">
+                    <i data-lucide="share-2" class="w-3 h-3 text-amber-400"></i> Correlation
+                </span>
                 <input type="checkbox" name="correlation" checked class="accent-amber-500">
             </label>
-
         </div>
-
     </div>
 
-    <!-- ========================= -->
-    <!-- SOURCE INPUT -->
-    <!-- ========================= -->
+    <!-- Data sources -->
     <div class="glass p-5 rounded-xl space-y-4 border-l-4 border-green-500">
-
         <h2 class="text-sm font-bold flex items-center gap-2">
-            <i data-lucide="database" class="w-4 h-4 text-green-500"></i>
-            Data Sources
+            <i data-lucide="database" class="w-4 h-4 text-green-500"></i> Data Sources
         </h2>
 
-        <!-- MODE SELECT -->
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-
-            <button type="button" class="mode-btn bg-slate-800 hover:bg-slate-700 p-3 rounded-lg border border-slate-700" data-mode="url">
-                URL
-            </button>
-
-            <button type="button" class="mode-btn bg-slate-800 hover:bg-slate-700 p-3 rounded-lg border border-slate-700" data-mode="ioc">
-                IOC
-            </button>
-
-            <button type="button" class="mode-btn bg-slate-800 hover:bg-slate-700 p-3 rounded-lg border border-slate-700" data-mode="file">
-                STIX2
-            </button>
-
-            <button type="button" class="mode-btn bg-slate-800 hover:bg-slate-700 p-3 rounded-lg border border-slate-700" data-mode="db">
-                Existing Case
-            </button>
-
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+            <button type="button" class="mode-btn bg-slate-800 hover:bg-slate-700 p-3 rounded-lg
+                                         border border-slate-700 transition font-semibold"
+                    data-mode="url">🔗 URL</button>
+            <button type="button" class="mode-btn bg-slate-800 hover:bg-slate-700 p-3 rounded-lg
+                                         border border-slate-700 transition font-semibold"
+                    data-mode="ioc">🎯 IOC</button>
+            <button type="button" class="mode-btn bg-slate-800 hover:bg-slate-700 p-3 rounded-lg
+                                         border border-slate-700 transition font-semibold"
+                    data-mode="file">📦 STIX2</button>
+            <button type="button" class="mode-btn bg-slate-800 hover:bg-slate-700 p-3 rounded-lg
+                                         border border-slate-700 transition font-semibold"
+                    data-mode="db">📂 Existing</button>
         </div>
 
-        <!-- FORMS -->
-        <div class="space-y-4">
-
+        <div>
             <div id="form-url" class="form-section hidden">
                 <input name="source_url" type="text"
-                       placeholder="https://opencti.local/..."
-                       class="w-full p-2 rounded bg-slate-900 border border-slate-700 text-sm">
+                       placeholder="https://opencti.local/reports/…"
+                       class="w-full p-2 rounded bg-slate-900 border border-slate-700 text-sm
+                              focus:outline-none focus:ring-1 focus:ring-green-500">
             </div>
-
             <div id="form-ioc" class="form-section hidden">
-                <textarea name="ioc_list" rows="6"
-                          placeholder="1.1.1.1&#10;malicious.com&#10;hash..."
-                          class="w-full p-2 rounded bg-slate-900 border border-slate-700 text-sm mono"></textarea>
+                <label class="text-[10px] text-slate-500 uppercase tracking-wider mb-1 block">
+                    One IOC per line — IP, domain, hash, URL
+                </label>
+                <textarea name="ioc_list" rows="7"
+                          placeholder="1.1.1.1&#10;evil.example.com&#10;d41d8cd98f00b204e9800998ecf8427e"
+                          class="w-full p-2 rounded bg-slate-900 border border-slate-700 text-sm mono
+                                 focus:outline-none focus:ring-1 focus:ring-green-500 resize-none"></textarea>
             </div>
-
             <div id="form-file" class="form-section hidden">
                 <input name="stix_file" type="file" accept=".json"
                        class="w-full p-2 rounded bg-slate-900 border border-slate-700 text-sm">
             </div>
-
             <div id="form-db" class="form-section hidden">
+                <label class="text-[10px] text-slate-500 uppercase tracking-wider mb-1 block">
+                    Select an existing case to reopen
+                </label>
                 <select name="existing_case"
                         class="w-full p-2 rounded bg-slate-900 border border-slate-700 text-sm">
-                    <option value="">-- Select a case --</option>
+                    <option value="">— Select a case —</option>
                     {% for case in existing_cases %}
                         <option value="{{ case.id }}">{{ case.name }}</option>
                     {% endfor %}
                 </select>
             </div>
-
         </div>
-
     </div>
 
-    <!-- SUBMIT -->
     <div class="flex justify-end">
         <button type="submit" data-action="new-case"
-                class="bg-blue-600 hover:bg-blue-500 px-5 py-2 rounded text-sm font-semibold flex items-center gap-2">
-            <i data-lucide="play" class="w-4 h-4"></i>
-            Create Case
+                class="bg-blue-600 hover:bg-blue-500 disabled:opacity-40 px-5 py-2 rounded
+                       text-sm font-semibold flex items-center gap-2 transition">
+            <i data-lucide="play" class="w-4 h-4"></i> Create Case
         </button>
     </div>
-
 </form>

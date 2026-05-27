@@ -4,52 +4,39 @@ from typing import List, Dict, Any
 
 class Module(ABC):
 
-    name: str = ""
-    description: str = ""
-    src_type: str = ""  # internal / external / siem
+    name:            str  = ""
+    description:     str  = ""
+    src_type:        str  = "external"   # external | internal | siem
     supported_types: list = []
-    icon: str = ""
-    url: str = ""
+    icon:            str  = "box"
+    url:             str  = ""
 
-    # -------------------------
-    # DATA COLLECTION
-    # -------------------------
     @abstractmethod
-    def get_info(self, indicator: str, context: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """
-        Retourne des lignes prêtes à être stockées en DB
-        """
+    async def get_info(self, indicator: str, context: Dict[str, Any]) -> List[Dict[str, Any]]:
         pass
 
-    # -------------------------
-    # CORRELATION
-    # -------------------------
     @abstractmethod
-    def get_correlation(self, indicator: str, context: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """
-        Retourne des relations entre indicateurs
-        """
+    async def get_correlation(self, indicator: str, context: Dict[str, Any]) -> List[Dict[str, Any]]:
         pass
 
-    # -------------------------
-    # QUOTAS API
-    # -------------------------
     @abstractmethod
-    def get_quotas(self) -> Dict[str, Any]:
+    async def get_quotas(self, context: Dict[str, Any]) -> Dict[str, Any]:
         pass
 
-    # -------------------------
-    # UI CONFIG
-    # -------------------------
     def get_fields(self) -> Dict[str, Any]:
         return {
-            "name": self.name,
-            "description": self.description,
-            "type": self.type,
-            "icon": self.icon,
-            "url": self.url,
-            "correlation": self.get_correlation_fields()
+            "key":             self._key(),
+            "name":            self.name,
+            "description":     self.description,
+            "type":            self.src_type,
+            "icon":            self.icon,
+            "url":             self.url,
+            "supported_types": self.supported_types,
+            "correlation":     self.get_correlation_fields(),
         }
 
     def get_correlation_fields(self) -> List[Dict[str, Any]]:
         return []
+
+    def _key(self) -> str:
+        return self.name.lower().replace(" ", "_")

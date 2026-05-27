@@ -1,64 +1,137 @@
-<div class="p-6 space-y-6">
-    <div class="glass p-5 rounded-xl border-l-4 border-blue-500">
-        <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
-                <p class="text-[10px] text-slate-400 uppercase font-bold mb-1">Case en cours</p>
-                <h1 class="text-2xl font-bold">{{ case_name }}</h1>
-                <p class="text-sm text-slate-400 mt-2">{{ search_message }}</p>
-            </div>
-            <div class="text-right text-[10px] text-slate-500 uppercase tracking-[0.2em]">
-                ID: {{ case_id }}
-            </div>
-        </div>
-    </div>
+<div class="p-6 space-y-4 relative">
 
-    {% if root_indicator %}
-    <div class="glass p-5 rounded-xl border-l-4 border-green-500">
-        <p class="text-[10px] text-slate-500 uppercase font-bold mb-1">Indicateur racine</p>
-        <h2 class="text-xl font-bold mono">{{ root_indicator }}</h2>
-    </div>
-    {% endif %}
+    <!-- ══════════════════════════════════════════════════ -->
+    <!-- ROW 1 : Active Case + Add Root Indicator side-by-side -->
+    <!-- ══════════════════════════════════════════════════ -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div class="glass p-4 rounded-xl border-l-4 border-red-500">
-            <p class="text-[10px] text-slate-500 uppercase font-bold mb-1">Indicateur Actif</p>
-            <h2 class="text-xl font-bold mono">{{ root_indicator or 'Aucun indicateur sélectionné' }}</h2>
-            <div class="flex gap-2 mt-2">
-                <span class="bg-red-500/20 text-red-400 text-[9px] px-2 py-0.5 rounded border border-red-500/30">{{ source_mode|upper }}</span>
-                <span class="bg-slate-800 text-slate-400 text-[9px] px-2 py-0.5 rounded border border-slate-700">Case</span>
-            </div>
-        </div>
-        <div class="glass p-4 rounded-xl">
-            <p class="text-[10px] text-slate-500 uppercase font-bold mb-1">Interne (OpenCTI/MISP)</p>
-            <div class="text-sm">
-                <p class="text-orange-400 font-semibold italic">Données en cours de collecte</p>
-                <p class="text-[10px] text-slate-400 mt-1">Lancez l'analyse des sources pour remplir ce panneau.</p>
-            </div>
-        </div>
-        <div class="glass p-4 rounded-xl">
-            <p class="text-[10px] text-slate-500 uppercase font-bold mb-1">Externe (VT/Shodan)</p>
-            <div class="flex items-center gap-4 mt-2">
-                <div class="text-center">
-                    <p class="text-lg font-bold text-red-500">--</p>
-                    <p class="text-[8px] text-slate-500 uppercase">Detections</p>
+        <!-- Active case (2/3) -->
+        <div class="lg:col-span-2 glass p-5 rounded-xl border-l-4 border-blue-500">
+            <p class="text-[10px] text-slate-400 uppercase font-bold mb-2 tracking-widest">Active case</p>
+
+            <!-- Editable title -->
+            <div class="flex items-center gap-2 mb-2">
+                <h1 id="case-name-display"
+                    class="text-xl font-bold cursor-pointer hover:text-blue-300 transition"
+                    title="Click to rename"
+                    onclick="CaseHeader.startRename()">{{ case_name }}</h1>
+
+                <input id="case-name-input"
+                       class="hidden text-xl font-bold bg-transparent border-b border-blue-500
+                              outline-none text-white w-full max-w-sm"
+                       type="text" value="{{ case_name }}">
+
+                <div id="case-name-actions" class="hidden flex items-center gap-1">
+                    <button onclick="CaseHeader.confirmRename()"
+                            class="p-1 text-green-400 hover:text-green-300">
+                        <i data-lucide="check" class="w-4 h-4"></i>
+                    </button>
+                    <button onclick="CaseHeader.cancelRename()"
+                            class="p-1 text-slate-500 hover:text-slate-300">
+                        <i data-lucide="x" class="w-4 h-4"></i>
+                    </button>
                 </div>
-                <div class="h-8 w-px bg-slate-800"></div>
-                <div>
-                    <p class="text-xs text-slate-300">Aucune donnée externe chargée</p>
-                </div>
+
+                <button onclick="CaseHeader.startRename()"
+                        class="text-slate-600 hover:text-slate-400 transition"
+                        title="Rename case">
+                    <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
+                </button>
+            </div>
+
+            <p id="case-id-value" class="text-[10px] text-slate-600 mono mb-4"
+               data-case-id="{{ case_id }}">{{ case_id }}</p>
+
+            <!-- Action buttons -->
+            <div class="flex flex-wrap gap-2">
+
+                <button onclick="CaseActions.undo('{{ case_id }}')"
+                        class="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700
+                               px-3 py-1.5 rounded text-xs font-medium transition"
+                        title="Undo last correlation">
+                    <i data-lucide="undo-2" class="w-3.5 h-3.5"></i> Undo
+                </button>
+
+                <button onclick="CaseActions.exportStix('{{ case_id }}')"
+                        class="flex items-center gap-1.5 bg-slate-800 hover:bg-green-700
+                               px-3 py-1.5 rounded text-xs font-medium transition"
+                        title="Export as STIX 2.1">
+                    <i data-lucide="download" class="w-3.5 h-3.5"></i> Export STIX
+                </button>
+
+                <button onclick="CaseActions.deleteCase('{{ case_id }}')"
+                        class="flex items-center gap-1.5 bg-slate-800 hover:bg-red-700
+                               px-3 py-1.5 rounded text-xs font-medium transition text-red-400 hover:text-white"
+                        title="Delete this case">
+                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Delete
+                </button>
+
             </div>
         </div>
+
+        <!-- Add root indicator (1/3) -->
+        <div class="lg:col-span-1 glass p-5 rounded-xl border-l-4 border-green-500">
+            <p class="text-[10px] text-slate-400 uppercase font-bold mb-3 tracking-widest">
+                Add root indicator
+            </p>
+            <div class="space-y-3">
+                <input id="new-ioc-input" type="text"
+                       placeholder="IP, domain, hash…"
+                       class="w-full bg-slate-900 border border-slate-700 rounded p-2
+                              text-sm mono focus:outline-none focus:ring-1 focus:ring-green-500">
+                <button id="new-ioc-btn"
+                        class="w-full bg-green-700 hover:bg-green-600 disabled:opacity-40
+                               px-3 py-2 rounded text-xs font-semibold transition
+                               flex items-center justify-center gap-1.5">
+                    <i data-lucide="plus-circle" class="w-4 h-4"></i> Add to case
+                </button>
+            </div>
+        </div>
+
     </div>
 
+    <!-- ══════════════════════════════════════════════════ -->
+    <!-- ROW 2 : Qualification                             -->
+    <!-- ══════════════════════════════════════════════════ -->
     <div class="glass rounded-xl p-4">
-        <div class="flex justify-between items-center mb-4">
-            <h3 class="text-sm font-bold flex items-center gap-2"><i data-lucide="network" class="w-4 h-4 text-blue-500"></i> Graphe de Corrélation</h3>
-            <div class="flex gap-4 text-[10px] text-slate-500">
-                <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-red-500"></span> Root</span>
-                <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-500"></span> Pivot</span>
-                <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-blue-500"></span> Corrélé</span>
+        <h3 class="text-sm font-bold flex items-center gap-2 mb-3">
+            <i data-lucide="crosshair" class="w-4 h-4 text-green-400"></i> Qualification
+        </h3>
+
+        <div id="qualif-header" class="mb-2">
+            <p class="text-slate-600 text-xs italic">Click a node to qualify it.</p>
+        </div>
+
+        <div id="qualif-panel" class="space-y-1 text-sm"></div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════ -->
+    <!-- ROW 3 : Correlation Graph                         -->
+    <!-- ══════════════════════════════════════════════════ -->
+    <div class="glass rounded-xl p-4">
+        <div class="flex justify-between items-center mb-3">
+            <h3 class="text-sm font-bold flex items-center gap-2">
+                <i data-lucide="network" class="w-4 h-4 text-blue-400"></i> Correlation Graph
+            </h3>
+            <div class="flex gap-3 text-[10px] text-slate-500">
+                <span class="flex items-center gap-1">
+                    <span class="w-2 h-2 rounded-full bg-red-500 inline-block"></span> Root
+                </span>
+                <span class="flex items-center gap-1">
+                    <span class="w-2 h-2 rounded-full bg-amber-500 inline-block"></span> Pivot
+                </span>
+                <span class="flex items-center gap-1">
+                    <span class="w-2 h-2 rounded-full bg-violet-500 inline-block"></span> Correlated
+                </span>
             </div>
         </div>
         <div id="cy"></div>
     </div>
+
+    <!-- Job log -->
+    <div id="job-log"
+         class="hidden fixed bottom-4 right-4 w-80 max-h-40 overflow-y-auto
+                bg-slate-950/95 border border-slate-700 rounded-lg p-3
+                space-y-0.5 z-50 shadow-2xl"></div>
+
 </div>

@@ -1,67 +1,20 @@
+<aside class="w-64 border-r border-slate-800 flex flex-col glass overflow-y-auto">
+    <div class="p-4 space-y-5">
 
-<aside class="w-72 border-r border-slate-800 flex flex-col glass overflow-y-auto">
-
-    <div class="p-4 space-y-6">
-
-        <!-- ========================= -->
-        <!-- ROOT INPUT -->
-        <!-- ========================= -->
-        <section>
-            <h3 class="text-xs font-semibold text-slate-500 uppercase mb-4 tracking-wider flex items-center gap-2">
-                <i data-lucide="search" class="w-3 h-3"></i> New root indicator
-            </h3>
-
-            <div class="space-y-3">
-                <input type="text"
-                       placeholder="IP, Domain, Hash..."
-                       class="w-full bg-slate-900 border border-slate-600 rounded p-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500">
-
-                <button class="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-2 rounded transition flex items-center justify-center gap-2">
-                    <i data-lucide="zap" class="w-4 h-4"></i>
-                    Analyze Indicator
-                </button>
-            </div>
-        </section>
-
-        <hr class="border-slate-700">
-
-        <!-- ========================= -->
-        <!-- INTERNAL SOURCES -->
-        <!-- ========================= -->
+        <!-- Internal sources -->
         <section>
             <h3 class="text-xs font-semibold text-slate-500 uppercase mb-3 tracking-wider">
                 Internal Sources
             </h3>
-
-            <div id="modules-internal" class="space-y-2 text-sm">
-                <!-- injected by Modules.js -->
-            </div>
+            <div id="modules-internal" class="space-y-1 text-sm"></div>
         </section>
 
-        <!-- ========================= -->
-        <!-- EXTERNAL SOURCES -->
-        <!-- ========================= -->
+        <!-- External sources -->
         <section>
             <h3 class="text-xs font-semibold text-slate-500 uppercase mb-3 tracking-wider">
                 External Sources
             </h3>
-
-            <div id="modules-external" class="space-y-2 text-sm">
-                <!-- injected by Modules.js -->
-            </div>
-        </section>
-
-        <hr class="border-slate-800">
-
-        <!-- ========================= -->
-        <!-- HISTORY -->
-        <!-- ========================= -->
-        <section>
-            <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 block">
-                Case History
-            </label>
-
-            <div id="history-list" class="space-y-1 max-h-64 overflow-y-auto pr-2"></div>
+            <div id="modules-external" class="space-y-1 text-sm"></div>
         </section>
 
     </div>
