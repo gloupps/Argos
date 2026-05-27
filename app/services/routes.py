@@ -67,12 +67,13 @@ def _handle_create_case(db_path, data):
     source_url = (data.get("source_url") or "").strip()
     try:
         if source_mode == "db" and existing_id:
+            # FIX : SELECT id, name pour récupérer le vrai nom du case existant
             row = conn.execute(
-                "SELECT id FROM cases WHERE id=?", (existing_id,)
+                "SELECT id, name FROM cases WHERE id=?", (existing_id,)
             ).fetchone()
             if not row:
-                return None, f"Case {existing_id} not found"
-            return row["id"], None
+                return None, None, f"Case {existing_id} not found"
+            return row["id"], row["name"], None
         case_id = str(uuid.uuid4())
         conn.execute("INSERT INTO cases (id, name) VALUES (?,?)", (case_id, case_name))
         if source_mode == "ioc" and ioc_raw:
@@ -87,10 +88,10 @@ def _handle_create_case(db_path, data):
                 (source_url, "url", "root", case_id),
             )
         conn.commit()
-        return case_id, None
+        return case_id, case_name, None
     except Exception as e:
         conn.rollback()
-        return None, str(e)
+        return None, None, str(e)
     finally:
         conn.close()
 
@@ -340,11 +341,14 @@ def register_routes(app, services, job_manager):
             value = (data.get("value") or "").strip()
             if not case_id or not value:
                 return jsonify({"error": "missing case_id or value"}), 400
+            node_type = data.get("node_type", "root")
+            if node_type not in ("root", "correlated", "pivot"):
+                node_type = "root"
             try:
                 conn = _get_conn(db_path)
                 conn.execute(
                     "INSERT OR IGNORE INTO indicators (value,type,node_type,case_id) VALUES(?,?,?,?)",
-                    (value, _guess_type(value), "root", case_id),
+                    (value, _guess_type(value), node_type, case_id),
                 )
                 conn.commit()
                 conn.close()
@@ -374,9 +378,208 @@ def register_routes(app, services, job_manager):
             except Exception as e:
                 return jsonify({"error": str(e)}), 500
 
+        # rename_pivot
+        if action == "rename_pivot":
+            case_id = data.get("case_id")
+            old_label = (data.get("old_label") or "").strip()
+            new_label = (data.get("new_label") or "").strip()
+            if not case_id or not old_label or not new_label:
+                return (
+                    jsonify({"error": "missing case_id, old_label or new_label"}),
+                    400,
+                )
+            try:
+                conn = _get_conn(db_path)
+                # Renomme dans la table correlation (colonne pivot)
+                conn.execute(
+                    "UPDATE correlation SET pivot=? WHERE case_id=? AND pivot=?",
+                    (new_label, case_id, old_label),
+                )
+                # Renomme aussi si c'est un indicateur de type pivot dans indicators
+                conn.execute(
+                    "UPDATE indicators SET value=? WHERE case_id=? AND value=? AND node_type='pivot'",
+                    (new_label, case_id, old_label),
+                )
+                conn.commit()
+                conn.close()
+                import asyncio
+
+                loop = asyncio.new_event_loop()
+                try:
+                    loop.run_until_complete(services.database.connect())
+                    graph = loop.run_until_complete(
+                        services.database.get_graph(case_id)
+                    )
+                finally:
+                    loop.close()
+                socketio.emit("graph_update", {"case_id": case_id, "graph": graph})
+                return jsonify({"ok": True})
+            except Exception as e:
+                return jsonify({"error": str(e)}), 500
+
+        # delete_indicator
+        if action == "delete_indicator":
+            case_id = data.get("case_id")
+            value = (data.get("value") or "").strip()
+            if not case_id or not value:
+                return jsonify({"error": "missing case_id or value"}), 400
+            try:
+                conn = _get_conn(db_path)
+                row = conn.execute(
+                    "SELECT id FROM indicators WHERE value=? AND case_id=?",
+                    (value, case_id),
+                ).fetchone()
+                if not row:
+                    conn.close()
+                    return jsonify({"error": "indicator not found"}), 404
+                ind_id = row["id"]
+                conn.execute(
+                    "DELETE FROM module_data  WHERE indicator_id=? AND case_id=?",
+                    (ind_id, case_id),
+                )
+                conn.execute(
+                    "DELETE FROM correlation  WHERE case_id=? AND (src_indicator_id=? OR tgt_indicator_id=?)",
+                    (case_id, ind_id, ind_id),
+                )
+                conn.execute("DELETE FROM indicators   WHERE id=?", (ind_id,))
+                conn.commit()
+                conn.close()
+                import asyncio
+
+                loop = asyncio.new_event_loop()
+                try:
+                    loop.run_until_complete(services.database.connect())
+                    graph = loop.run_until_complete(
+                        services.database.get_graph(case_id)
+                    )
+                finally:
+                    loop.close()
+                socketio.emit("graph_update", {"case_id": case_id, "graph": graph})
+                return jsonify({"ok": True})
+            except Exception as e:
+                return jsonify({"error": str(e)}), 500
+
+        # add_manual_edge
+        # Deux modes :
+        #   mode "ioc-to-ioc"   : src + tgt sont deux IOC réels, pivot_label = nom du pivot à créer
+        #   mode "ioc-to-pivot" : pivot_label est fourni + is_pivot_link=True
+        #                         → on relie l'IOC au pivot existant (via son texte en DB)
+        if action == "add_manual_edge":
+            case_id = data.get("case_id")
+            src = (data.get("src") or "").strip()
+            tgt = (data.get("tgt") or "").strip()
+            pivot_label = (data.get("pivot_label") or "").strip()
+            is_pivot_link = bool(data.get("is_pivot_link", False))
+            if not case_id or not src or not tgt:
+                return jsonify({"error": "missing case_id, src or tgt"}), 400
+            try:
+                conn = _get_conn(db_path)
+
+                if is_pivot_link:
+                    # ── Mode lien vers pivot existant ──────────────
+                    # src et tgt sont des IOC réels, pivot_label est le texte du pivot
+                    # On cherche l'IOC source et l'IOC cible (ils existent déjà)
+                    src_row = conn.execute(
+                        "SELECT id FROM indicators WHERE value=? AND case_id=?",
+                        (src, case_id),
+                    ).fetchone()
+                    tgt_row = conn.execute(
+                        "SELECT id FROM indicators WHERE value=? AND case_id=?",
+                        (tgt, case_id),
+                    ).fetchone()
+                    if not src_row:
+                        # src n'existe pas encore → upsert comme correlated
+                        conn.execute(
+                            "INSERT OR IGNORE INTO indicators (value,type,node_type,case_id) VALUES(?,?,?,?)",
+                            (src, _guess_type(src), "correlated", case_id),
+                        )
+                        conn.commit()
+                        src_row = conn.execute(
+                            "SELECT id FROM indicators WHERE value=? AND case_id=?",
+                            (src, case_id),
+                        ).fetchone()
+                    if not tgt_row:
+                        conn.execute(
+                            "INSERT OR IGNORE INTO indicators (value,type,node_type,case_id) VALUES(?,?,?,?)",
+                            (tgt, _guess_type(tgt), "correlated", case_id),
+                        )
+                        conn.commit()
+                        tgt_row = conn.execute(
+                            "SELECT id FROM indicators WHERE value=? AND case_id=?",
+                            (tgt, case_id),
+                        ).fetchone()
+                    if not src_row or not tgt_row:
+                        conn.close()
+                        return jsonify({"error": "could not resolve indicators"}), 500
+                    # Insérer l'edge avec le pivot_label existant
+                    conn.execute(
+                        "INSERT OR IGNORE INTO correlation (job_id, case_id, src_indicator_id, tgt_indicator_id, module, pivot) VALUES(?,?,?,?,?,?)",
+                        (
+                            str(uuid.uuid4()),
+                            case_id,
+                            src_row["id"],
+                            tgt_row["id"],
+                            "manual",
+                            pivot_label or "manual",
+                        ),
+                    )
+                else:
+                    # ── Mode IOC→IOC avec création de pivot ────────
+                    # Upsert les deux IOC (ne pas écraser un node_type existant)
+                    conn.execute(
+                        "INSERT OR IGNORE INTO indicators (value,type,node_type,case_id) VALUES(?,?,?,?)",
+                        (src, _guess_type(src), "correlated", case_id),
+                    )
+                    conn.execute(
+                        "INSERT OR IGNORE INTO indicators (value,type,node_type,case_id) VALUES(?,?,?,?)",
+                        (tgt, _guess_type(tgt), "correlated", case_id),
+                    )
+                    conn.commit()
+                    src_row = conn.execute(
+                        "SELECT id FROM indicators WHERE value=? AND case_id=?",
+                        (src, case_id),
+                    ).fetchone()
+                    tgt_row = conn.execute(
+                        "SELECT id FROM indicators WHERE value=? AND case_id=?",
+                        (tgt, case_id),
+                    ).fetchone()
+                    if not src_row or not tgt_row:
+                        conn.close()
+                        return jsonify({"error": "could not resolve indicators"}), 500
+                    # pivot_label = nom du pivot saisi par l'analyste
+                    conn.execute(
+                        "INSERT OR IGNORE INTO correlation (job_id, case_id, src_indicator_id, tgt_indicator_id, module, pivot) VALUES(?,?,?,?,?,?)",
+                        (
+                            str(uuid.uuid4()),
+                            case_id,
+                            src_row["id"],
+                            tgt_row["id"],
+                            "manual",
+                            pivot_label or "manual",
+                        ),
+                    )
+
+                conn.commit()
+                conn.close()
+                import asyncio
+
+                loop = asyncio.new_event_loop()
+                try:
+                    loop.run_until_complete(services.database.connect())
+                    graph = loop.run_until_complete(
+                        services.database.get_graph(case_id)
+                    )
+                finally:
+                    loop.close()
+                socketio.emit("graph_update", {"case_id": case_id, "graph": graph})
+                return jsonify({"ok": True})
+            except Exception as e:
+                return jsonify({"error": str(e)}), 500
+
         # create_case
         if action == "create_case":
-            case_id, err = _handle_create_case(db_path, data)
+            # FIX : déstructuration en 3 valeurs — case_id, resolved_name, err
+            case_id, resolved_name, err = _handle_create_case(db_path, data)
             if err:
                 return jsonify({"error": err}), 400
             api_keys = data.get("api_keys", {})
@@ -402,7 +605,10 @@ def register_routes(app, services, job_manager):
                         "extra_config": extra_config,
                     }
                 )
-            return jsonify({"case_id": case_id, "job_ids": job_ids})
+            # FIX : retourner case_name pour que le JS nomme correctement l'onglet
+            return jsonify(
+                {"case_id": case_id, "case_name": resolved_name, "job_ids": job_ids}
+            )
 
         # check_quotas — synchronous
         if action == "check_quotas":

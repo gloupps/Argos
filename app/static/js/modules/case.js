@@ -4,10 +4,12 @@ window.CaseModule = {
 
     init() {
         console.log("[Case] init");
+        // Tabs.init() → ensureTab() → activate() → App.switchTab() → App.loadView()
+        // gère entièrement le chargement initial.
+        // CaseModule écoute uniquement view:loaded pour binder le formulaire new-case.
         document.addEventListener("view:loaded", e => {
             if (e.detail?.url?.includes("/view/new-case")) this.bindForm();
         });
-        App.loadView("/view/new-case");
     },
 
     bindForm() {
@@ -70,8 +72,9 @@ window.CaseModule = {
         const tabId = App.state.activeTab;
         if (tabId && App.state.tabs[tabId]) {
             App.state.tabs[tabId].caseId = result.case_id;
-            App.state.tabs[tabId].name   = payload.case_name || "Case";
+            App.state.tabs[tabId].name   = result.case_name || payload.case_name || "Case";
             Tabs?.updateLabel?.(tabId, App.state.tabs[tabId].name);
+            App._saveState();
         }
 
         await App.loadView(`/view/case/${result.case_id}`);
@@ -100,7 +103,6 @@ window.CaseModule = {
                 btn.classList.remove("bg-slate-800");
                 if (input) input.value = mode;
 
-                // Hide entire case config section for "existing" mode
                 if (configSect) configSect.style.display = mode === "db" ? "none" : "";
                 if (nameInput)  nameInput.required = mode !== "db";
             });

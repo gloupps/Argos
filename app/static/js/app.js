@@ -4,9 +4,8 @@ const App = {
     container: null,
     socket:    null,
 
-    // ═══════════════════════════════════════════════════════
-    // INIT
-    // ═══════════════════════════════════════════════════════
+    _STATE_KEY: "pivotlens_app_state",
+
     async init() {
         console.log("[APP] init");
 
@@ -16,20 +15,51 @@ const App = {
         this._initSocket();
         this._bindGlobalEvents();
 
-        // 1. Load module registry first
         await Modules?.init?.();
 
-        // 2. Boot the rest synchronously
         JobLog?.init?.();
         Settings?.init?.();
         SIEMModule?.init?.();
         CorrelationModule?.init?.();
         GraphModule?.init?.();
+
+        // Restaurer l'état AVANT Tabs.init() pour que ensureTab() trouve les tabs
+        this._loadState();
+
         Tabs?.init?.();
+
+        // CaseModule écoute uniquement view:loaded pour binder le formulaire.
+        // Le chargement initial est entièrement délégué à Tabs.
         CaseModule?.init?.();
 
         console.log("[APP] ready");
     },
+
+    // ── Persistance sessionStorage ────────────────────────
+
+    _loadState() {
+        try {
+            const raw = sessionStorage.getItem(this._STATE_KEY);
+            if (!raw) return;
+            const saved = JSON.parse(raw);
+            if (saved?.tabs && typeof saved.tabs === "object") {
+                this.state.tabs      = saved.tabs;
+                this.state.activeTab = saved.activeTab || null;
+                console.log("[APP] state restored:", Object.keys(this.state.tabs).length, "tab(s)");
+            }
+        } catch (_) {}
+    },
+
+    _saveState() {
+        try {
+            sessionStorage.setItem(this._STATE_KEY, JSON.stringify({
+                tabs:      this.state.tabs,
+                activeTab: this.state.activeTab,
+            }));
+        } catch (_) {}
+    },
+
+    // ── Socket ────────────────────────────────────────────
 
     _initSocket() {
         if (typeof io === "undefined") { console.warn("[APP] socket.io not loaded"); return; }
@@ -51,6 +81,7 @@ const App = {
             caseId: data.caseId || null,
         };
         this.state.activeTab = id;
+        this._saveState();
         return id;
     },
 
@@ -58,6 +89,7 @@ const App = {
         const tab = this.state.tabs[id];
         if (!tab) return;
         this.state.activeTab = id;
+        this._saveState();
         tab.caseId
             ? this.loadView(`/view/case/${tab.caseId}`)
             : this.loadView("/view/new-case");
@@ -72,6 +104,7 @@ const App = {
                 ? this.switchTab(rem[0])
                 : (this.state.activeTab = null, Tabs?.ensureTab?.());
         }
+        this._saveState();
     },
 
     // ── View loader ───────────────────────────────────────
@@ -79,7 +112,21 @@ const App = {
     async loadView(url) {
         try {
             const res = await fetch(url);
-            if (!res.ok) { console.error("[APP] view error", res.status, url); return; }
+            if (!res.ok) {
+                console.error("[APP] view error", res.status, url);
+                // Case supprimé en DB → nettoyer l'état et afficher le formulaire
+                if (url.includes("/view/case/") && res.status === 404) {
+                    const tabId = this.state.activeTab;
+                    if (tabId && this.state.tabs[tabId]) {
+                        this.state.tabs[tabId].caseId = null;
+                        this.state.tabs[tabId].name   = "Case 1";
+                        Tabs?.updateLabel?.(tabId, "Case 1");
+                        this._saveState();
+                    }
+                    return this.loadView("/view/new-case");
+                }
+                return;
+            }
             this.container.innerHTML = await res.text();
             lucide.createIcons();
             requestAnimationFrame(() => {
@@ -109,7 +156,6 @@ const App = {
             const forCorr = payload.action === "correlate";
             payload = { ...payload, api_keys: this._collectApiKeys(forCorr) };
         }
-        // Always inject extra_config (e.g. opencti_url) unless caller set it explicitly
         if (!payload.extra_config) {
             payload = { ...payload, extra_config: this._collectExtraConfig() };
         }
@@ -139,27 +185,25 @@ const App = {
         return keys;
     },
 
-    /** Collect non-key settings (e.g. opencti_url) via Modules. */
     _collectExtraConfig() {
         return Modules?.collectExtraConfig?.() || {};
     },
-
-    // ── Global events ─────────────────────────────────────
 
     _bindGlobalEvents() {
         document.addEventListener("click", e => {
             const el = e.target.closest("[data-action]");
             if (!el) return;
             switch (el.dataset.action) {
-                case "open-settings":     Settings?.open?.();  break;
-                case "close-settings":    Settings?.close?.(); break;
-                case "save-settings":     Settings?.save?.();  break;
+                case "open-settings":  Settings?.open?.();  break;
+                case "close-settings": Settings?.close?.(); break;
+                case "save-settings":  Settings?.save?.();  break;
                 case "close-node-panel":
                     document.getElementById("node-panel")?.classList.add("hidden"); break;
                 case "rename-case":
                     CaseHeader?.startRename?.(); break;
             }
         });
+        window.addEventListener("beforeunload", () => this._saveState());
     },
 };
 

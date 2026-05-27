@@ -1,4 +1,5 @@
-from typing import List, Dict, Any
+import asyncio
+from typing import List, Dict, Any, Optional
 from .module import Module
 
 
@@ -88,9 +89,13 @@ class ShodanModule(Module):
     # ─────────────────────────────────────────────
     # get_correlation
     #
-    # Logique : pour chaque service de l'IP, récupérer le hash de bannière.
-    # Si le nombre d'hôtes partageant ce hash est <= correlation_threshold,
-    # pivote et retourne les IPs corrélées.
+    # Nouvelle logique :
+    #   1. Récupérer l'IP source (host data)
+    #   2. Construire la liste de hash queries (http.* + banner hash)
+    #   3. COUNT en parallèle sur tous les hashes
+    #   4. Filtrer : garder uniquement 1 < total <= max_hash_results
+    #   5. SEARCH en parallèle uniquement sur les hashes retenus
+    #   6. Dédupliquer + exclure l'IP source → résultats de corrélation
     # ─────────────────────────────────────────────
     async def get_correlation(
         self, indicator: str, context: Dict[str, Any]
@@ -99,52 +104,95 @@ class ShodanModule(Module):
         if not api_key:
             return []
 
-        # Seul paramètre : seuil maximum d'hôtes pour considérer le hash comme "pivot utile"
-        max_count = int(context.get("correlation_threshold", 100))
+        max_hash_results = int(context.get("correlation_threshold", 100))
 
-        raw = await self.requester.get(
+        # ── 1. Récupérer les données de l'IP source ──────
+        ip_data = await self.requester.get(
             f"{self.url}/shodan/host/{indicator}",
             params={"key": api_key},
         )
-        if not raw or raw.get("error"):
+        if not ip_data or ip_data.get("error"):
             return []
 
+        # ── 2. Construire la liste de hash queries ────────
+        seen_keys: set = set()
+        hash_queries: List[Dict] = []
+
+        for service in ip_data.get("data", []):
+            # Hashes HTTP (html, title, headers, robots, sitemap, dom)
+            http = service.get("http")
+            if http:
+                for hash_name in [
+                    "robots_hash",
+                    "title_hash",
+                    "sitemap_hash",
+                    "html_hash",
+                    "dom_hash",
+                    "headers_hash",
+                ]:
+                    value = http.get(hash_name)
+                    if value:
+                        key = f"http.{hash_name}:{value}"
+                        if key not in seen_keys:
+                            seen_keys.add(key)
+                            hash_queries.append(
+                                {
+                                    "key": key,
+                                    "query": f"http.{hash_name}",
+                                    "value": value,
+                                }
+                            )
+
+            # Hash de bannière
+            banner_hash = service.get("hash")
+            if banner_hash:
+                key = f"hash:{banner_hash}"
+                if key not in seen_keys:
+                    seen_keys.add(key)
+                    hash_queries.append(
+                        {"key": key, "query": "hash", "value": banner_hash}
+                    )
+
+        if not hash_queries:
+            return []
+
+        # ── 3. COUNT en parallèle ─────────────────────────
+        count_tasks = [self._count_ips_by_hash(api_key, h) for h in hash_queries]
+        counts = await asyncio.gather(*count_tasks, return_exceptions=True)
+
+        # ── 4. Filtrer les hashes utiles ──────────────────
+        search_tasks = []
+        valid_hashes = []
+
+        for h, count in zip(hash_queries, counts):
+            if isinstance(count, Exception):
+                continue
+            total = int(count)
+            if total <= 1:  # seul résultat = l'IP elle-même
+                continue
+            if total > max_hash_results:  # trop répandu = bruit
+                continue
+            valid_hashes.append((h, total))
+            search_tasks.append(self._search_ips_by_hash(api_key, h, max_hash_results))
+
+        if not search_tasks:
+            return []
+
+        # ── 5. SEARCH en parallèle ────────────────────────
+        responses = await asyncio.gather(*search_tasks, return_exceptions=True)
+
+        # ── 6. Construire les résultats ───────────────────
         results: List[Dict[str, Any]] = []
-        seen: set = set()
+        seen_ips: set = set()
 
-        for service in raw.get("data", []):
-            hash_value = service.get("hash")
-            if not hash_value:
+        for (h, total), response in zip(valid_hashes, responses):
+            if isinstance(response, Exception):
                 continue
 
-            count_data = await self.requester.get(
-                f"{self.url}/shodan/host/count",
-                params={"key": api_key, "query": f"hash:{hash_value}"},
-            )
-            if not count_data:
-                continue
-
-            total = count_data.get("total", 0)
-            # Skip si trop répandu (bruit) ou trivial (1 seul hôte = l'IP elle-même)
-            if total <= 1 or total > max_count:
-                continue
-
-            search_data = await self.requester.get(
-                f"{self.url}/shodan/host/search",
-                params={
-                    "key": api_key,
-                    "query": f"hash:{hash_value}",
-                    "fields": "ip_str",
-                },
-            )
-            if not search_data:
-                continue
-
-            for match in search_data.get("matches", []):
-                ip = match.get("ip_str")
-                if not ip or ip == indicator or ip in seen:
+            for ip in response:
+                if not ip or ip == indicator or ip in seen_ips:
                     continue
-                seen.add(ip)
+                seen_ips.add(ip)
                 results.append(
                     {
                         "source_indicator": indicator,
@@ -153,11 +201,38 @@ class ShodanModule(Module):
                         "target_type": "ip",
                         "score": 1,
                         "pivot": True,
-                        "pivot_reason": f"shared banner hash {hash_value} ({total} hosts)",
+                        "pivot_reason": f"{h['key']} (shared by {total} hosts)",
                     }
                 )
 
         return results
+
+    # ─────────────────────────────────────────────
+    # Helpers count / search
+    # ─────────────────────────────────────────────
+
+    async def _count_ips_by_hash(self, api_key: str, hash_data: Dict) -> int:
+        query = f"{hash_data['query']}:{hash_data['value']}"
+        data = await self.requester.get(
+            f"{self.url}/shodan/host/count",
+            params={"key": api_key, "query": query},
+        )
+        if not data:
+            return 0
+        return data.get("total", 0)
+
+    async def _search_ips_by_hash(
+        self, api_key: str, hash_data: Dict, max_results: int
+    ) -> List[str]:
+        query = f"{hash_data['query']}:{hash_data['value']}"
+        data = await self.requester.get(
+            f"{self.url}/shodan/host/search",
+            params={"key": api_key, "query": query, "fields": "ip_str"},
+        )
+        if not data:
+            return []
+        matches = data.get("matches", [])[:max_results]
+        return [m.get("ip_str") for m in matches if m.get("ip_str")]
 
     # ─────────────────────────────────────────────
     # get_quotas
@@ -176,12 +251,17 @@ class ShodanModule(Module):
         credits = int(data.get("credits", 0))
         member = data.get("member", False)
         plan = "pro+" if (member and credits > 0) else ("pro" if member else "free")
-        credits = (
+        credits_label = (
             "unlimited"
             if (member and credits > 0)
             else ("unlimited" if member else "limited")
         )
-        return {"used": 0, "limit": credits, "remaining": credits, "plan_type": plan}
+        return {
+            "used": 0,
+            "limit": credits_label,
+            "remaining": credits_label,
+            "plan_type": plan,
+        }
 
     def get_fields(self) -> Dict[str, Any]:
         base = super().get_fields()
