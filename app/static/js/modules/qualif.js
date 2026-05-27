@@ -90,9 +90,10 @@ window.EnrichPanel = {
     // ── Mapping champ → thème ─────────────────────────────
     // Shodan et URLScan n'ont PAS de score — leurs champs vont dans host/dns/ports/vulns
     _THEME_MAP: {
-        "Detection Score": "scores", "Confidence Score": "scores",
-        "Malicious":       "detection", "Suspicious": "detection",
-        "Reputation":      "detection", "Scan Count": "detection",
+        "Detection Score": "threat",  "Confidence Score": "threat",
+        "Malicious":       "threat",  "Suspicious":       "threat",
+        "Reputation":      "threat",  "Scan Count":       "threat",
+        "Threat Actors":   "threat",
         "Organization":    "host", "ASN": "host", "ASN Owner": "host",
         "Country":         "host", "OS": "host", "Registrar": "host",
         "Last Seen":       "host", "Last Analysis": "host", "Last Scan": "host",
@@ -157,7 +158,7 @@ window.EnrichPanel = {
             });
         });
 
-        const ORDER = ["scores","detection","host","ports","vulns","dns","tags","urlscan_meta","screenshot","other"];
+        const ORDER = ["threat","host","ports","vulns","dns","tags","urlscan_meta","screenshot","other"];
         const sections = ORDER
             .filter(t => themes[t]?.length)
             .map(t => this._renderThemeSection(t, themes[t]))
@@ -186,48 +187,66 @@ window.EnrichPanel = {
 
     _renderThemeSection(theme, items) {
 
-        // ── SCORES : barres comparatives (VT, AbuseIPDB uniquement) ──
-        if (theme === "scores") {
-            const bars = items.map(({ mod, field }) => {
-                const pct    = Math.min(100, Math.max(0, Number(field.value)));
-                const color  = pct > 70 ? "#ef4444" : pct > 40 ? "#f59e0b" : "#22c55e";
-                const txtcls = pct > 70 ? "text-red-400" : pct > 40 ? "text-amber-400" : "text-green-400";
-                return `
-                    <div class="flex items-center gap-2">
-                        <span class="flex items-center gap-1 text-[9px] text-slate-500 w-20 shrink-0 truncate"
-                              title="${this._modLabel(mod)}">
-                            <i data-lucide="${this._modIcon(mod)}" class="w-2.5 h-2.5 shrink-0"></i>
-                            ${this._modLabel(mod)}
-                        </span>
-                        <div class="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                            <div class="h-full rounded-full" style="width:${pct}%;background:${color}"></div>
-                        </div>
-                        <span class="text-[10px] font-bold ${txtcls} w-6 text-right shrink-0">${pct}</span>
-                    </div>`;
-            }).join("");
-            return `${this._sectionHeader("shield-check", "Threat scores")}<div class="space-y-1.5">${bars}</div>`;
-        }
+        // ── THREAT : score barre + KV (Malicious, Suspicious, Reputation, Scan Count, Threat Actors) ──
+        if (theme === "threat") {
+            // Score en barre (Detection Score, Confidence Score)
+            const scoreItems = items.filter(({ field }) => field.type === "score");
+            const kvItems    = items.filter(({ field }) => field.type !== "score");
 
-        // ── DETECTION : KV (Malicious, Suspicious, Scan count…) ──
-        if (theme === "detection") {
-            const seen = {};
-            items.forEach(({ mod, field }) => {
-                const k = field.name, num = Number(field.value);
-                if (!seen[k] || (!isNaN(num) && num > Number(seen[k].field.value)))
-                    seen[k] = { mod, field };
-            });
-            const rows = Object.values(seen).map(({ mod, field }) => {
-                const v   = String(field.value);
-                const num = Number(v);
-                const cls = !isNaN(num) && num > 0 ? "text-red-400 font-bold" : "text-slate-300";
-                return `
-                    <tr>
-                        <td class="text-[9px] text-slate-500 pr-3 py-0.5 whitespace-nowrap">${field.name}</td>
-                        <td class="text-[10px] ${cls} font-mono py-0.5">${v}</td>
-                        <td class="text-[9px] text-slate-600 pl-2 py-0.5 whitespace-nowrap">${this._modLabel(mod)}</td>
-                    </tr>`;
-            }).join("");
-            return `${this._sectionHeader("search", "Detection")}<table class="w-full">${rows}</table>`;
+            let html = "";
+
+            if (scoreItems.length) {
+                const bars = scoreItems.map(({ mod, field }) => {
+                    const pct    = Math.min(100, Math.max(0, Number(field.value)));
+                    const color  = pct > 70 ? "#ef4444" : pct > 40 ? "#f59e0b" : "#22c55e";
+                    const txtcls = pct > 70 ? "text-red-400" : pct > 40 ? "text-amber-400" : "text-green-400";
+                    return `
+                        <div class="flex items-center gap-2">
+                            <span class="flex items-center gap-1 text-[9px] text-slate-500 w-20 shrink-0 truncate"
+                                title="${this._modLabel(mod)}">
+                                <i data-lucide="${this._modIcon(mod)}" class="w-2.5 h-2.5 shrink-0"></i>
+                                ${this._modLabel(mod)}
+                            </span>
+                            <div class="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                                <div class="h-full rounded-full" style="width:${pct}%;background:${color}"></div>
+                            </div>
+                            <span class="text-[10px] font-bold ${txtcls} w-6 text-right shrink-0">${pct}</span>
+                        </div>`;
+                }).join("");
+                html += `<div class="space-y-1.5 mb-2">${bars}</div>`;
+            }
+
+            if (kvItems.length) {
+                const seen = {};
+                kvItems.forEach(({ mod, field }) => {
+                    const k = field.name, num = Number(field.value);
+                    if (!seen[k] || (!isNaN(num) && num > Number(seen[k].field.value)))
+                        seen[k] = { mod, field };
+                });
+                const rows = Object.values(seen).map(({ mod, field }) => {
+                    const v   = String(field.value);
+                    const num = Number(v);
+                    // Rouge seulement pour Malicious/Suspicious si > 0
+                    const isThreatCount = ["Malicious", "Suspicious"].includes(field.name);
+                    const cls = isThreatCount && !isNaN(num) && num > 0
+                        ? "text-red-400 font-bold"
+                        : Array.isArray(field.value)
+                            ? "text-amber-400"   // Threat Actors → amber
+                            : "text-slate-300";
+                    const display = Array.isArray(field.value)
+                        ? field.value.slice(0, 3).join(", ") + (field.value.length > 3 ? ` +${field.value.length - 3}` : "")
+                        : v;
+                    return `
+                        <tr>
+                            <td class="text-[9px] text-slate-500 pr-3 py-0.5 whitespace-nowrap">${field.name}</td>
+                            <td class="text-[10px] ${cls} font-mono py-0.5">${display}</td>
+                            <td class="text-[9px] text-slate-600 pl-2 py-0.5 whitespace-nowrap">${this._modLabel(mod)}</td>
+                        </tr>`;
+                }).join("");
+                html += `<table class="w-full">${rows}</table>`;
+            }
+
+            return `${this._sectionHeader("shield-alert", "Threat")}${html}`;
         }
 
         // ── HOST : KV dédupliqué ──
