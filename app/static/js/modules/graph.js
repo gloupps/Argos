@@ -601,17 +601,13 @@ window.ContextMenu = {
 
     async _runPivot(label, iocType, caseId) {
         this.hide();
-        const corrConfig = Object.keys(Modules?.registry || {}).reduce((acc, k) => ({
-            ...acc, ...(Modules.getCorrelationConfig(k) || {}),
-        }), {});
+        const corrConfig = Modules?.collectCorrelationConfig?.() || {};
         await App.runAction({ action: "correlate", case_id: caseId, indicator_filter: label, correlation_config: corrConfig });
     },
 
     async _runQualifyAndPivot(label, iocType, caseId, nodeData) {
         this.hide();
-        const corrConfig = Object.keys(Modules?.registry || {}).reduce((acc, k) => ({
-            ...acc, ...(Modules.getCorrelationConfig(k) || {}),
-        }), {});
+        const corrConfig = Modules?.collectCorrelationConfig?.() || {};
         const result = await App.runAction({
             action: "enrich_and_correlate", case_id: caseId,
             indicator_filter: label, correlation_config: corrConfig,
