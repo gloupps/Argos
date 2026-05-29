@@ -84,6 +84,20 @@ window.CaseModule = {
         }
 
         await App.loadView(`/view/case/${result.case_id}`);
+
+        // Observer les jobs auto-lancés (enrich / correlate)
+        const jobIds = result.job_ids || {};
+        Object.entries(jobIds).forEach(([type, jobId]) => {
+            if (!jobId) return;
+            const label = type === "enrich" ? "Auto Qualify" : "Auto Correlation";
+            JobLog?.push?.({ message: `▶ ${label} started`, status: "running" });
+            App.socket?.on?.("job_update", function handler(d) {
+                if (d.job_id === jobId && d.status === "done") {
+                    App.socket.off("job_update", handler);
+                    JobLog?.push?.({ message: `✓ ${label} done`, status: "done" });
+                }
+            });
+        });
     },
 
     _initModeSwitch() {
