@@ -1,0 +1,110 @@
+<div class="p-6 space-y-4 relative">
+
+    <!-- ══════════════════════════════════════════════════ -->
+    <!-- ROW 1 : Active Case (pleine largeur)              -->
+    <!-- ══════════════════════════════════════════════════ -->
+    <div class="glass p-5 rounded-xl border-l-4 border-blue-500">
+        <p class="text-[10px] text-slate-400 uppercase font-bold mb-2 tracking-widest">Active case</p>
+
+        <div class="flex items-center gap-2 mb-2">
+            <h1 id="case-name-display"
+                class="text-xl font-bold cursor-pointer hover:text-blue-300 transition"
+                title="Click to rename"
+                onclick="CaseHeader.startRename()">{{ case_name }}</h1>
+
+            <input id="case-name-input"
+                   class="hidden text-xl font-bold bg-transparent border-b border-blue-500
+                          outline-none text-white w-full max-w-sm"
+                   type="text" value="{{ case_name }}">
+
+            <div id="case-name-actions" class="hidden flex items-center gap-1">
+                <button onclick="CaseHeader.confirmRename()"
+                        class="p-1 text-green-400 hover:text-green-300">
+                    <i data-lucide="check" class="w-4 h-4"></i>
+                </button>
+                <button onclick="CaseHeader.cancelRename()"
+                        class="p-1 text-slate-500 hover:text-slate-300">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+        </div>
+
+        <div id="case-id-value" data-case-id="{{ case_id }}" class="hidden"></div>
+
+        <div class="flex flex-wrap gap-2 mt-3">
+            <button onclick="CaseActions.undo('{{ case_id }}')"
+                    class="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700
+                           px-3 py-1.5 rounded text-xs font-medium transition text-slate-300">
+                <i data-lucide="undo-2" class="w-3.5 h-3.5"></i> Undo
+            </button>
+            <button onclick="CaseActions.exportStix('{{ case_id }}')"
+                    class="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700
+                           px-3 py-1.5 rounded text-xs font-medium transition text-slate-300">
+                <i data-lucide="download" class="w-3.5 h-3.5"></i> Export STIX
+            </button>
+            <button onclick="CaseActions.deleteCase('{{ case_id }}')"
+                    class="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700
+                           px-3 py-1.5 rounded text-xs font-medium transition text-red-400 hover:text-white"
+                    title="Delete this case">
+                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Delete
+            </button>
+            <span class="ml-auto flex items-center gap-1.5 text-[9px] text-slate-600 italic">
+                <i data-lucide="mouse-pointer-2" class="w-3 h-3"></i>
+                Right-click node for actions · Hold &amp; drag to link
+            </span>
+        </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════ -->
+    <!-- ROW 2 : Correlation Graph                         -->
+    <!-- ══════════════════════════════════════════════════ -->
+    <div class="glass rounded-xl p-4">
+        <div class="flex justify-between items-center mb-3">
+            <h3 class="text-sm font-bold flex items-center gap-2">
+                <i data-lucide="network" class="w-4 h-4 text-blue-400"></i> Correlation Graph
+            </h3>
+            <div class="flex gap-3 text-[10px] text-slate-500">
+                <span class="flex items-center gap-1">
+                    <span class="w-2 h-2 rounded-full bg-red-500 inline-block"></span> Root
+                </span>
+                <span class="flex items-center gap-1">
+                    <span class="w-2 h-2 rounded-full bg-amber-500 inline-block"></span> Pivot
+                </span>
+                <span class="flex items-center gap-1">
+                    <span class="w-2 h-2 rounded-full bg-violet-500 inline-block"></span> Correlated
+                </span>
+            </div>
+        </div>
+        <div id="cy"></div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════ -->
+    <!-- ROW 3 : Enrichment (ex Qualification)             -->
+    <!-- ══════════════════════════════════════════════════ -->
+    <div class="glass rounded-xl p-4">
+        <h3 class="text-sm font-bold flex items-center gap-2 mb-3">
+            <i data-lucide="zap" class="w-4 h-4 text-green-400"></i> Enrichment
+        </h3>
+
+        <div id="qualif-header" class="mb-2">
+            <p class="text-slate-600 text-xs italic">Right-click a node to enrich it.</p>
+        </div>
+
+        <div id="qualif-panel" class="space-y-1 text-sm"></div>
+
+        <!-- Internal Intelligence (OpenCTI etc.) -->
+        <div id="internal-intel-section" class="hidden mt-4 pt-4 border-t border-violet-900/30">
+            <h4 class="text-xs font-bold text-violet-400 flex items-center gap-2 mb-3 uppercase tracking-widest">
+                <i data-lucide="database" class="w-3.5 h-3.5"></i> Internal Intelligence
+            </h4>
+            <div id="internal-intel-panel" class="space-y-3"></div>
+        </div>
+    </div>
+
+    <!-- Job log -->
+    <div id="job-log"
+         class="hidden fixed bottom-4 right-4 w-80 max-h-40 overflow-y-auto
+                bg-slate-950/95 border border-slate-700 rounded-lg p-3
+                space-y-0.5 z-50 shadow-2xl"></div>
+
+</div>
