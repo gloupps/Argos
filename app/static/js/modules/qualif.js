@@ -13,7 +13,8 @@ window.EnrichPanel = {
         const i = Modules?.registry?.[k]?.icon;
         if (i) return i;
         return { virustotal:"shield", shodan:"radar", abuseipdb:"ban",
-                 urlscan:"scan-eye", viewdns:"globe", opencti:"database", misp:"share-2" }[k] || "box";
+            urlscan:"scan-eye", viewdns:"globe", opencti:"database", misp:"share-2",
+            threatfox:"bug" }[k] || "box";
     },
     _isEmpty(v) {
         if (v === null || v === undefined || v === "") return true;
@@ -89,6 +90,12 @@ window.EnrichPanel = {
 
     // ── Mapping champ → thème ─────────────────────────────
     _THEME_MAP: {
+        "Malware Family":  "threat",
+        "Threat Type":     "threat",
+        "Avg Confidence":  "threat",
+        "IOC Count":       "threat",
+        "Reporters":       "other",
+        "ThreatFox Entry": "intel",
         "Detection Score": "threat",  "Confidence Score": "threat",
         "Malicious":       "threat",  "Suspicious":       "threat",
         "Reputation":      "threat",  "Scan Count":       "threat",

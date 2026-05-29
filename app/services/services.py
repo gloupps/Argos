@@ -31,14 +31,16 @@ class Services:
         from app.modules.urlscan_module import URLScanModule
         from app.modules.opencti_module import OpenCTIModule
         from app.modules.misp_module import MISPModule
+        from app.modules.threatfox_module import ThreatFoxModule
 
         self.modules = {
-            "shodan":     ShodanModule(self.requester),
+            "shodan": ShodanModule(self.requester),
             "virustotal": VirusTotalModule(self.requester),
-            "viewdns":    ViewDNSModule(self.requester),
-            "urlscan":    URLScanModule(self.requester),
-            "opencti":    OpenCTIModule(self.requester),
-            "misp":       MISPModule(self.requester),
+            "viewdns": ViewDNSModule(self.requester),
+            "urlscan": URLScanModule(self.requester),
+            "opencti": OpenCTIModule(self.requester),
+            "misp": MISPModule(self.requester),
+            "threatfox": ThreatFoxModule(self.requester),
         }
 
     # ── Public ────────────────────────────────────────────
@@ -81,6 +83,7 @@ class Services:
     async def _run_enrichment(self, job_id, data):
         case_id = data.get("case_id")
         api_keys = data.get("api_keys", {})
+        cfg = data.get("correlation_config", {})
         extra_config = data.get("extra_config", {})  # e.g. {"opencti_url": "..."}
         indicator_filter = data.get("indicator_filter")
 
@@ -137,6 +140,14 @@ class Services:
                     self.job_manager.add_log(
                         job_id, f"🔍 [{module.name}] {ind['value']}…"
                     )
+
+                    # Collect all root indicators for cross-IOC correlation (VT etc.)
+                    root_cur = await db.execute(
+                        "SELECT DISTINCT value, type FROM indicators WHERE case_id=? AND node_type='root'",
+                        (case_id,),
+                    )
+                    all_root_indicators = [dict(r) for r in await root_cur.fetchall()]
+
                     try:
                         # Build context — include ioc_type and any extra_config (e.g. opencti_url)
                         mod_cfg = cfg.get(mod_key, {}) if isinstance(cfg, dict) else {}
@@ -233,13 +244,61 @@ class Services:
                 self.job_manager.add_log(job_id, "⚠ No indicators found")
                 return
 
-            # Save snapshot before modifying correlations (undo support)
-            snap_cur = await db.execute(
-                "SELECT id, src_indicator_id, tgt_indicator_id, module, pivot FROM correlation WHERE case_id=?",
-                (case_id,),
+            # ── Snapshot undo ────────────────────────────────────────────
+            ind_snap = [
+                dict(r)
+                for r in await (
+                    await db.execute(
+                        "SELECT id, value, type, node_type FROM indicators WHERE case_id=?",
+                        (case_id,),
+                    )
+                ).fetchall()
+            ]
+            piv_snap = [
+                dict(r)
+                for r in await (
+                    await db.execute(
+                        "SELECT id, label, module FROM pivots WHERE case_id=?",
+                        (case_id,),
+                    )
+                ).fetchall()
+            ]
+            lnk_snap = [
+                dict(r)
+                for r in await (
+                    await db.execute(
+                        "SELECT pivot_id, indicator_id, direction FROM pivot_links WHERE case_id=?",
+                        (case_id,),
+                    )
+                ).fetchall()
+            ]
+            cor_snap = [
+                dict(r)
+                for r in await (
+                    await db.execute(
+                        "SELECT job_id, src_indicator_id, tgt_indicator_id, module, pivot FROM correlation WHERE case_id=?",
+                        (case_id,),
+                    )
+                ).fetchall()
+            ]
+            import json as _json
+
+            await db.execute(
+                "INSERT INTO correlation_history (case_id, snapshot) VALUES (?,?)",
+                (
+                    case_id,
+                    _json.dumps(
+                        {
+                            "indicators": ind_snap,
+                            "pivots": piv_snap,
+                            "pivot_links": lnk_snap,
+                            "correlation": cor_snap,
+                        }
+                    ),
+                ),
             )
-            snap_rows = [dict(r) for r in await snap_cur.fetchall()]
-            await self.database.save_graph_snapshot(case_id)
+            await db.commit()
+            # ── Fin snapshot ─────────────────────────────────────────────
 
             job_db_id = str(uuid.uuid4())
             await db.execute(
@@ -338,7 +397,14 @@ class Services:
                                 """INSERT OR IGNORE INTO correlation
                                    (job_id, case_id, src_indicator_id, tgt_indicator_id, module, pivot)
                                    VALUES (?,?,?,?,?,?)""",
-                                (job_db_id, case_id, src_id, tgt_id, mod_key, pivot_text),
+                                (
+                                    job_db_id,
+                                    case_id,
+                                    src_id,
+                                    tgt_id,
+                                    mod_key,
+                                    pivot_text,
+                                ),
                             )
                             # ── Alimenter pivots + pivot_links ──
                             if pivot_text and pivot_text not in ("True", "true", ""):
@@ -346,10 +412,12 @@ class Services:
                                     "INSERT OR IGNORE INTO pivots (case_id, label, module) VALUES (?,?,?)",
                                     (case_id, pivot_text, mod_key),
                                 )
-                                prow = await (await db.execute(
-                                    "SELECT id FROM pivots WHERE case_id=? AND label=?",
-                                    (case_id, pivot_text),
-                                )).fetchone()
+                                prow = await (
+                                    await db.execute(
+                                        "SELECT id FROM pivots WHERE case_id=? AND label=?",
+                                        (case_id, pivot_text),
+                                    )
+                                ).fetchone()
                                 if prow:
                                     pivot_id = prow["id"]
                                     await db.execute(
@@ -417,13 +485,15 @@ class Services:
                         (case_id, pivot["id"]),
                     )
                     for lk in await links_cur.fetchall():
-                        edges.append({
-                            "pivot_id":     pivot["id"],
-                            "pivot_label":  pivot["label"],
-                            "pivot_module": pivot["module"],
-                            "indicator_id": lk["indicator_id"],
-                            "direction":    lk["direction"],    # ← NEW
-                        })
+                        edges.append(
+                            {
+                                "pivot_id": pivot["id"],
+                                "pivot_label": pivot["label"],
+                                "pivot_module": pivot["module"],
+                                "indicator_id": lk["indicator_id"],
+                                "direction": lk["direction"],  # ← NEW
+                            }
+                        )
 
                 legacy_cur = await db.execute(
                     "SELECT src_indicator_id, tgt_indicator_id, module, pivot FROM correlation WHERE case_id=?",
@@ -431,15 +501,15 @@ class Services:
                 )
 
                 graph = {
-                    "nodes":        [dict(r) for r in await nodes_cur.fetchall()],
-                    "pivots":       pivots,
-                    "edges":        edges,
+                    "nodes": [dict(r) for r in await nodes_cur.fetchall()],
+                    "pivots": pivots,
+                    "edges": edges,
                     "legacy_edges": [dict(r) for r in await legacy_cur.fetchall()],
                 }
             self.socketio.emit("graph_update", {"case_id": case_id, "graph": graph})
         except Exception as e:
             print(f"[Services] emit_graph error: {e}")
-            
+
     def _build_modules_for_job(self, extra_config: dict) -> dict:
         """
         Retourne self.modules complété par les instances MISP externes
@@ -451,7 +521,7 @@ class Services:
 
         raw_instances = extra_config.get("misp_instances") or []
         for inst in raw_instances:
-            iid   = str(inst.get("id",    "")).strip()
+            iid = str(inst.get("id", "")).strip()
             label = str(inst.get("label", "")).strip()
             if not iid or not label:
                 continue
