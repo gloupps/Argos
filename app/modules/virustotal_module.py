@@ -635,7 +635,7 @@ class VirusTotalModule(Module):
         ioc_type = context.get("ioc_type", "ip")
         all_roots = context.get("all_root_indicators", [])
         threshold = int(context.get("vt_detection_threshold", 3))
-        max_rel = int(context.get("vt_max_relations", 10))
+        min_shared_roots = int(context.get("vt_min_shared_roots", 2))
 
         if not api_key:
             return []
@@ -681,7 +681,9 @@ class VirusTotalModule(Module):
         if not my_relations:
             return []
 
-        shared: Dict[str, str] = {}
+        shared_counts: Dict[str, int] = {}   # val → nombre de roots qui partagent cette relation
+        shared_types:  Dict[str, str] = {}   # val → type
+
         for other in other_roots:
             other_base, _ = self._endpoint(other, ioc_type)
             if not other_base:
@@ -695,21 +697,22 @@ class VirusTotalModule(Module):
                     attrs = item.get("attributes", {})
                     val = self._extract_rel_value(item, attrs, target_type)
                     if val and val in my_relations:
-                        shared[val] = my_relations[val]
+                        shared_counts[val] = shared_counts.get(val, 0) + 1
+                        shared_types[val]  = my_relations[val]
 
         results = []
-        for val, target_type in list(shared.items())[:max_rel]:
-            results.append(
-                {
-                    "source_indicator": indicator,
-                    "source_type": ioc_type,
-                    "target_indicator": val,
-                    "target_type": target_type,
-                    "score": 1,
-                    "pivot": True,
-                    "pivot_reason": f"VT cross-IOC relation (shared with {len(other_roots)} root(s))",
-                }
-            )
+        for val, count in shared_counts.items():
+            if count < min_shared_roots:      # ← filtre : doit être partagé par assez de roots
+                continue
+            results.append({
+                "source_indicator": indicator,
+                "source_type":      ioc_type,
+                "target_indicator": val,
+                "target_type":      shared_types[val],
+                "score":            1,
+                "pivot":            True,
+                "pivot_reason":     f"VT cross-IOC relation (shared with {count}/{len(other_roots)} root(s))",
+            })
 
         return results
 
@@ -771,12 +774,12 @@ class VirusTotalModule(Module):
                 "default": 3,
             },
             {
-                "key": "vt_max_relations",
+                "key": "vt_min_shared_roots",       # ← clé renommée
                 "type": "range",
-                "label": "Max shared relations",
+                "label": "Min shared relations between roots",
                 "min": 1,
-                "max": 30,
-                "default": 10,
+                "max": 10,
+                "default": 2,
             },
         ]
 
