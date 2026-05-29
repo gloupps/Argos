@@ -30,13 +30,15 @@ class Services:
         from app.modules.viewdns_module import ViewDNSModule
         from app.modules.urlscan_module import URLScanModule
         from app.modules.opencti_module import OpenCTIModule
+        from app.modules.misp_module import MISPModule
 
         self.modules = {
-            "shodan": ShodanModule(self.requester),
+            "shodan":     ShodanModule(self.requester),
             "virustotal": VirusTotalModule(self.requester),
-            "viewdns": ViewDNSModule(self.requester),
-            "urlscan": URLScanModule(self.requester),
-            "opencti": OpenCTIModule(self.requester),
+            "viewdns":    ViewDNSModule(self.requester),
+            "urlscan":    URLScanModule(self.requester),
+            "opencti":    OpenCTIModule(self.requester),
+            "misp":       MISPModule(self.requester),
         }
 
     # ── Public ────────────────────────────────────────────
@@ -115,7 +117,8 @@ class Services:
 
             for ind in indicators:
                 ioc_type = ind["type"]
-                for mod_key, module in self.modules.items():
+                job_modules = self._build_modules_for_job(extra_config)
+                for mod_key, module in job_modules.items():
                     if ioc_type not in module.supported_types:
                         self.job_manager.add_log(
                             job_id,
@@ -251,7 +254,8 @@ class Services:
 
             for ind in indicators:
                 ioc_type = ind["type"]
-                for mod_key, module in self.modules.items():
+                job_modules = self._build_modules_for_job(extra_config)
+                for mod_key, module in job_modules.items():
                     if ioc_type not in module.supported_types:
                         continue
                     api_key = api_keys.get(mod_key)
@@ -373,7 +377,8 @@ class Services:
         api_keys = data.get("api_keys", {})
         extra_config = data.get("extra_config", {})
         result = {}
-        for mod_key, module in self.modules.items():
+        job_modules = self._build_modules_for_job(extra_config)
+        for mod_key, module in job_modules.items():
             api_key = api_keys.get(mod_key)
             if not api_key:
                 continue
@@ -431,3 +436,24 @@ class Services:
             self.socketio.emit("graph_update", {"case_id": case_id, "graph": graph})
         except Exception as e:
             print(f"[Services] emit_graph error: {e}")
+            
+    def _build_modules_for_job(self, extra_config: dict) -> dict:
+        """
+        Retourne self.modules complété par les instances MISP externes
+        déclarées dans extra_config["misp_instances"].
+        """
+        from app.modules.misp_module import ExternalMISPModule
+
+        modules = dict(self.modules)  # shallow copy — on n'altère pas self.modules
+
+        raw_instances = extra_config.get("misp_instances") or []
+        for inst in raw_instances:
+            iid   = str(inst.get("id",    "")).strip()
+            label = str(inst.get("label", "")).strip()
+            if not iid or not label:
+                continue
+            key = f"misp_ext_{iid}"
+            if key not in modules:  # ne pas écraser un module déjà présent
+                modules[key] = ExternalMISPModule(self.requester, iid, label)
+
+        return modules
