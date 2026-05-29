@@ -46,6 +46,9 @@ window.Modules = {
                 });
             });
 
+            // ── Injecter les modules MISP externes depuis SecretStore ──────
+            this._injectExternalMispModules();
+
             console.log("[Modules] registry:", Object.keys(this.registry));
 
             await this._loadCorrelationSchema();
@@ -55,6 +58,29 @@ window.Modules = {
             console.error("[Modules] load error", err);
         }
     },
+    
+    _injectExternalMispModules() {
+        const instances = SecretStore.getJSON?.("misp_instances", []) ?? [];
+        instances.forEach(inst => {
+            const key = `misp_ext_${inst.id}`;
+            this.registry[key] = {
+                key,
+                name:            `MISP — ${inst.label}`,
+                description:     `External MISP instance: ${inst.label}`,
+                type:            "external",
+                icon:            "share-2",
+                url:             "",
+                supported_types: ["ip", "domain", "url", "hash"],
+                correlation:     [],
+                // settings_fields vide : l'URL/key sont gérés directement dans
+                // le bloc MISPInstances (pas dans la section "API Keys" standard)
+                settings_fields: [],
+            };
+            if (this.state.enabled[key]     === undefined) this.state.enabled[key]     = true;
+            if (this._correlateEnabled[key] === undefined) this._correlateEnabled[key] = true;
+        });
+    },
+
 
     async _loadCorrelationSchema() {
         try {
@@ -292,12 +318,27 @@ window.Modules = {
 
     collectExtraConfig() {
         const extra = {};
+
+        // Champs extra déclarés par chaque module (opencti_url, misp_url, etc.)
         Object.values(this.registry).forEach(mod => {
             (mod.settings_fields || []).forEach(sf => {
                 const val = SecretStore?.get(`extra_${sf.key}`);
                 if (val) extra[sf.key] = val;
             });
         });
+
+        // Liste des instances MISP externes (pour que le backend puisse les instancier)
+        const mispInstances = SecretStore.getJSON?.("misp_instances", []) ?? [];
+        if (mispInstances.length) {
+            extra["misp_instances"] = mispInstances;
+            // Inclure l'URL de chaque instance
+            mispInstances.forEach(inst => {
+                const urlKey = `extra_misp_ext_${inst.id}_url`;
+                const url    = SecretStore.get(urlKey);
+                if (url) extra[`misp_ext_${inst.id}_url`] = url;
+            });
+        }
+
         return extra;
     },
 
