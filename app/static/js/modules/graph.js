@@ -409,15 +409,13 @@ window.LinkDrag = {
 
         // ── IOC → IOC : créer un nouveau pivot ───────────
         if (!srcIsPivot && !tgtIsPivot) {
-            const pivotName = prompt(`Name the pivot connecting:\n${srcLabel}  ↔  ${tgtLabel}`, "");
-            if (pivotName === null) return;
             const result = await App.runAction({
-                action:        "add_manual_edge",
-                case_id:       caseId,
-                src:           srcLabel,
-                tgt:           tgtLabel,
-                pivot_label:   pivotName.trim() || "manual",
-                src_direction: "out",   // src --→ pivot --→ tgt
+                action:      "add_manual_edge",
+                case_id:     caseId,
+                src:         srcLabel,
+                tgt:         tgtLabel,
+                pivot_label: pivotName.trim() || "manual",
+                link_type:   "correlation",   // ← ioc → pivot ← ioc
             });
             if (result?.ok) {
                 JobLog?.push?.({ message: `✓ pivot "${pivotName.trim() || "manual"}" created`, status: "done" });
@@ -436,8 +434,9 @@ window.LinkDrag = {
                 case_id:       caseId,
                 src:           srcLabel,
                 pivot_label:   tgtLabel,
-                pivot_db_id:   tgtData.pivotDbId ?? null,   // ← NEW
-                src_direction: "out",
+                pivot_db_id:   tgtData.pivotDbId ?? null,
+                link_type:     "manual_directed",
+                src_direction: "out",   // IOC → pivot
             });
             if (result?.ok) {
                 JobLog?.push?.({ message: `✓ ${srcLabel} → pivot "${tgtLabel}"`, status: "done" });
@@ -454,10 +453,11 @@ window.LinkDrag = {
             const result = await App.runAction({
                 action:        "add_manual_edge",
                 case_id:       caseId,
-                src:           tgtLabel,
+                src:           tgtLabel,       // on garde src=IOC pour cohérence
                 pivot_label:   srcLabel,
-                pivot_db_id:   srcData.pivotDbId ?? null,   // ← NEW
-                src_direction: "in",
+                pivot_db_id:   srcData.pivotDbId ?? null,
+                link_type:     "manual_directed",
+                src_direction: "in",    // pivot → IOC (l'IOC "reçoit" du pivot)
             });
             if (result?.ok) {
                 JobLog?.push?.({ message: `✓ pivot "${srcLabel}" → ${tgtLabel}`, status: "done" });
@@ -667,13 +667,17 @@ window.ContextMenu = {
 
     async _runAddIndicator(caseId, nodeType) {
         this.hide();
-        const value = prompt(`Add a new ${nodeType} indicator:`);
+        const value = prompt(`Add a new ${nodeType}:`);
         if (!value?.trim()) return;
         const tabId = App?.state?.activeTab;
-        const result = await App.runAction({
-            action: "add_ioc", case_id: caseId,
-            value: value.trim(), node_type: nodeType,
-        });
+
+        // Un pivot est une entité de la table pivots, pas un indicateur
+        const action = nodeType === "pivot" ? "add_pivot" : "add_ioc";
+        const payload = nodeType === "pivot"
+            ? { action, case_id: caseId, label: value.trim() }
+            : { action, case_id: caseId, value: value.trim(), node_type: nodeType };
+
+        const result = await App.runAction(payload);
         if (result?.ok) {
             JobLog?.push?.({ message: `✓ ${value.trim()} added as ${nodeType}`, status: "done" });
             GraphModule?.refreshGraph?.(tabId, caseId);
