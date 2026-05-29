@@ -409,13 +409,15 @@ window.LinkDrag = {
 
         // ── IOC → IOC : créer un nouveau pivot ───────────
         if (!srcIsPivot && !tgtIsPivot) {
+            const pivotName = prompt(`Create a pivot between "${srcLabel}" and "${tgtLabel}":\nPivot name:`, "manual");
+            if (pivotName === null) return;  // annulé par l'utilisateur
             const result = await App.runAction({
                 action:      "add_manual_edge",
                 case_id:     caseId,
                 src:         srcLabel,
                 tgt:         tgtLabel,
                 pivot_label: pivotName.trim() || "manual",
-                link_type:   "correlation",   // ← ioc → pivot ← ioc
+                link_type:   "correlation",
             });
             if (result?.ok) {
                 JobLog?.push?.({ message: `✓ pivot "${pivotName.trim() || "manual"}" created`, status: "done" });
