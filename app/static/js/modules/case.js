@@ -56,9 +56,7 @@ window.CaseModule = {
         }
         this._clearError(form);
 
-        const corrConfig = Object.keys(Modules?.registry || {}).reduce((acc, k) => ({
-            ...acc, ...(Modules.getCorrelationConfig(k) || {}),
-        }), {});
+        const corrConfig = Modules?.collectCorrelationConfig?.() || {};
         const result = await App.runAction({
             ...payload,
             api_keys:           App._collectApiKeys(true),   // true = inclure les clés correlate
