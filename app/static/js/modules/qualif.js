@@ -19,7 +19,7 @@ window.EnrichPanel = {
     _isEmpty(v) {
         if (v === null || v === undefined || v === "") return true;
         if (typeof v === "number" && v === 0) return true;
-        if (Array.isArray(v) && v.filter(x => x !== "" && x !== null).length === 0) return true;
+        if (Array.isArray(v) && v.filter(x => x !== "" && x !== null && typeof x !== "object").length === 0 && !v.some(x => x && typeof x === "object")) return true;
         return false;
     },
 
@@ -309,7 +309,7 @@ window.EnrichPanel = {
             });
         });
 
-        const ORDER = ["threat","host","ports","vulns","dns","tags","urlscan_meta","screenshot","urlscan_web","urlscan_content","other"];
+        const ORDER = ["threat","host","ports","vulns","dns","tags","urlscan_meta","screenshot","urlscan_web","urlscan_content","shodan_services","other"];
         const sections = ORDER
             .filter(t => themes[t]?.length)
             .map(t => this._renderThemeSection(t, themes[t]))

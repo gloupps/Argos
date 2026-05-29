@@ -155,8 +155,9 @@ class ShodanModule(Module):
                 h["redirects"] = len(http["redirects"])
             if http.get("waf"):
                 h["waf"] = http["waf"]
-            if http.get("components"):
-                comps = list(http["components"].keys())
+            components = http.get("components")
+            if components and isinstance(components, dict):
+                comps = list(components.keys())
                 if comps:
                     h["components"] = comps[:10]
             entry["http"] = h
@@ -197,7 +198,7 @@ class ShodanModule(Module):
             if ssh.get("type"):
                 sh["type"] = ssh["type"]
             fingerprint = ssh.get("fingerprint", {})
-            if fingerprint:
+            if fingerprint and isinstance(fingerprint, dict):
                 for algo, fp in list(fingerprint.items())[:2]:
                     sh[f"fp_{algo}"] = fp
             entry["ssh"] = sh
