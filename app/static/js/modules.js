@@ -87,6 +87,31 @@ window.Modules = {
             const res    = await fetch("/api/modules/correlation");
             const schema = await res.json();
 
+            // ── Injecter les instances MISP externes dans le schema ──
+            // Elles ne sont pas retournées par le backend (instanciées dynamiquement),
+            // mais elles partagent les mêmes correlation_fields que MISPModule.
+            const mispInstances = SecretStore.getJSON?.("misp_instances", []) ?? [];
+            mispInstances.forEach(inst => {
+                const key = `misp_ext_${inst.id}`;
+                if (!schema[key] && SecretStore.has(key)) {
+                    schema[key] = {
+                        name:   `MISP — ${inst.label}`,
+                        icon:   "share-2",
+                        fields: [
+                            {
+                                key:     "misp_max_events",
+                                type:    "range",
+                                label:   "Max events per pivot",
+                                min:     1,
+                                max:     20,
+                                default: 3,
+                            },
+                        ],
+                    };
+                }
+            });
+            // ────────────────────────────────────────────────────────
+
             Object.entries(schema).forEach(([modKey, mod]) => {
                 if (!this._correlationState[modKey]) this._correlationState[modKey] = {};
                 (mod.fields || []).forEach(f => {
