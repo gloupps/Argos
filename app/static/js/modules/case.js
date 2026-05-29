@@ -56,8 +56,14 @@ window.CaseModule = {
         }
         this._clearError(form);
 
-        const result = await App.runAction(payload);
-
+        const corrConfig = Object.keys(Modules?.registry || {}).reduce((acc, k) => ({
+            ...acc, ...(Modules.getCorrelationConfig(k) || {}),
+        }), {});
+        const result = await App.runAction({
+            ...payload,
+            api_keys:           App._collectApiKeys(true),   // true = inclure les clés correlate
+            correlation_config: corrConfig,
+        });
         if (btn) {
             btn.disabled = false;
             btn.innerHTML = `<i data-lucide="play" class="w-4 h-4"></i> Create Case`;
