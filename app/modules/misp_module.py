@@ -1,4 +1,4 @@
-import aiohttp
+# app/modules/misp_module.py
 import asyncio
 from typing import List, Dict, Any
 from .module import Module
@@ -34,6 +34,41 @@ class MISPModule(Module):
         self.requester = requester
 
     # ──────────────────────────────────────────────────────
+    # get_correlation_fields  — exposé via module.py → get_fields()
+    # ──────────────────────────────────────────────────────
+    def get_correlation_fields(self) -> List[Dict[str, Any]]:
+        return [
+            {
+                "key":     "misp_max_events",
+                "type":    "range",
+                "label":   "Max events per pivot",
+                "min":     1,
+                "max":     20,
+                "default": 3,
+            },
+        ]
+
+    # ──────────────────────────────────────────────────────
+    # get_fields  — surcharge pour fixer la clé "misp"
+    # ──────────────────────────────────────────────────────
+    def get_fields(self) -> Dict[str, Any]:
+        base = super().get_fields()
+        base["key"]             = "misp"
+        base["settings_fields"] = self.settings_fields
+        return base
+
+    # ──────────────────────────────────────────────────────
+    # _misp_headers  — construit les headers MISP communs
+    # ──────────────────────────────────────────────────────
+    @staticmethod
+    def _misp_headers(api_key: str) -> Dict[str, str]:
+        return {
+            "Authorization": api_key,
+            "Accept":        "application/json",
+            "Content-Type":  "application/json",
+        }
+
+    # ──────────────────────────────────────────────────────
     # get_info
     # ──────────────────────────────────────────────────────
     async def get_info(self, indicator: str, context: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -42,20 +77,19 @@ class MISPModule(Module):
         if not api_key or not base_url:
             return []
 
-        headers = {
-            "Authorization": api_key,
-            "Accept":        "application/json",
-            "Content-Type":  "application/json",
-        }
+        headers = self._misp_headers(api_key)
 
         # ── 1. Recherche des attributs correspondants ─────
-        payload = {
-            "returnFormat": "json",
-            "value":        indicator,
-            "limit":        20,
-            "includeEventTags": True,
-        }
-        data = await self._post(f"{base_url}/attributes/restSearch", headers, payload)
+        data = await self.requester.post(
+            f"{base_url}/attributes/restSearch",
+            headers=headers,
+            json={
+                "returnFormat":    "json",
+                "value":           indicator,
+                "limit":           20,
+                "includeEventTags": True,
+            },
+        )
         if not data:
             return [self._f(indicator, "In MISP", "label-capsule", "Not found")]
 
@@ -68,7 +102,7 @@ class MISPModule(Module):
         # ── 2. Dédupliquer les events référencés ──────────
         events: Dict[str, Dict] = {}
         for attr in attributes:
-            ev = attr.get("Event") or {}
+            ev  = attr.get("Event") or {}
             eid = ev.get("id") or attr.get("event_id")
             if eid and eid not in events:
                 events[eid] = ev
@@ -90,15 +124,13 @@ class MISPModule(Module):
                 name = (tag.get("name") or "").strip()
                 if name:
                     tag_set.add(name)
-            # tags portés par l'event
             for ev_tag in (attr.get("Event") or {}).get("Tag") or []:
                 name = (ev_tag.get("name") or "").strip()
                 if name:
                     tag_set.add(name)
 
-        # Séparer les tags MITRE/Galaxy des tags libres
-        mitre_tags  = sorted(t for t in tag_set if "mitre" in t.lower() or "galaxy" in t.lower())
-        plain_tags  = sorted(t for t in tag_set if t not in mitre_tags)
+        mitre_tags = sorted(t for t in tag_set if "mitre" in t.lower() or "galaxy" in t.lower())
+        plain_tags = sorted(t for t in tag_set if t not in mitre_tags)
 
         if plain_tags:
             results.append(self._f(indicator, "Tags", "list", plain_tags[:10]))
@@ -139,57 +171,67 @@ class MISPModule(Module):
     # get_correlation  — pivot sur les attributs co-événements
     # ──────────────────────────────────────────────────────
     async def get_correlation(self, indicator: str, context: Dict[str, Any]) -> List[Dict[str, Any]]:
-        api_key  = context.get("api_key")
-        base_url = context.get("misp_url", "").rstrip("/")
+        api_key   = context.get("api_key")
+        base_url  = context.get("misp_url", "").rstrip("/")
         if not api_key or not base_url:
             return []
 
-        headers = {
-            "Authorization": api_key,
-            "Accept":        "application/json",
-            "Content-Type":  "application/json",
-        }
+        # ← Lit la valeur du slider (défaut 3 si absent)
+        max_events = int(context.get("misp_max_events", 3))
 
-        # Trouver les events qui contiennent cet indicateur
-        payload = {
-            "returnFormat": "json",
-            "value":        indicator,
-            "limit":        5,
-        }
-        data = await self._post(f"{base_url}/attributes/restSearch", headers, payload)
+        headers = self._misp_headers(api_key)
+
+        # ── 1. Trouver les events qui contiennent cet indicateur ──
+        data = await self.requester.post(
+            f"{base_url}/attributes/restSearch",
+            headers=headers,
+            json={
+                "returnFormat": "json",
+                "value":        indicator,
+                "limit":        max_events * 2,   # marge pour la déduplication
+            },
+        )
         if not data:
             return []
 
         attributes = (data.get("response") or {}).get("Attribute") or []
-        event_ids = list({
+        event_ids  = list({
             a.get("event_id") for a in attributes if a.get("event_id")
-        })[:3]
+        })[:max_events]   # ← respecte la valeur du slider
 
         if not event_ids:
             return []
 
+        # ── 2. Pour chaque event, récupérer les attributs co-présents ──
         correlations: List[Dict[str, Any]] = []
         seen: set = {indicator}
 
-        for eid in event_ids:
-            # Récupérer tous les attributs de l'événement
-            ev_payload = {
-                "returnFormat": "json",
-                "eventid":      eid,
-                "limit":        50,
-            }
-            ev_data = await self._post(f"{base_url}/attributes/restSearch", headers, ev_payload)
-            if not ev_data:
+        # Lancer toutes les requêtes en parallèle
+        tasks = [
+            self.requester.post(
+                f"{base_url}/attributes/restSearch",
+                headers=headers,
+                json={
+                    "returnFormat": "json",
+                    "eventid":      eid,
+                    "limit":        50,
+                },
+            )
+            for eid in event_ids
+        ]
+        responses = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for eid, ev_data in zip(event_ids, responses):
+            if not ev_data or isinstance(ev_data, Exception):
                 continue
 
             ev_attrs = (ev_data.get("response") or {}).get("Attribute") or []
             for attr in ev_attrs:
-                val  = (attr.get("value") or "").strip()
-                typ  = attr.get("type", "")
+                val = (attr.get("value") or "").strip()
+                typ = attr.get("type", "")
                 if not val or val in seen:
                     continue
 
-                # Mapper le type MISP vers nos types internes
                 target_type = _misp_type_to_ioc(typ)
                 if not target_type:
                     continue
@@ -208,7 +250,7 @@ class MISPModule(Module):
         return correlations
 
     # ──────────────────────────────────────────────────────
-    # get_quotas  — version MISP (pas de quota, on probe)
+    # get_quotas  — version MISP (pas de quota, on probe la version)
     # ──────────────────────────────────────────────────────
     async def get_quotas(self, context: Dict[str, Any]) -> Dict[str, Any]:
         api_key  = context.get("api_key")
@@ -220,67 +262,25 @@ class MISPModule(Module):
             "Authorization": api_key,
             "Accept":        "application/json",
         }
-        try:
-            timeout = aiohttp.ClientTimeout(total=10)
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.get(
-                    f"{base_url}/servers/getVersion",
-                    headers=headers, ssl=False
-                ) as resp:
-                    if resp.status != 200:
-                        return {}
-                    body = await resp.json()
-                    version = body.get("version", "unknown")
-                    return {
-                        "plan_type": "internal",
-                        "version":   version,
-                        "remaining": None,
-                        "limit":     None,
-                    }
-        except Exception:
+
+        body = await self.requester.get(
+            f"{base_url}/servers/getVersion",
+            headers=headers,
+        )
+        if not body:
             return {"plan_type": "internal", "remaining": None, "limit": None}
 
-    # ──────────────────────────────────────────────────────
-    # get_fields
-    # ──────────────────────────────────────────────────────
-    def get_fields(self) -> Dict[str, Any]:
-        base = super().get_fields()
-        base["key"]             = "misp"
-        base["settings_fields"] = self.settings_fields
-        return base
-    
-    def get_correlation_fields(self):
-        return [
-            {
-                "key":     "misp_max_events",
-                "type":    "range",
-                "label":   "Max events per pivot",
-                "min":     1,
-                "max":     20,
-                "default": 3,
-            },
-        ]
+        version = body.get("version", "unknown")
+        return {
+            "plan_type": "internal",
+            "version":   version,
+            "remaining": None,
+            "limit":     None,
+        }
 
     # ──────────────────────────────────────────────────────
-    # Helpers
+    # Helper statique — formatage d'un champ de résultat
     # ──────────────────────────────────────────────────────
-    async def _post(self, url: str, headers: Dict, payload: Dict) -> Dict | None:
-        timeout = aiohttp.ClientTimeout(total=15)
-        for attempt in range(3):
-            try:
-                async with aiohttp.ClientSession(timeout=timeout) as session:
-                    async with session.post(
-                        url, json=payload, headers=headers, ssl=False
-                    ) as resp:
-                        if resp.status not in (200, 201):
-                            return None
-                        return await resp.json()
-            except Exception:
-                if attempt == 2:
-                    return None
-                await asyncio.sleep(1 * (attempt + 1))
-        return None
-
     @staticmethod
     def _f(indicator, name, field_type, value, max_=None) -> Dict[str, Any]:
         return {
@@ -331,33 +331,29 @@ class ExternalMISPModule(MISPModule):
         return base
 
     async def get_info(self, indicator: str, context: Dict[str, Any]) -> List[Dict[str, Any]]:
-        # Récupère l'URL spécifique à cette instance depuis le context
         url_key = f"misp_ext_{self._instance_id}_url"
-        instance_context = {
+        return await super().get_info(indicator, {
             **context,
             "misp_url": context.get(url_key, ""),
-        }
-        return await super().get_info(indicator, instance_context)
+        })
 
     async def get_correlation(self, indicator: str, context: Dict[str, Any]) -> List[Dict[str, Any]]:
         url_key = f"misp_ext_{self._instance_id}_url"
-        instance_context = {
+        return await super().get_correlation(indicator, {
             **context,
             "misp_url": context.get(url_key, ""),
-        }
-        return await super().get_correlation(indicator, instance_context)
+        })
 
     async def get_quotas(self, context: Dict[str, Any]) -> Dict[str, Any]:
         url_key = f"misp_ext_{self._instance_id}_url"
-        instance_context = {
+        return await super().get_quotas({
             **context,
             "misp_url": context.get(url_key, ""),
-        }
-        return await super().get_quotas(instance_context)
+        })
 
 
 # ──────────────────────────────────────────────────────────────
-# Helpers
+# Helper — mapping types MISP → types IOC internes
 # ──────────────────────────────────────────────────────────────
 
 def _misp_type_to_ioc(misp_type: str) -> str | None:
