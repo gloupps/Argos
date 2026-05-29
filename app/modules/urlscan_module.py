@@ -78,7 +78,7 @@ class URLScanModule(Module):
 
         ioc_type  = context.get("ioc_type", "domain")
         headers   = {"API-Key": api_key}
-        min_hits  = int(context.get("urlscan_min_hits", 2))
+        max_hits  = int(context.get("urlscan_max_hits", 2))
 
         # ── 1. Trouver l'UUID le plus récent ──────────────
         if ioc_type == "url":
@@ -136,7 +136,7 @@ class URLScanModule(Module):
             item_ip     = item.get("ip")     or (item.get("page") or {}).get("ip", "")
             hits        = int(item.get("hits") or item.get("score") or 1)
 
-            if hits < min_hits:
+            if hits > max_hits:
                 continue
 
             # Pivot 1 : même domaine → on skip (c'est l'IP qu'on veut)
@@ -189,12 +189,12 @@ class URLScanModule(Module):
     def get_correlation_fields(self):
         return [
             {
-                "key":     "urlscan_min_hits",
+                "key":     "urlscan_max_results",   # ← clé renommée
                 "type":    "range",
-                "label":   "Min similarity hits",
+                "label":   "Max similarity hits",
                 "min":     1,
                 "max":     20,
-                "default": 2,
+                "default": 5,
             },
         ]
 
