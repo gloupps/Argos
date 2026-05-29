@@ -7,6 +7,17 @@ window.Settings = {
 
     open() {
         Modules?.renderSettingsKeys?.();
+
+        // Injecter le bloc "External MISP Instances" dans le modal
+        const modalBody = document.querySelector("#settings-modal > div");
+        document.getElementById("misp-instances-section")?.remove();
+        if (modalBody) {
+            const saveBar = modalBody.lastElementChild;
+            const wrapper = document.createElement("div");
+            modalBody.insertBefore(wrapper, saveBar);
+            MISPInstances?.render?.(wrapper);
+        }
+
         document.getElementById("settings-modal")?.classList.remove("hidden");
     },
 
@@ -15,16 +26,19 @@ window.Settings = {
     },
 
     save() {
-        // Save API keys
+        // API keys
         document.querySelectorAll("#settings-keys input[data-key]").forEach(input => {
             const val = input.value.trim();
             if (val) SecretStore.set(input.dataset.key, val);
         });
-        // Save extra settings fields (e.g. opencti_url)
+        // Champs extra (opencti_url, misp_url…)
         document.querySelectorAll("#settings-keys input[data-extra-key]").forEach(input => {
             const val = input.value.trim();
             SecretStore.set(`extra_${input.dataset.extraKey}`, val);
         });
+        // Instances MISP externes — tout dans SecretStore
+        MISPInstances?.collect?.();
+
         this.close();
         document.dispatchEvent(new Event("settings:updated"));
     },
