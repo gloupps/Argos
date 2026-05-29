@@ -365,7 +365,7 @@ class Database:
             # src → pivot (direction out), pivot → tgt (direction in)
             await self.link_indicator_to_pivot(case_id, pivot_id, src_indicator_id, "out")
             if tgt_indicator_id != src_indicator_id:
-                await self.link_indicator_to_pivot(case_id, pivot_id, tgt_indicator_id, "in")
+                await self.link_indicator_to_pivot(case_id, pivot_id, tgt_indicator_id, "out")
 
         await self.db.commit()
 
