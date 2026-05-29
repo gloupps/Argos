@@ -339,6 +339,16 @@ def register_routes(app, services, job_manager):
         if action == "add_ioc":
             case_id = data.get("case_id")
             value = (data.get("value") or "").strip()
+            
+            # ── snapshot undo ──
+            import asyncio as _aio
+            _loop = _aio.new_event_loop()
+            try:
+                _loop.run_until_complete(services.database.connect())
+                _loop.run_until_complete(services.database.save_graph_snapshot(case_id))
+            finally:
+                _loop.close()
+                
             if not case_id or not value:
                 return jsonify({"error": "missing case_id or value"}), 400
             node_type = data.get("node_type", "root")
@@ -371,6 +381,16 @@ def register_routes(app, services, job_manager):
         if action == "delete_indicator":
             case_id = data.get("case_id")
             value = (data.get("value") or "").strip()
+            
+            # ── snapshot undo ──
+            import asyncio as _aio
+            _loop = _aio.new_event_loop()
+            try:
+                _loop.run_until_complete(services.database.connect())
+                _loop.run_until_complete(services.database.save_graph_snapshot(case_id))
+            finally:
+                _loop.close()
+                
             if not case_id or not value:
                 return jsonify({"error": "missing case_id or value"}), 400
             try:
@@ -417,6 +437,15 @@ def register_routes(app, services, job_manager):
             src         = (data.get("src") or "").strip()
             tgt         = (data.get("tgt") or "").strip()
             pivot_label = (data.get("pivot_label") or "").strip()
+            
+            # ── snapshot undo ──
+            import asyncio as _aio
+            _loop = _aio.new_event_loop()
+            try:
+                _loop.run_until_complete(services.database.connect())
+                _loop.run_until_complete(services.database.save_graph_snapshot(case_id))
+            finally:
+                _loop.close()
 
             if not case_id or not pivot_label:
                 return jsonify({"error": "missing case_id or pivot_label"}), 400
@@ -490,7 +519,7 @@ def register_routes(app, services, job_manager):
                 else:
                     # Corrélation IOC↔IOC : les deux IOC pointent vers le pivot
                     src_direction = "out"
-                    tgt_direction = "out"
+                    tgt_direction = "in"
 
                 # ── Rattacher src ──
                 if src:
@@ -523,6 +552,16 @@ def register_routes(app, services, job_manager):
         if action == "add_pivot":
             case_id     = data.get("case_id")
             label       = (data.get("label") or "").strip()
+            
+            # ── snapshot undo ──
+            import asyncio as _aio
+            _loop = _aio.new_event_loop()
+            try:
+                _loop.run_until_complete(services.database.connect())
+                _loop.run_until_complete(services.database.save_graph_snapshot(case_id))
+            finally:
+                _loop.close()
+                
             if not case_id or not label:
                 return jsonify({"error": "missing case_id or label"}), 400
             try:
@@ -552,6 +591,16 @@ def register_routes(app, services, job_manager):
         if action == "delete_pivot":
             case_id     = data.get("case_id")
             pivot_label = (data.get("pivot_label") or "").strip()
+            
+            # ── snapshot undo ──
+            import asyncio as _aio
+            _loop = _aio.new_event_loop()
+            try:
+                _loop.run_until_complete(services.database.connect())
+                _loop.run_until_complete(services.database.save_graph_snapshot(case_id))
+            finally:
+                _loop.close()
+                
             if not case_id or not pivot_label:
                 return jsonify({"error": "missing case_id or pivot_label"}), 400
             try:
