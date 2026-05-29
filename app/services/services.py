@@ -234,10 +234,7 @@ class Services:
                 (case_id,),
             )
             snap_rows = [dict(r) for r in await snap_cur.fetchall()]
-            await db.execute(
-                "INSERT INTO correlation_history (case_id, snapshot) VALUES (?,?)",
-                (case_id, json.dumps(snap_rows)),
-            )
+            await self.database.save_graph_snapshot(case_id)
 
             job_db_id = str(uuid.uuid4())
             await db.execute(
