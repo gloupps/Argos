@@ -363,17 +363,6 @@ def register_routes(app, services, job_manager):
                 finally:
                     loop.close()
                 socketio.emit("graph_update", {"case_id": case_id, "graph": graph})
-                api_keys = data.get("api_keys", {})
-                extra_config = data.get("extra_config", {})
-                if api_keys:
-                    services.start_job(
-                        {
-                            "action": "enrich",
-                            "case_id": case_id,
-                            "api_keys": api_keys,
-                            "extra_config": extra_config,
-                        }
-                    )
                 return jsonify({"ok": True, "value": value})
             except Exception as e:
                 return jsonify({"error": str(e)}), 500
@@ -449,7 +438,16 @@ def register_routes(app, services, job_manager):
                     ).fetchone()
                     return row["id"] if row else None
 
-                def _get_or_create_pivot(label, module="manual"):
+                def _get_or_create_pivot(label, module="manual", pivot_db_id=None):
+                    # ← NEW: si l'id est fourni, on vérifie d'abord qu'il existe
+                    if pivot_db_id is not None:
+                        row = conn.execute(
+                            "SELECT id FROM pivots WHERE id=? AND case_id=?",
+                            (pivot_db_id, case_id),
+                        ).fetchone()
+                        if row:
+                            return row["id"]
+                    # fallback : chercher/créer par label
                     conn.execute(
                         "INSERT OR IGNORE INTO pivots (case_id, label, module) VALUES (?,?,?)",
                         (case_id, label, module),
@@ -470,8 +468,12 @@ def register_routes(app, services, job_manager):
                         (case_id, pivot_id, indicator_id, direction),
                     )
 
+                # Récupérer l'éventuel id de pivot transmis par le frontend
+                pivot_db_id_raw = data.get("pivot_db_id")
+                pivot_db_id = int(pivot_db_id_raw) if pivot_db_id_raw is not None else None
+
                 # ── Upsert le pivot ──
-                pivot_id = _get_or_create_pivot(pivot_label)
+                pivot_id = _get_or_create_pivot(pivot_label, pivot_db_id=pivot_db_id)
                 if not pivot_id:
                     conn.close()
                     return jsonify({"error": "could not create pivot"}), 500
