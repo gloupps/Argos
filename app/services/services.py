@@ -139,10 +139,12 @@ class Services:
                     )
                     try:
                         # Build context — include ioc_type and any extra_config (e.g. opencti_url)
+                        mod_cfg = cfg.get(mod_key, {}) if isinstance(cfg, dict) else {}
                         context = {
                             "api_key": api_key,
                             "ioc_type": ioc_type,
-                            "max_results": 10,
+                            "all_root_indicators": all_root_indicators,
+                            **mod_cfg,
                             **extra_config,
                         }
                         results = await module.get_info(ind["value"], context)
@@ -266,11 +268,12 @@ class Services:
                         job_id, f"🔗 [{module.name}] pivot {ind['value']}…"
                     )
                     try:
+                        mod_cfg = cfg.get(mod_key, {}) if isinstance(cfg, dict) else {}
                         context = {
                             "api_key": api_key,
                             "ioc_type": ioc_type,
                             "all_root_indicators": all_root_indicators,
-                            **cfg,
+                            **mod_cfg,
                             **extra_config,
                         }
                         corrs = await module.get_correlation(ind["value"], context)
