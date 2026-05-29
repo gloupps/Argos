@@ -333,6 +333,16 @@ window.Modules = {
     getCorrelationConfig(modKey) {
         return this._correlationState[modKey] || {};
     },
+    
+    collectCorrelationConfig() {
+        // Retourne { modKey: { field: value, ... }, ... } — structuré par module
+        const out = {};
+        Object.keys(this._correlationState).forEach(modKey => {
+            const cfg = this._correlationState[modKey];
+            if (cfg && Object.keys(cfg).length) out[modKey] = { ...cfg };
+        });
+        return out;
+    },
 
     isAvailable(key)        { return SecretStore?.has?.(key) ?? false; },
     isEnabled(key)          { return this.state.enabled[key] !== false; },
@@ -556,7 +566,7 @@ window.Modules = {
             App.runAction({
                 action: "correlate", case_id: caseId,
                 api_keys: corrKeys, extra_config: extraConf,
-                correlation_config: this.getCorrelationConfig(mod.key),
+                correlation_config: { [mod.key]: this.getCorrelationConfig(mod.key) },
             }).then(r => {
                 if (r?.job_id)
                     JobLog?.push?.({ message: `[${mod.name}] Correlation started`, status: "running" });
