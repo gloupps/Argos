@@ -28,6 +28,7 @@ class VirusTotalModule(Module):
             "related_threat_actors",
             "referrer_files",
             "comments",
+            "collections",
         ],
         "domain": [
             "caa_records",
@@ -43,6 +44,8 @@ class VirusTotalModule(Module):
             "urls",
             "subdomains",
             "comments",
+            "collections",
+            "related_references",
         ],
         "url": [
             "communicating_files",
@@ -55,6 +58,8 @@ class VirusTotalModule(Module):
             "referrer_urls",
             "related_threat_actors",
             "comments",
+            "collections",
+            "related_references",
         ],
         "hash": [
             "bundled_files",
@@ -68,6 +73,8 @@ class VirusTotalModule(Module):
             "execution_parents",
             "related_threat_actors",
             "submissions",
+            "collections",
+            "related_references",
         ],
     }
 
@@ -172,6 +179,19 @@ class VirusTotalModule(Module):
                     }
                 )
 
+            elif endpoint == "collections":
+                name = attrs.get("name") or item.get("id")
+                description = (attrs.get("description") or "")[:150]
+                collection_id = item.get("id", "")
+                if name:
+                    result.append(
+                        {
+                            "name": name,
+                            "description": description,
+                            "id": collection_id,
+                        }
+                    )
+
             elif endpoint == "historical_ssl_certificates":
                 result.append(
                     {
@@ -184,6 +204,32 @@ class VirusTotalModule(Module):
                 name = attrs.get("name") or item.get("id")
                 if name:
                     result.append({"name": name})
+
+            elif endpoint == "related_references":
+                # Chaque item est une référence externe (article, blog, rapport)
+                # attrs: url, title, author, creation_date
+                # context_attributes.related_from: collections parentes (malware, tool...)
+                title = attrs.get("title") or ""
+                url = attrs.get("url") or ""
+                author = attrs.get("author") or ""
+                # Extraire les noms de collections parentes (ex: "Emotet")
+                related_from = (item.get("context_attributes") or {}).get(
+                    "related_from", []
+                )
+                parent_names = [
+                    rf.get("attributes", {}).get("name") or rf.get("id", "")
+                    for rf in related_from
+                    if rf.get("attributes", {}).get("name") or rf.get("id")
+                ]
+                if title or url:
+                    result.append(
+                        {
+                            "title": title,
+                            "url": url,
+                            "author": author,
+                            "parents": parent_names,
+                        }
+                    )
 
             elif endpoint == "comments":
                 result.append(
@@ -274,6 +320,55 @@ class VirusTotalModule(Module):
         tags = attrs.get("tags", [])
         if tags:
             res.append(self._f(indicator, "Tags", "list", tags))
+
+        # Collections (all types)
+        collections = relations.get("collections", [])
+        if collections:
+            col_labels = []
+            for c in collections:
+                label = c.get("name", "")
+                if c.get("description"):
+                    label += f" — {c['description']}"
+                if label:
+                    col_labels.append(label)
+            if col_labels:
+                res.append(
+                    self._f(indicator, "Collections", "list", col_labels, max_=10)
+                )
+
+        # Related References — références externes (articles, rapports, blogs)
+        # Chaque item a: title, url, author, parents (noms des collections parentes)
+        references = relations.get("related_references", [])
+        if references:
+            # Malware Names : noms uniques extraits de context_attributes.related_from
+            malware_names = list(
+                dict.fromkeys(
+                    name for r in references for name in r.get("parents", []) if name
+                )
+            )
+            if malware_names:
+                res.append(
+                    self._f(indicator, "Malware Names", "list", malware_names, max_=10)
+                )
+
+            # Reports : titre — auteur (avec lien)
+            report_entries = []
+            for r in references:
+                title = r.get("title", "")
+                author = r.get("author", "")
+                label = title + (f" — {author}" if author else "")
+                if label:
+                    report_entries.append(
+                        {
+                            "label": label,
+                            "url": r.get("url", ""),
+                        }
+                    )
+            if report_entries:
+                # On stocke les labels pour l'affichage liste
+                # et on expose le premier lien via le champ link
+                labels = [e["label"] for e in report_entries]
+                res.append(self._f(indicator, "Reports", "list", labels, max_=10))
 
         # ════════════════════════════════════════════════
         # IP
@@ -681,8 +776,10 @@ class VirusTotalModule(Module):
         if not my_relations:
             return []
 
-        shared_counts: Dict[str, int] = {}   # val → nombre de roots qui partagent cette relation
-        shared_types:  Dict[str, str] = {}   # val → type
+        shared_counts: Dict[str, int] = (
+            {}
+        )  # val → nombre de roots qui partagent cette relation
+        shared_types: Dict[str, str] = {}  # val → type
 
         for other in other_roots:
             other_base, _ = self._endpoint(other, ioc_type)
@@ -698,21 +795,25 @@ class VirusTotalModule(Module):
                     val = self._extract_rel_value(item, attrs, target_type)
                     if val and val in my_relations:
                         shared_counts[val] = shared_counts.get(val, 0) + 1
-                        shared_types[val]  = my_relations[val]
+                        shared_types[val] = my_relations[val]
 
         results = []
         for val, count in shared_counts.items():
-            if count < min_shared_roots:      # ← filtre : doit être partagé par assez de roots
+            if (
+                count < min_shared_roots
+            ):  # ← filtre : doit être partagé par assez de roots
                 continue
-            results.append({
-                "source_indicator": indicator,
-                "source_type":      ioc_type,
-                "target_indicator": val,
-                "target_type":      shared_types[val],
-                "score":            1,
-                "pivot":            True,
-                "pivot_reason":     f"VT cross-IOC relation (shared with {count}/{len(other_roots)} root(s))",
-            })
+            results.append(
+                {
+                    "source_indicator": indicator,
+                    "source_type": ioc_type,
+                    "target_indicator": val,
+                    "target_type": shared_types[val],
+                    "score": 1,
+                    "pivot": True,
+                    "pivot_reason": f"VT cross-IOC relation (shared with {count}/{len(other_roots)} root(s))",
+                }
+            )
 
         return results
 
@@ -774,7 +875,7 @@ class VirusTotalModule(Module):
                 "default": 3,
             },
             {
-                "key": "vt_min_shared_roots",       # ← clé renommée
+                "key": "vt_min_shared_roots",  # ← clé renommée
                 "type": "range",
                 "label": "Min shared relations between roots",
                 "min": 1,

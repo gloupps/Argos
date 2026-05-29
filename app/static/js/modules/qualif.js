@@ -235,6 +235,10 @@ window.EnrichPanel = {
         "IOC Count":       "threat",
         "Reporters":       "other",
         "ThreatFox Entry": "intel",
+        "Collections":      "vt_refs",
+        "Malware Names":    "vt_refs",
+        "Reports":          "vt_refs",
+        "Other Sightings":  "vt_refs",
         "Detection Score": "threat",  "Confidence Score": "threat",
         "Malicious":       "threat",  "Suspicious":       "threat",
         "Reputation":      "threat",  "Scan Count":       "threat",
@@ -259,7 +263,7 @@ window.EnrichPanel = {
         "Vulnerabilities": "vulns",
         "Tags":            "tags", "Categories": "tags", "Indicator Types": "tags",
         "In OpenCTI":      "intel", "Detection": "intel", "Labels": "intel",
-        "Reports":         "intel", "Report Count": "intel", "OpenCTI Link": "intel",
+        "VT Reports":      "intel", "Report Count": "intel", "OpenCTI Link": "intel",
     },
     _getTheme(name) { return this._THEME_MAP[name] || "other"; },
 
@@ -309,7 +313,7 @@ window.EnrichPanel = {
             });
         });
 
-        const ORDER = ["threat","host","ports","vulns","dns","tags","urlscan_meta","screenshot","urlscan_web","urlscan_content","shodan_services","other"];
+        const ORDER = ["threat","vt_refs","host","ports","vulns","dns","tags","urlscan_meta","screenshot","urlscan_web","urlscan_content","shodan_services","other"];
         const sections = ORDER
             .filter(t => themes[t]?.length)
             .map(t => this._renderThemeSection(t, themes[t]))
@@ -686,6 +690,56 @@ window.EnrichPanel = {
                     </tr>`;
             }).join("");
             return rows ? `${this._sectionHeader("database", "Intel")}<table class="w-full">${rows}</table>` : "";
+        }
+
+        // ── VT REFS (Collections, Malware, Reports, Other Sightings) ──
+        if (theme === "vt_refs") {
+            const fieldOrder = [
+                { name: "Malware Names",   icon: "bug",         color: "text-red-400"    },
+                { name: "Reports",         icon: "file-text",   color: "text-blue-400"   },
+                { name: "Other Sightings", icon: "eye",         color: "text-amber-400"  },
+                { name: "Collections",     icon: "folder-open", color: "text-slate-400"  },
+            ];
+            const blocks = [];
+            fieldOrder.forEach(({ name, icon, color }) => {
+                const matched = items.filter(({ field }) => field.name === name);
+                if (!matched.length) return;
+                const vals = [];
+                matched.forEach(({ field }) => {
+                    (Array.isArray(field.value) ? field.value : [field.value])
+                        .forEach(v => v && vals.push(String(v)));
+                });
+                if (!vals.length) return;
+                const rows = vals.slice(0, 10).map(v => {
+                    const sep = v.indexOf(" — ");
+                    const title    = sep !== -1 ? v.slice(0, sep) : v;
+                    const subtitle = sep !== -1 ? v.slice(sep + 3) : "";
+                    const tDisp = title.length > 40 ? title.slice(0, 38) + "…" : title;
+                    const sDisp = subtitle.length > 60 ? subtitle.slice(0, 58) + "…" : subtitle;
+                    return `
+                        <div class="flex items-start gap-1.5 py-1 border-b border-slate-800/40 last:border-0">
+                            <i data-lucide="${icon}" class="w-2.5 h-2.5 ${color} shrink-0 mt-0.5"></i>
+                            <div class="min-w-0">
+                                <div class="text-[9px] text-slate-200 font-medium truncate" title="${title}">${tDisp}</div>
+                                ${sDisp ? `<div class="text-[8px] text-slate-500 truncate">${sDisp}</div>` : ""}
+                            </div>
+                        </div>`;
+                }).join("");
+                const overflow = vals.length > 10
+                    ? `<div class="text-[8px] text-slate-600 pt-0.5">+${vals.length - 10} more</div>` : "";
+                blocks.push(`
+                    <div class="mb-2">
+                        <div class="flex items-center gap-1 mb-1">
+                            <i data-lucide="${icon}" class="w-2.5 h-2.5 text-slate-500"></i>
+                            <span class="text-[8px] text-slate-500 uppercase tracking-wider font-semibold">${name}</span>
+                            <span class="text-[8px] text-slate-600 ml-1">${vals.length}</span>
+                        </div>
+                        ${rows}${overflow}
+                    </div>`);
+            });
+            return blocks.length
+                ? `${this._sectionHeader("layers", "VT Associations", items.length)}${blocks.join("")}`
+                : "";
         }
 
         // ── OTHER / FALLBACK ──
