@@ -406,7 +406,7 @@ class Services:
                 edges = []
                 for pivot in pivots:
                     links_cur = await db.execute(
-                        """SELECT pl.indicator_id
+                        """SELECT pl.indicator_id, pl.direction
                            FROM pivot_links pl
                            WHERE pl.case_id=? AND pl.pivot_id=?""",
                         (case_id, pivot["id"]),
@@ -417,6 +417,7 @@ class Services:
                             "pivot_label":  pivot["label"],
                             "pivot_module": pivot["module"],
                             "indicator_id": lk["indicator_id"],
+                            "direction":    lk["direction"],    # ← NEW
                         })
 
                 legacy_cur = await db.execute(
