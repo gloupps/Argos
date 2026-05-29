@@ -391,7 +391,7 @@ class Database:
         edges = []
         for pivot in pivots:
             links_cur = await self.db.execute(
-                """SELECT pl.indicator_id, i.value as indicator_value
+                """SELECT pl.indicator_id, pl.direction, i.value as indicator_value
                    FROM pivot_links pl
                    JOIN indicators i ON i.id = pl.indicator_id
                    WHERE pl.case_id=? AND pl.pivot_id=?""",
@@ -404,6 +404,7 @@ class Database:
                     "pivot_label":  pivot["label"],
                     "pivot_module": pivot["module"],
                     "indicator_id": lk["indicator_id"],
+                    "direction":    lk["direction"],    # ← NEW
                 })
 
         # Edges legacy (modules auto-correlation non encore migrés)
