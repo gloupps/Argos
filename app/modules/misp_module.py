@@ -248,6 +248,18 @@ class MISPModule(Module):
         base["key"]             = "misp"
         base["settings_fields"] = self.settings_fields
         return base
+    
+    def get_correlation_fields(self):
+        return [
+            {
+                "key":     "misp_max_events",
+                "type":    "range",
+                "label":   "Max events per pivot",
+                "min":     1,
+                "max":     20,
+                "default": 3,
+            },
+        ]
 
     # ──────────────────────────────────────────────────────
     # Helpers
