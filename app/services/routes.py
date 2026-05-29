@@ -481,8 +481,16 @@ def register_routes(app, services, job_manager):
                 # direction transmise par le frontend
                 # src_dir : sens du drag depuis src vers le pivot
                 # tgt_dir : sens opposé
-                src_direction = data.get("src_direction", "out")
-                tgt_direction = "in" if src_direction == "out" else "out"
+                link_type = data.get("link_type", "correlation")  # "correlation" ou "manual_directed"
+
+                if link_type == "manual_directed":
+                    # Lien manuel avec direction explicite (drag IOC→pivot ou pivot→IOC)
+                    src_direction = data.get("src_direction", "out")
+                    tgt_direction = "in" if src_direction == "out" else "out"
+                else:
+                    # Corrélation IOC↔IOC : les deux IOC pointent vers le pivot
+                    src_direction = "out"
+                    tgt_direction = "out"
 
                 # ── Rattacher src ──
                 if src:
@@ -494,6 +502,35 @@ def register_routes(app, services, job_manager):
                     tgt_id = _upsert_ioc(tgt)
                     _link(pivot_id, tgt_id, tgt_direction)
 
+                conn.commit()
+                conn.close()
+
+                import asyncio
+                loop = asyncio.new_event_loop()
+                try:
+                    loop.run_until_complete(services.database.connect())
+                    graph = loop.run_until_complete(services.database.get_graph(case_id))
+                finally:
+                    loop.close()
+                socketio.emit("graph_update", {"case_id": case_id, "graph": graph})
+                return jsonify({"ok": True})
+            except Exception as e:
+                return jsonify({"error": str(e)}), 500
+            
+        # ══════════════════════════════════════════════════════════
+        # add_pivot  — crée un pivot standalone dans la table pivots
+        # ══════════════════════════════════════════════════════════
+        if action == "add_pivot":
+            case_id     = data.get("case_id")
+            label       = (data.get("label") or "").strip()
+            if not case_id or not label:
+                return jsonify({"error": "missing case_id or label"}), 400
+            try:
+                conn = _get_conn(db_path)
+                conn.execute(
+                    "INSERT OR IGNORE INTO pivots (case_id, label, module) VALUES (?,?,?)",
+                    (case_id, label, "manual"),
+                )
                 conn.commit()
                 conn.close()
 
