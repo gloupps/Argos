@@ -436,6 +436,7 @@ window.LinkDrag = {
                 case_id:       caseId,
                 src:           srcLabel,
                 pivot_label:   tgtLabel,
+                pivot_db_id:   tgtData.pivotDbId ?? null,   // ← NEW
                 src_direction: "out",
             });
             if (result?.ok) {
@@ -455,6 +456,7 @@ window.LinkDrag = {
                 case_id:       caseId,
                 src:           tgtLabel,
                 pivot_label:   srcLabel,
+                pivot_db_id:   srcData.pivotDbId ?? null,   // ← NEW
                 src_direction: "in",
             });
             if (result?.ok) {
@@ -550,7 +552,7 @@ window.ContextMenu = {
             items.push(this._separator());
             items.push(this._item("trash-2", "Delete pivot", "Remove pivot and its edges", "red",
                 () => this._runDeleteNode(nodeData, caseId)));
-        } else if (nodeType == ("root"||"correlated")) {
+        } else if (nodeType === "root" || nodeType === "correlated") {
             items.push(this._item("zap",       "Qualify",         "Enrich via all active modules", "blue",
                 () => this._runQualify(label, iocType, caseId, nodeData)));
             items.push(this._item("share-2",   "Pivot",           "Find correlated indicators",    "amber",
