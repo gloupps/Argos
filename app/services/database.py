@@ -248,22 +248,49 @@ class Database:
         await self.db.commit()
 
     # ─────────────────────────────────────────────────────
-    # Correlation (table legacy — lecture seule pour modules)
+    # Undo — snapshot complet (indicators + pivots + pivot_links + correlation)
     # ─────────────────────────────────────────────────────
 
-    async def save_correlation_snapshot(self, case_id):
-        cur = await self.db.execute(
-            "SELECT id, src_indicator_id, tgt_indicator_id, module, pivot FROM correlation WHERE case_id=?",
+    async def save_graph_snapshot(self, case_id):
+        """Sauvegarde un snapshot complet avant toute action modifiante."""
+        ind_cur = await self.db.execute(
+            "SELECT id, value, type, node_type FROM indicators WHERE case_id=?",
             (case_id,),
         )
-        rows = [dict(r) for r in await cur.fetchall()]
+        indicators = [dict(r) for r in await ind_cur.fetchall()]
+
+        piv_cur = await self.db.execute(
+            "SELECT id, label, module FROM pivots WHERE case_id=?",
+            (case_id,),
+        )
+        pivots = [dict(r) for r in await piv_cur.fetchall()]
+
+        lnk_cur = await self.db.execute(
+            "SELECT pivot_id, indicator_id, direction FROM pivot_links WHERE case_id=?",
+            (case_id,),
+        )
+        pivot_links = [dict(r) for r in await lnk_cur.fetchall()]
+
+        cor_cur = await self.db.execute(
+            "SELECT job_id, src_indicator_id, tgt_indicator_id, module, pivot FROM correlation WHERE case_id=?",
+            (case_id,),
+        )
+        correlation = [dict(r) for r in await cor_cur.fetchall()]
+
+        snapshot = json.dumps({
+            "indicators":  indicators,
+            "pivots":      pivots,
+            "pivot_links": pivot_links,
+            "correlation": correlation,
+        })
         await self.db.execute(
             "INSERT INTO correlation_history (case_id, snapshot) VALUES (?,?)",
-            (case_id, json.dumps(rows)),
+            (case_id, snapshot),
         )
         await self.db.commit()
 
     async def undo_last_correlation(self, case_id):
+        """Restaure le dernier snapshot complet."""
         cur = await self.db.execute(
             "SELECT id, snapshot FROM correlation_history WHERE case_id=? ORDER BY timestamp DESC LIMIT 1",
             (case_id,),
@@ -272,27 +299,55 @@ class Database:
         if not row:
             return False
 
-        snapshot = json.loads(row["snapshot"])
-        snap_id  = row["id"]
+        snap    = json.loads(row["snapshot"])
+        snap_id = row["id"]
 
+        # Détecter l'ancien format (liste de corrélations à plat)
+        if isinstance(snap, list):
+            snap = {"indicators": [], "pivots": [], "pivot_links": [], "correlation": snap}
+
+        # ── Restaurer indicators ──
+        if snap.get("indicators"):
+            await self.db.execute("DELETE FROM indicators WHERE case_id=?", (case_id,))
+            for ind in snap["indicators"]:
+                await self.db.execute(
+                    "INSERT OR IGNORE INTO indicators (id, value, type, node_type, case_id) VALUES (?,?,?,?,?)",
+                    (ind["id"], ind["value"], ind["type"], ind["node_type"], case_id),
+                )
+
+        # ── Restaurer pivots ──
+        await self.db.execute("DELETE FROM pivot_links WHERE case_id=?", (case_id,))
+        await self.db.execute("DELETE FROM pivots WHERE case_id=?", (case_id,))
+        for piv in snap.get("pivots", []):
+            await self.db.execute(
+                "INSERT OR IGNORE INTO pivots (id, case_id, label, module) VALUES (?,?,?,?)",
+                (piv["id"], case_id, piv["label"], piv["module"]),
+            )
+        for lnk in snap.get("pivot_links", []):
+            await self.db.execute(
+                "INSERT OR IGNORE INTO pivot_links (case_id, pivot_id, indicator_id, direction) VALUES (?,?,?,?)",
+                (case_id, lnk["pivot_id"], lnk["indicator_id"], lnk["direction"]),
+            )
+
+        # ── Restaurer correlation (legacy) ──
         await self.db.execute("DELETE FROM correlation WHERE case_id=?", (case_id,))
-        for item in snapshot:
+        for item in snap.get("correlation", []):
             await self.db.execute(
                 """INSERT OR IGNORE INTO correlation
                    (job_id, case_id, src_indicator_id, tgt_indicator_id, module, pivot)
                    VALUES (?,?,?,?,?,?)""",
-                (
-                    item.get("job_id", ""),
-                    case_id,
-                    item["src_indicator_id"],
-                    item["tgt_indicator_id"],
-                    item["module"],
-                    item["pivot"],
-                ),
+                (item.get("job_id", ""), case_id,
+                 item["src_indicator_id"], item["tgt_indicator_id"],
+                 item["module"], item["pivot"]),
             )
+
         await self.db.execute("DELETE FROM correlation_history WHERE id=?", (snap_id,))
         await self.db.commit()
         return True
+
+    # Alias pour ne pas casser les appels existants depuis services.py
+    async def save_correlation_snapshot(self, case_id):
+        await self.save_graph_snapshot(case_id)
 
     # ─────────────────────────────────────────────────────
     # Pivots
@@ -365,7 +420,7 @@ class Database:
             # src → pivot (direction out), pivot → tgt (direction in)
             await self.link_indicator_to_pivot(case_id, pivot_id, src_indicator_id, "out")
             if tgt_indicator_id != src_indicator_id:
-                await self.link_indicator_to_pivot(case_id, pivot_id, tgt_indicator_id, "out")
+                await self.link_indicator_to_pivot(case_id, pivot_id, tgt_indicator_id, "in")
 
         await self.db.commit()
 
