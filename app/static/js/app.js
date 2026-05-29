@@ -25,12 +25,14 @@ const App = {
 
         // Restaurer l'état AVANT Tabs.init() pour que ensureTab() trouve les tabs
         this._loadState();
-
-        Tabs?.init?.();
-
+        
         // CaseModule écoute uniquement view:loaded pour binder le formulaire.
         // Le chargement initial est entièrement délégué à Tabs.
         CaseModule?.init?.();
+        Tabs?.init?.();
+
+
+        
 
         console.log("[APP] ready");
     },
