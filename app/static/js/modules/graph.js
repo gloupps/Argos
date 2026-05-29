@@ -419,7 +419,6 @@ window.LinkDrag = {
             });
             if (result?.ok) {
                 JobLog?.push?.({ message: `✓ pivot "${pivotName.trim() || "manual"}" created`, status: "done" });
-                GraphModule?.refreshGraph?.(tabId, caseId);
             } else {
                 JobLog?.push?.({ message: result?.error || "Failed", status: "failed" });
             }
@@ -440,7 +439,6 @@ window.LinkDrag = {
             });
             if (result?.ok) {
                 JobLog?.push?.({ message: `✓ ${srcLabel} → pivot "${tgtLabel}"`, status: "done" });
-                GraphModule?.refreshGraph?.(tabId, caseId);
             } else {
                 JobLog?.push?.({ message: result?.error || "Failed", status: "failed" });
             }
@@ -461,7 +459,6 @@ window.LinkDrag = {
             });
             if (result?.ok) {
                 JobLog?.push?.({ message: `✓ pivot "${srcLabel}" → ${tgtLabel}`, status: "done" });
-                GraphModule?.refreshGraph?.(tabId, caseId);
             } else {
                 JobLog?.push?.({ message: result?.error || "Failed", status: "failed" });
             }
@@ -680,7 +677,9 @@ window.ContextMenu = {
         const result = await App.runAction(payload);
         if (result?.ok) {
             JobLog?.push?.({ message: `✓ ${value.trim()} added as ${nodeType}`, status: "done" });
-            GraphModule?.refreshGraph?.(tabId, caseId);
+            if (nodeType !== "pivot") {
+                GraphModule?.refreshGraph?.(tabId, caseId);
+            }
         } else {
             JobLog?.push?.({ message: result?.error || "Failed to add indicator", status: "failed" });
         }
