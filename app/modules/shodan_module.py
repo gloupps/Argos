@@ -71,11 +71,20 @@ class ShodanModule(Module):
             results.append(
                 self._f(indicator, "Vulnerabilities", "list", sorted(vulns), max_=10)
             )
+
+        # ── Services détaillés ────────────────────────────
         data_items = raw.get("data", [])
         if data_items:
-            results.append(
-                self._f(indicator, "Services", "label-capsule", str(len(data_items)))
-            )
+            services = []
+            for svc in data_items:
+                entry = self._extract_service(svc)
+                if entry:
+                    services.append(entry)
+            if services:
+                results.append(
+                    self._f(indicator, "Services", "shodan_services", services)
+                )
+
         tags = raw.get("tags", [])
         if tags:
             results.append(self._f(indicator, "Tags", "list", tags))
@@ -87,15 +96,116 @@ class ShodanModule(Module):
         return results
 
     # ─────────────────────────────────────────────
+    # _extract_service  — construit le dict d'un service
+    # ─────────────────────────────────────────────
+    @staticmethod
+    def _extract_service(svc: Dict) -> Optional[Dict]:
+        port = svc.get("port")
+        transport = svc.get("transport", "tcp")
+        if not port:
+            return None
+
+        entry: Dict[str, Any] = {
+            "port": port,
+            "transport": transport,
+        }
+
+        # Produit / version
+        if svc.get("product"):
+            entry["product"] = svc["product"]
+        if svc.get("version"):
+            entry["version"] = svc["version"]
+        if svc.get("info"):
+            entry["info"] = svc["info"]
+
+        # Module Shodan (ssh, http, ftp…)
+        if svc.get("_shodan", {}).get("module"):
+            entry["module"] = svc["_shodan"]["module"]
+
+        # Timestamp
+        if svc.get("timestamp"):
+            entry["timestamp"] = svc["timestamp"][:10]
+
+        # CPE
+        cpe_list = svc.get("cpe", []) or svc.get("cpe23", [])
+        if cpe_list:
+            entry["cpe"] = cpe_list[:5]
+
+        # Vulns liées au service
+        svc_vulns = svc.get("vulns", {})
+        if isinstance(svc_vulns, dict) and svc_vulns:
+            entry["vulns"] = sorted(svc_vulns.keys())[:10]
+
+        # Banner (data field)
+        banner = svc.get("data", "")
+        if banner and isinstance(banner, str):
+            entry["banner"] = banner[:2000]
+
+        # ── HTTP ──────────────────────────────────────────
+        http = svc.get("http")
+        if http:
+            h: Dict[str, Any] = {}
+            if http.get("title"):
+                h["title"] = http["title"]
+            if http.get("server"):
+                h["server"] = http["server"]
+            if http.get("statuscode"):
+                h["status"] = http["statuscode"]
+            if http.get("redirects"):
+                h["redirects"] = len(http["redirects"])
+            if http.get("waf"):
+                h["waf"] = http["waf"]
+            if http.get("components"):
+                comps = list(http["components"].keys())
+                if comps:
+                    h["components"] = comps[:10]
+            entry["http"] = h
+
+        # ── SSL/TLS ───────────────────────────────────────
+        ssl = svc.get("ssl")
+        if ssl:
+            s: Dict[str, Any] = {}
+            cert = ssl.get("cert", {})
+            subj = cert.get("subject", {})
+            if subj.get("CN"):
+                s["cn"] = subj["CN"]
+            issuer = cert.get("issuer", {})
+            if issuer.get("O"):
+                s["issuer"] = issuer["O"]
+            if cert.get("expires"):
+                s["expires"] = cert["expires"][:10]
+            sans = ssl.get("cert", {}).get("extensions", [])
+            alt_names = []
+            for ext in sans or []:
+                if ext.get("name") == "subjectAltName":
+                    raw_san = ext.get("data", "")
+                    for part in raw_san.split(","):
+                        part = part.strip()
+                        if part.startswith("DNS:"):
+                            alt_names.append(part[4:])
+            if alt_names:
+                s["san"] = alt_names[:10]
+            versions = ssl.get("versions", [])
+            if versions:
+                s["versions"] = versions
+            entry["ssl"] = s
+
+        # ── SSH ───────────────────────────────────────────
+        ssh = svc.get("ssh")
+        if ssh:
+            sh: Dict[str, Any] = {}
+            if ssh.get("type"):
+                sh["type"] = ssh["type"]
+            fingerprint = ssh.get("fingerprint", {})
+            if fingerprint:
+                for algo, fp in list(fingerprint.items())[:2]:
+                    sh[f"fp_{algo}"] = fp
+            entry["ssh"] = sh
+
+        return entry
+
+    # ─────────────────────────────────────────────
     # get_correlation
-    #
-    # Nouvelle logique :
-    #   1. Récupérer l'IP source (host data)
-    #   2. Construire la liste de hash queries (http.* + banner hash)
-    #   3. COUNT en parallèle sur tous les hashes
-    #   4. Filtrer : garder uniquement 1 < total <= max_hash_results
-    #   5. SEARCH en parallèle uniquement sur les hashes retenus
-    #   6. Dédupliquer + exclure l'IP source → résultats de corrélation
     # ─────────────────────────────────────────────
     async def get_correlation(
         self, indicator: str, context: Dict[str, Any]
@@ -106,7 +216,6 @@ class ShodanModule(Module):
 
         max_hash_results = int(context.get("correlation_threshold", 100))
 
-        # ── 1. Récupérer les données de l'IP source ──────
         ip_data = await self.requester.get(
             f"{self.url}/shodan/host/{indicator}",
             params={"key": api_key},
@@ -114,12 +223,10 @@ class ShodanModule(Module):
         if not ip_data or ip_data.get("error"):
             return []
 
-        # ── 2. Construire la liste de hash queries ────────
         seen_keys: set = set()
         hash_queries: List[Dict] = []
 
         for service in ip_data.get("data", []):
-            # Hashes HTTP (html, title, headers, robots, sitemap, dom)
             http = service.get("http")
             if http:
                 for hash_name in [
@@ -142,47 +249,38 @@ class ShodanModule(Module):
                                     "value": value,
                                 }
                             )
-
-            # Hash de bannière
-            banner_hash = service.get("hash")
-            if banner_hash:
-                key = f"hash:{banner_hash}"
+            hash_val = service.get("hash")
+            if hash_val:
+                key = f"hash:{hash_val}"
                 if key not in seen_keys:
                     seen_keys.add(key)
                     hash_queries.append(
-                        {"key": key, "query": "hash", "value": banner_hash}
+                        {"key": key, "query": "hash", "value": hash_val}
                     )
 
         if not hash_queries:
             return []
 
-        # ── 3. COUNT en parallèle ─────────────────────────
         count_tasks = [self._count_ips_by_hash(api_key, h) for h in hash_queries]
         counts = await asyncio.gather(*count_tasks, return_exceptions=True)
-        
-        # ── 4. Filtrer les hashes utiles ──────────────────
-        search_tasks = []
+
         valid_hashes = []
         for h, count in zip(hash_queries, counts):
             if isinstance(count, Exception):
                 continue
-            total = int(count)
-            if total <= 1:  # seul résultat = l'IP elle-même
-                continue
-            if total > max_hash_results:  # trop répandu = bruit
-                continue
-            valid_hashes.append((h, total))
-            search_tasks.append(self._search_ips_by_hash(api_key, h, max_hash_results))
+            if 1 < count <= max_hash_results:
+                valid_hashes.append((h, count))
 
-        print(valid_hashes)
-        print(search_tasks)
-        if not search_tasks:
+        if not valid_hashes:
             return []
 
-        # ── 5. SEARCH en parallèle ────────────────────────
+        search_tasks = [
+            self._search_ips_by_hash(api_key, h, max_hash_results)
+            for h, _ in valid_hashes
+        ]
         responses = await asyncio.gather(*search_tasks, return_exceptions=True)
         print(responses)
-        # ── 6. Construire les résultats ───────────────────
+
         results: List[Dict[str, Any]] = []
         seen_ips: set = set()
 
@@ -211,7 +309,6 @@ class ShodanModule(Module):
     # ─────────────────────────────────────────────
     # Helpers count / search
     # ─────────────────────────────────────────────
-
     async def _count_ips_by_hash(self, api_key: str, hash_data: Dict) -> int:
         query = f"{hash_data['query']}:{hash_data['value']}"
         data = await self.requester.get(

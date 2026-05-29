@@ -23,6 +23,145 @@ window.EnrichPanel = {
         return false;
     },
 
+        _openShodanServiceModal(encoded) {
+        let svc = {};
+        try { svc = JSON.parse(decodeURIComponent(escape(atob(encoded)))); }
+        catch(e) { svc = { error: "decode error" }; }
+ 
+        const port      = svc.port      || "?";
+        const transport = svc.transport || "tcp";
+        const product   = svc.product   || svc.module || "—";
+        const version   = svc.version   || "";
+        const title     = `${port}/${transport}${product !== "—" ? ` · ${product}` : ""}`;
+ 
+        // Helper pour rendre une section de détails
+        const section = (icon, label, rows) => `
+            <div class="border border-slate-800 rounded-lg overflow-hidden">
+                <div class="flex items-center gap-2 px-3 py-2 bg-slate-900/60 border-b border-slate-800">
+                    <i data-lucide="${icon}" class="w-3 h-3 text-slate-500 shrink-0"></i>
+                    <span class="text-[9px] text-slate-400 uppercase tracking-wider font-semibold">${label}</span>
+                </div>
+                <table class="w-full p-2">
+                    <tbody class="divide-y divide-slate-800/50">${rows}</tbody>
+                </table>
+            </div>`;
+ 
+        const row = (k, v, cls = "text-slate-300") => {
+            if (!v && v !== 0) return "";
+            const disp = typeof v === "string"
+                ? v.replace(/</g,"&lt;").replace(/>/g,"&gt;")
+                : (Array.isArray(v) ? v.join(", ") : String(v));
+            return `
+                <tr>
+                    <td class="text-[8.5px] text-slate-500 pr-3 py-1 pl-3 whitespace-nowrap align-top w-28">${k}</td>
+                    <td class="text-[8.5px] ${cls} font-mono py-1 pr-3 break-all">${disp}</td>
+                </tr>`;
+        };
+ 
+        const sections = [];
+ 
+        // ── Général ──
+        let genRows = "";
+        genRows += row("Port", `${port}/${transport}`);
+        if (product !== "—")  genRows += row("Product", `${product}${version ? ` ${version}` : ""}`);
+        if (svc.info)         genRows += row("Info", svc.info);
+        if (svc.module)       genRows += row("Module", svc.module);
+        if (svc.timestamp)    genRows += row("Last seen", svc.timestamp);
+        if (genRows) sections.push(section("server", "General", genRows));
+ 
+        // ── HTTP ──
+        if (svc.http) {
+            let h = "";
+            h += row("Status",     svc.http.status);
+            h += row("Title",      svc.http.title);
+            h += row("Server",     svc.http.server);
+            h += row("WAF",        svc.http.waf);
+            h += row("Redirects",  svc.http.redirects ? `${svc.http.redirects} redirect(s)` : null);
+            if (svc.http.components?.length)
+                h += row("Tech",   svc.http.components.join(", "), "text-cyan-300");
+            if (h) sections.push(section("globe", "HTTP", h));
+        }
+ 
+        // ── SSL/TLS ──
+        if (svc.ssl) {
+            let s = "";
+            s += row("CN",       svc.ssl.cn);
+            s += row("Issuer",   svc.ssl.issuer);
+            s += row("Expires",  svc.ssl.expires);
+            if (svc.ssl.san?.length)
+                s += row("SAN", svc.ssl.san.slice(0, 8).join(", ") + (svc.ssl.san.length > 8 ? ` +${svc.ssl.san.length - 8}` : ""), "text-blue-300");
+            if (svc.ssl.versions?.length)
+                s += row("Protocols", svc.ssl.versions.join(", "));
+            if (s) sections.push(section("lock", "TLS / Certificate", s));
+        }
+ 
+        // ── SSH ──
+        if (svc.ssh) {
+            let sh = "";
+            sh += row("Type", svc.ssh.type);
+            Object.entries(svc.ssh).forEach(([k, v]) => {
+                if (k !== "type") sh += row(k, v, "text-slate-400");
+            });
+            if (sh) sections.push(section("terminal", "SSH", sh));
+        }
+ 
+        // ── CPE ──
+        if (svc.cpe?.length) {
+            const cpeRows = svc.cpe.map(c => row("CPE", c, "text-slate-400")).join("");
+            sections.push(section("package", "CPE", cpeRows));
+        }
+ 
+        // ── CVEs ──
+        if (svc.vulns?.length) {
+            const cveRows = svc.vulns.map(cve => {
+                const yr  = parseInt(cve.match(/CVE-(\d{4})/)?.[1] || "0");
+                const cls = yr >= 2021 ? "text-red-400" : "text-amber-400";
+                return row("CVE", cve, cls);
+            }).join("");
+            sections.push(section("bug", `Vulnerabilities (${svc.vulns.length})`, cveRows));
+        }
+ 
+        // ── Banner ──
+        if (svc.banner) {
+            const escaped = svc.banner.replace(/</g,"&lt;").replace(/>/g,"&gt;");
+            sections.push(`
+                <div class="border border-slate-800 rounded-lg overflow-hidden">
+                    <div class="flex items-center gap-2 px-3 py-2 bg-slate-900/60 border-b border-slate-800">
+                        <i data-lucide="terminal" class="w-3 h-3 text-slate-500 shrink-0"></i>
+                        <span class="text-[9px] text-slate-400 uppercase tracking-wider font-semibold">Banner</span>
+                    </div>
+                    <pre class="text-[8px] font-mono text-slate-400 p-3 overflow-auto max-h-40 whitespace-pre-wrap break-all leading-relaxed">${escaped}</pre>
+                </div>`);
+        }
+ 
+        // ── Rendu modal ──
+        let modal = document.getElementById("shodan-service-modal");
+        if (modal) modal.remove();
+        modal = document.createElement("div");
+        modal.id = "shodan-service-modal";
+        modal.className = "fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4";
+        modal.innerHTML = `
+            <div class="relative w-full max-w-lg max-h-[85vh] flex flex-col
+                        bg-slate-950 border border-slate-700 rounded-xl shadow-2xl overflow-hidden">
+                <div class="flex items-center justify-between px-4 py-3 border-b border-slate-800 shrink-0">
+                    <span class="text-[11px] font-bold text-slate-200 flex items-center gap-2">
+                        <i data-lucide="layers" class="w-3.5 h-3.5 text-blue-400"></i>
+                        ${title}
+                    </span>
+                    <button onclick="document.getElementById('shodan-service-modal').remove()"
+                            class="text-slate-500 hover:text-white transition">
+                        <i data-lucide="x" class="w-4 h-4"></i>
+                    </button>
+                </div>
+                <div class="flex-1 overflow-auto p-4 space-y-3">
+                    ${sections.length ? sections.join("") : '<p class="text-[9px] text-slate-600">No detail available.</p>'}
+                </div>
+            </div>`;
+        modal.addEventListener("click", e => { if (e.target === modal) modal.remove(); });
+        document.body.appendChild(modal);
+        lucide.createIcons({ nodes: [modal] });
+    },
+ 
     async load(nodeData, caseId) {
         if (this._abortCtrl) this._abortCtrl.abort();
         this._abortCtrl = new AbortController();
@@ -103,7 +242,7 @@ window.EnrichPanel = {
         "Organization":    "host", "ASN": "host", "ASN Owner": "host",
         "Country":         "host", "OS": "host", "Registrar": "host",
         "Last Seen":       "host", "Last Analysis": "host", "Last Scan": "host",
-        "Usage":           "host", "Services": "host", "Name": "host",
+        "Usage":           "host", "Services": "shodan_services", "Name": "host",
         "Type":            "host", "Server Headers": "host",
         "Scan Report":     "urlscan_meta",
         "Screenshot":      "screenshot",
@@ -315,6 +454,79 @@ window.EnrichPanel = {
             const overflow = sorted.length > 15 ? `<span class="text-[9px] text-slate-600">+${sorted.length-15}</span>` : "";
             return `${this._sectionHeader("bug", "Vulnerabilities", sorted.length)}<div class="flex flex-wrap gap-1">${tags}${overflow}</div>`;
         }
+        
+        // ── SHODAN SERVICES ──
+        if (theme === "shodan_services") {
+            // La value est un tableau d'objets service
+            const services = [];
+            items.forEach(({ field }) => {
+                const val = field.value;
+                if (Array.isArray(val)) services.push(...val);
+                else if (val && typeof val === "object") services.push(val);
+            });
+            if (!services.length) return "";
+ 
+            const btns = services.map((svc, idx) => {
+                const port      = svc.port      || "?";
+                const transport = svc.transport || "tcp";
+                const product   = svc.product   || svc.module || "";
+                const version   = svc.version   || "";
+                const httpTitle = svc.http?.title || "";
+                const vulnCount = (svc.vulns || []).length;
+                const hasSSL    = !!svc.ssl;
+                const hasHTTP   = !!svc.http;
+ 
+                // Couleur du badge port selon protocole/risque
+                const RISKY = new Set([21,22,23,25,53,80,110,135,139,143,443,445,
+                                       1433,1521,3306,3389,5432,5900,6379,8080,8443,9200,27017,6667]);
+                const portCls = RISKY.has(Number(port))
+                    ? "bg-red-500/15 border-red-500/40 text-red-400"
+                    : "bg-slate-800/80 border-slate-700/60 text-slate-300";
+ 
+                // Ligne principale : port + transport + product
+                const productLabel = product
+                    ? `<span class="text-slate-400 truncate">${product}${version ? ` <span class="text-slate-600">${version}</span>` : ""}</span>`
+                    : `<span class="text-slate-600 italic text-[8px]">unknown</span>`;
+ 
+                // Badges contextuels
+                const badges = [];
+                if (hasSSL)    badges.push(`<span class="text-[7.5px] px-1 py-px rounded bg-blue-500/10 border border-blue-500/30 text-blue-400">TLS</span>`);
+                if (hasHTTP)   badges.push(`<span class="text-[7.5px] px-1 py-px rounded bg-cyan-500/10 border border-cyan-500/30 text-cyan-400">HTTP</span>`);
+                if (vulnCount) badges.push(`<span class="text-[7.5px] px-1 py-px rounded bg-red-500/10 border border-red-500/30 text-red-400">${vulnCount} CVE${vulnCount > 1 ? "s" : ""}</span>`);
+ 
+                // Sous-titre : title HTTP ou banner preview
+                const subtitle = httpTitle
+                    ? `<div class="text-[8px] text-slate-500 font-mono truncate mt-0.5">${httpTitle.replace(/</g,"&lt;").replace(/>/g,"&gt;")}</div>`
+                    : (svc.banner
+                        ? `<div class="text-[8px] text-slate-600 font-mono truncate mt-0.5">${svc.banner.slice(0,60).replace(/[\r\n]+/g," ").replace(/</g,"&lt;")}</div>`
+                        : "");
+ 
+                // Encodage du service pour la modal
+                let encoded = "";
+                try { encoded = btoa(unescape(encodeURIComponent(JSON.stringify(svc)))); }
+                catch(e) { encoded = btoa(JSON.stringify(svc).replace(/[^\x00-\x7F]/g,"?")); }
+ 
+                return `
+                    <button onclick="EnrichPanel._openShodanServiceModal('${encoded}')"
+                            class="flex items-start gap-2 w-full text-left rounded border border-slate-700/50
+                                   hover:border-blue-500/40 bg-slate-900/30 hover:bg-slate-900/60
+                                   px-2 py-1.5 transition group">
+                        <span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border shrink-0 mt-0.5 ${portCls}">${port}</span>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-1.5 flex-wrap">
+                                <span class="text-[8.5px] text-slate-500">${transport}</span>
+                                ${productLabel}
+                                ${badges.join("")}
+                            </div>
+                            ${subtitle}
+                        </div>
+                        <i data-lucide="chevron-right" class="w-2.5 h-2.5 text-slate-700 group-hover:text-slate-400 shrink-0 mt-1 transition"></i>
+                    </button>`;
+            }).join("");
+ 
+            return `${this._sectionHeader("layers", "Services", services.length)}<div class="space-y-1">${btns}</div>`;
+        }
+
 
         // ── DNS ──
         if (theme === "dns") {
