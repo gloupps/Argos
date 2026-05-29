@@ -349,13 +349,13 @@ class Services:
                                 if prow:
                                     pivot_id = prow["id"]
                                     await db.execute(
-                                        "INSERT OR IGNORE INTO pivot_links (case_id, pivot_id, indicator_id) VALUES (?,?,?)",
-                                        (case_id, pivot_id, src_id),
+                                        "INSERT OR IGNORE INTO pivot_links (case_id, pivot_id, indicator_id, direction) VALUES (?,?,?,?)",
+                                        (case_id, pivot_id, src_id, "out"),
                                     )
                                     if tgt_id != src_id:
                                         await db.execute(
-                                            "INSERT OR IGNORE INTO pivot_links (case_id, pivot_id, indicator_id) VALUES (?,?,?)",
-                                            (case_id, pivot_id, tgt_id),
+                                            "INSERT OR IGNORE INTO pivot_links (case_id, pivot_id, indicator_id, direction) VALUES (?,?,?,?)",
+                                            (case_id, pivot_id, tgt_id, "in"),
                                         )
                         await db.commit()
                         self.job_manager.add_log(
