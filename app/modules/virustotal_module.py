@@ -206,28 +206,16 @@ class VirusTotalModule(Module):
                     result.append({"name": name})
 
             elif endpoint == "related_references":
-                # Chaque item est une référence externe (article, blog, rapport)
-                # attrs: url, title, author, creation_date
-                # context_attributes.related_from: collections parentes (malware, tool...)
-                title = attrs.get("title") or ""
-                url = attrs.get("url") or ""
-                author = attrs.get("author") or ""
-                # Extraire les noms de collections parentes (ex: "Emotet")
-                related_from = (item.get("context_attributes") or {}).get(
-                    "related_from", []
-                )
-                parent_names = [
-                    rf.get("attributes", {}).get("name") or rf.get("id", "")
-                    for rf in related_from
-                    if rf.get("attributes", {}).get("name") or rf.get("id")
-                ]
-                if title or url:
+                raw_id = item.get("id", "")
+                item_type = item.get("type", "")  # "malware", "tool", "report", etc.
+                name = attrs.get("name") or raw_id.split("/")[-1]
+                if name:
                     result.append(
                         {
-                            "title": title,
-                            "url": url,
-                            "author": author,
-                            "parents": parent_names,
+                            "name": name,
+                            "description": (attrs.get("description") or "")[:120],
+                            "ref_type": item_type,
+                            "id": raw_id,
                         }
                     )
 
@@ -336,39 +324,34 @@ class VirusTotalModule(Module):
                     self._f(indicator, "Collections", "list", col_labels, max_=10)
                 )
 
-        # Related References — références externes (articles, rapports, blogs)
-        # Chaque item a: title, url, author, parents (noms des collections parentes)
+        # Related References — Malware & Tools, Reports, Other Sightings (all types)
         references = relations.get("related_references", [])
         if references:
-            # Malware Names : noms uniques extraits de context_attributes.related_from
-            malware_names = list(
-                dict.fromkeys(
-                    name for r in references for name in r.get("parents", []) if name
-                )
-            )
-            if malware_names:
+            malware_refs = [
+                r["name"] + (f" — {r['description']}" if r.get("description") else "")
+                for r in references
+                if r.get("ref_type") in ("malware", "tool")
+            ]
+            report_refs = [
+                r["name"] + (f" — {r['description']}" if r.get("description") else "")
+                for r in references
+                if r.get("ref_type") == "report"
+            ]
+            other_refs = [
+                r["name"] + (f" — {r['description']}" if r.get("description") else "")
+                for r in references
+                if r.get("ref_type") not in ("malware", "tool", "report")
+            ]
+            if malware_refs:
                 res.append(
-                    self._f(indicator, "Malware Names", "list", malware_names, max_=10)
+                    self._f(indicator, "Malware Names", "list", malware_refs, max_=10)
                 )
-
-            # Reports : titre — auteur (avec lien)
-            report_entries = []
-            for r in references:
-                title = r.get("title", "")
-                author = r.get("author", "")
-                label = title + (f" — {author}" if author else "")
-                if label:
-                    report_entries.append(
-                        {
-                            "label": label,
-                            "url": r.get("url", ""),
-                        }
-                    )
-            if report_entries:
-                # On stocke les labels pour l'affichage liste
-                # et on expose le premier lien via le champ link
-                labels = [e["label"] for e in report_entries]
-                res.append(self._f(indicator, "Reports", "list", labels, max_=10))
+            if report_refs:
+                res.append(self._f(indicator, "Reports", "list", report_refs, max_=10))
+            if other_refs:
+                res.append(
+                    self._f(indicator, "Other Sightings", "list", other_refs, max_=10)
+                )
 
         # ════════════════════════════════════════════════
         # IP
@@ -721,7 +704,57 @@ class VirusTotalModule(Module):
         return res
 
     # ──────────────────────────────────────────────────────
-    # get_correlation  (unchanged logic)
+    # ──────────────────────────────────────────────────────
+    # _fetch_collections  — helper : {col_id: col_name} pour un IOC
+    # ──────────────────────────────────────────────────────
+    async def _fetch_collections(
+        self, base_endpoint: str, headers: Dict
+    ) -> Dict[str, str]:
+        data = await self.requester.get(
+            f"{base_endpoint}/collections?limit=10", headers=headers
+        )
+        if not data or isinstance(data, Exception):
+            return {}
+        result = {}
+        for item in data.get("data") or []:
+            col_id = item.get("id", "")
+            col_name = (item.get("attributes") or {}).get("name") or col_id
+            if col_id:
+                result[col_id] = col_name
+        return result
+
+    # ──────────────────────────────────────────────────────
+    # _fetch_collection_members  — helper : {val: ioc_type} pour une collection
+    # ──────────────────────────────────────────────────────
+    async def _fetch_collection_members(
+        self, col_id: str, headers: Dict
+    ) -> Dict[str, str]:
+        subtypes = [
+            ("ip_addresses", "ip"),
+            ("domains", "domain"),
+            ("files", "hash"),
+        ]
+        tasks = [
+            self.requester.get(
+                f"{self.url}/collections/{col_id}/relationships/{sub}?limit=40",
+                headers=headers,
+            )
+            for sub, _ in subtypes
+        ]
+        responses = await asyncio.gather(*tasks, return_exceptions=True)
+        members: Dict[str, str] = {}
+        for (_, target_type), resp in zip(subtypes, responses):
+            if not resp or isinstance(resp, Exception):
+                continue
+            for item in resp.get("data") or []:
+                attrs = item.get("attributes", {})
+                val = self._extract_rel_value(item, attrs, target_type)
+                if val:
+                    members[val] = target_type
+        return members
+
+    # ──────────────────────────────────────────────────────
+    # get_correlation
     # ──────────────────────────────────────────────────────
     async def get_correlation(
         self, indicator: str, context: Dict[str, Any]
@@ -729,18 +762,33 @@ class VirusTotalModule(Module):
         api_key = context.get("api_key")
         ioc_type = context.get("ioc_type", "ip")
         all_roots = context.get("all_root_indicators", [])
+        all_correlated = context.get("all_correlated_indicators", [])
         threshold = int(context.get("vt_detection_threshold", 3))
         min_shared_roots = int(context.get("vt_min_shared_roots", 2))
+        include_correlated = bool(context.get("vt_include_correlated", False))
 
         if not api_key:
             return []
 
-        other_roots = [
+        # Pool de comparaison : roots seuls ou roots + correlated
+        pool = list(all_roots)
+        if include_correlated:
+            seen = {(r["value"], r["type"]) for r in pool}
+            for r in all_correlated:
+                if (r["value"], r["type"]) not in seen:
+                    pool.append(r)
+                    seen.add((r["value"], r["type"]))
+
+        other_pool = [
             r["value"]
-            for r in all_roots
+            for r in pool
             if r["value"] != indicator and r["type"] == ioc_type
         ]
-        if not other_roots:
+        if not other_pool:
+            return []
+
+        base, _ = self._endpoint(indicator, ioc_type)
+        if not base:
             return []
 
         headers = {"x-apikey": api_key}
@@ -750,15 +798,15 @@ class VirusTotalModule(Module):
             "url": [("network_location", "domain")],
             "hash": [("contacted_ips", "ip"), ("contacted_domains", "domain")],
         }
+        results = []
 
+        # ── Pivot 1 : relations VT croisées ──────────────────────────────
+        # IOC tiers partagé par ≥ min_shared_roots membres du pool
         my_relations: Dict[str, str] = {}
-        base, _ = self._endpoint(indicator, ioc_type)
-        if not base:
-            return []
-
         for rel_name, target_type in rel_map.get(ioc_type, []):
-            rel_url = f"{base}/relationships/{rel_name}?limit=20"
-            data = await self.requester.get(rel_url, headers=headers)
+            data = await self.requester.get(
+                f"{base}/relationships/{rel_name}?limit=20", headers=headers
+            )
             if not data:
                 continue
             for item in data.get("data", []):
@@ -767,53 +815,111 @@ class VirusTotalModule(Module):
                 if not val or val == indicator:
                     continue
                 if target_type == "hash":
-                    stats = attrs.get("last_analysis_stats", {})
-                    malicious = stats.get("malicious", 0)
-                    if malicious < threshold:
+                    if (
+                        attrs.get("last_analysis_stats", {}).get("malicious", 0)
+                        < threshold
+                    ):
                         continue
                 my_relations[val] = target_type
 
-        if not my_relations:
-            return []
-
-        shared_counts: Dict[str, int] = (
-            {}
-        )  # val → nombre de roots qui partagent cette relation
-        shared_types: Dict[str, str] = {}  # val → type
-
-        for other in other_roots:
-            other_base, _ = self._endpoint(other, ioc_type)
-            if not other_base:
-                continue
-            for rel_name, target_type in rel_map.get(ioc_type, []):
-                rel_url = f"{other_base}/relationships/{rel_name}?limit=20"
-                data = await self.requester.get(rel_url, headers=headers)
-                if not data:
+        if my_relations:
+            shared_counts: Dict[str, int] = {}
+            shared_types: Dict[str, str] = {}
+            for other in other_pool:
+                other_base, _ = self._endpoint(other, ioc_type)
+                if not other_base:
                     continue
-                for item in data.get("data", []):
-                    attrs = item.get("attributes", {})
-                    val = self._extract_rel_value(item, attrs, target_type)
-                    if val and val in my_relations:
-                        shared_counts[val] = shared_counts.get(val, 0) + 1
-                        shared_types[val] = my_relations[val]
+                for rel_name, target_type in rel_map.get(ioc_type, []):
+                    data = await self.requester.get(
+                        f"{other_base}/relationships/{rel_name}?limit=20",
+                        headers=headers,
+                    )
+                    if not data:
+                        continue
+                    for item in data.get("data", []):
+                        attrs = item.get("attributes", {})
+                        val = self._extract_rel_value(item, attrs, target_type)
+                        if val and val in my_relations:
+                            shared_counts[val] = shared_counts.get(val, 0) + 1
+                            shared_types[val] = my_relations[val]
 
-        results = []
-        for val, count in shared_counts.items():
-            if (
-                count < min_shared_roots
-            ):  # ← filtre : doit être partagé par assez de roots
-                continue
-            results.append(
-                {
-                    "source_indicator": indicator,
-                    "source_type": ioc_type,
-                    "target_indicator": val,
-                    "target_type": shared_types[val],
-                    "score": 1,
-                    "pivot": True,
-                    "pivot_reason": f"VT cross-IOC relation (shared with {count}/{len(other_roots)} root(s))",
-                }
-            )
+            for val, count in shared_counts.items():
+                if count < min_shared_roots:
+                    continue
+                results.append(
+                    {
+                        "source_indicator": indicator,
+                        "source_type": ioc_type,
+                        "target_indicator": val,
+                        "target_type": shared_types[val],
+                        "score": 1,
+                        "pivot": True,
+                        "pivot_reason": f"VT cross-IOC relation (shared with {count}/{len(other_pool)} IOC(s))",
+                    }
+                )
+
+        # ── Pivot 2 : collections partagées ──────────────────────────────
+        # Si ≥ 2 IOCs du pool sont dans la même collection VT
+        # → tous les IOCs de cette collection deviennent des pivots correlated
+
+        # Récupérer les collections de l'indicateur courant et de tout le pool en parallèle
+        col_tasks = [self._fetch_collections(base, headers)]
+        pool_bases = []
+        for other in other_pool:
+            ob, _ = self._endpoint(other, ioc_type)
+            if ob:
+                pool_bases.append((other, ob))
+                col_tasks.append(self._fetch_collections(ob, headers))
+
+        col_responses = await asyncio.gather(*col_tasks, return_exceptions=True)
+
+        my_cols: Dict[str, str] = (
+            {} if isinstance(col_responses[0], Exception) else col_responses[0]
+        )
+
+        if my_cols and pool_bases:
+            # Trouver les collections partagées avec au moins un autre IOC du pool
+            # shared_col_ids = collections présentes chez l'indicateur ET chez ≥1 autre
+            shared_col_ids: Dict[str, int] = (
+                {}
+            )  # col_id → count d'IOCs du pool qui l'ont
+            for idx, (_, _) in enumerate(pool_bases):
+                other_cols = col_responses[idx + 1]
+                if isinstance(other_cols, Exception) or not other_cols:
+                    continue
+                for col_id in set(my_cols.keys()) & set(other_cols.keys()):
+                    shared_col_ids[col_id] = shared_col_ids.get(col_id, 0) + 1
+
+            if shared_col_ids:
+                # Pour chaque collection partagée, récupérer tous ses membres
+                col_ids = list(shared_col_ids.keys())
+                mem_tasks = [
+                    self._fetch_collection_members(cid, headers) for cid in col_ids
+                ]
+                mem_responses = await asyncio.gather(*mem_tasks, return_exceptions=True)
+
+                # Déduplication : un IOC peut apparaître dans plusieurs collections
+                emitted: set = set()
+                for col_id, members in zip(col_ids, mem_responses):
+                    if isinstance(members, Exception) or not members:
+                        continue
+                    col_name = my_cols[col_id]
+                    col_count = shared_col_ids[col_id]
+                    for val, ttype in members.items():
+                        if val == indicator or val in emitted:
+                            continue
+                        emitted.add(val)
+                        results.append(
+                            {
+                                "source_indicator": indicator,
+                                "source_type": ioc_type,
+                                "target_indicator": val,
+                                "target_type": ttype,
+                                "score": 1,
+                                "pivot": True,
+                                "pivot_reason": f"VT collection: {col_name}",
+                            }
+                        )
 
         return results
 
@@ -875,12 +981,18 @@ class VirusTotalModule(Module):
                 "default": 3,
             },
             {
-                "key": "vt_min_shared_roots",  # ← clé renommée
+                "key": "vt_min_shared_roots",
                 "type": "range",
-                "label": "Min shared relations between roots",
+                "label": "Min shared IOCs for cross-relation pivot",
                 "min": 1,
                 "max": 10,
                 "default": 2,
+            },
+            {
+                "key": "vt_include_correlated",
+                "type": "checkbox",
+                "label": "Include correlated IOCs (not only roots)",
+                "default": False,
             },
         ]
 

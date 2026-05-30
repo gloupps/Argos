@@ -313,6 +313,12 @@ class Services:
             )
             all_root_indicators = [dict(r) for r in await root_cur.fetchall()]
 
+            corr_cur = await db.execute(
+                "SELECT DISTINCT value, type FROM indicators WHERE case_id=? AND node_type='correlated'",
+                (case_id,),
+            )
+            all_correlated_indicators = [dict(r) for r in await corr_cur.fetchall()]
+
             for ind in indicators:
                 ioc_type = ind["type"]
                 job_modules = self._build_modules_for_job(extra_config)
@@ -332,6 +338,7 @@ class Services:
                             "api_key": api_key,
                             "ioc_type": ioc_type,
                             "all_root_indicators": all_root_indicators,
+                            "all_correlated_indicators": all_correlated_indicators,
                             **mod_cfg,
                             **extra_config,
                         }

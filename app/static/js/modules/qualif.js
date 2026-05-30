@@ -235,14 +235,17 @@ window.EnrichPanel = {
         "IOC Count":       "threat",
         "Reporters":       "other",
         "ThreatFox Entry": "intel",
-        "Collections":      "vt_refs",
-        "Malware Names":    "vt_refs",
-        "Reports":          "vt_refs",
-        "Other Sightings":  "vt_refs",
+        "Collections":        "vt_refs",
+        "Malware Names":      "vt_refs",
+        "Threat Names":       "vt_refs",
+        "Malware Categories": "vt_refs",
+        "Collection Tags":    "vt_refs",
+        "Reports":            "vt_refs",
+        "Other Sightings":    "vt_refs",
         "Detection Score": "threat",  "Confidence Score": "threat",
         "Malicious":       "threat",  "Suspicious":       "threat",
         "Reputation":      "threat",  "Scan Count":       "threat",
-        "Threat Actors":   "threat",
+        "Threat Actors":   "threat", 
         "Organization":    "host", "ASN": "host", "ASN Owner": "host",
         "Country":         "host", "OS": "host", "Registrar": "host",
         "Last Seen":       "host", "Last Analysis": "host", "Last Scan": "host",
@@ -692,13 +695,16 @@ window.EnrichPanel = {
             return rows ? `${this._sectionHeader("database", "Intel")}<table class="w-full">${rows}</table>` : "";
         }
 
-        // ── VT REFS (Collections, Malware, Reports, Other Sightings) ──
+        // ── VT ASSOCIATIONS (Collections, Malware, Reports, Sightings) ──
         if (theme === "vt_refs") {
             const fieldOrder = [
-                { name: "Malware Names",   icon: "bug",         color: "text-red-400"    },
-                { name: "Reports",         icon: "file-text",   color: "text-blue-400"   },
-                { name: "Other Sightings", icon: "eye",         color: "text-amber-400"  },
-                { name: "Collections",     icon: "folder-open", color: "text-slate-400"  },
+                { name: "Malware Names",      icon: "bug",         color: "text-red-400"    },
+                { name: "Threat Names",        icon: "shield-alert",color: "text-orange-400" },
+                { name: "Malware Categories",  icon: "tag",         color: "text-yellow-500" },
+                { name: "Collection Tags",     icon: "hash",        color: "text-slate-400"  },
+                { name: "Collections",         icon: "folder-open", color: "text-slate-300"  },
+                { name: "Reports",             icon: "file-text",   color: "text-blue-400"   },
+                { name: "Other Sightings",     icon: "eye",         color: "text-amber-400"  },
             ];
             const blocks = [];
             fieldOrder.forEach(({ name, icon, color }) => {
