@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="full-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 160" width="460" height="153">
+      <defs>
+        <radialGradient id="bg2" cx="20%" cy="50%" r="80%">
+          <stop offset="0%" stop-color="#1a1628"/>
+          <stop offset="100%" stop-color="#0a0810"/>
+        </radialGradient>
+
+        <radialGradient id="gold2" cx="40%" cy="35%" r="60%">
+          <stop offset="0%" stop-color="#f0d060"/>
+          <stop offset="50%" stop-color="#c89a20"/>
+          <stop offset="100%" stop-color="#8a6010"/>
+        </radialGradient>
+
+        <radialGradient id="iris2" cx="40%" cy="35%" r="60%">
+          <stop offset="0%" stop-color="#4a9090"/>
+          <stop offset="50%" stop-color="#1e5858"/>
+          <stop offset="100%" stop-color="#0a2828"/>
+        </radialGradient>
+
+        <filter id="glow2">
+          <feGaussianBlur stdDeviation="2" result="blur"/>
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+
+        <filter id="text-glow">
+          <feGaussianBlur stdDeviation="3" result="blur"/>
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+
+        <linearGradient id="title-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="#f5e080"/>
+          <stop offset="40%" stop-color="#d4af37"/>
+          <stop offset="100%" stop-color="#8a6010"/>
+        </linearGradient>
+
+        <linearGradient id="subtitle-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#6b5c3e"/>
+          <stop offset="50%" stop-color="#a08040"/>
+          <stop offset="100%" stop-color="#6b5c3e"/>
+        </linearGradient>
+      </defs>
+
+      <!-- Background -->
+      <rect width="480" height="160" rx="14" fill="url(#bg2)"/>
+      <rect width="480" height="160" rx="14" fill="none" stroke="#2a2535" stroke-width="1"/>
+      <!-- Top golden shimmer -->
+      <rect width="480" height="160" rx="14" fill="url(#bg2)" opacity="0"/>
+      <ellipse cx="120" cy="0" rx="200" ry="60" fill="#d4af37" opacity="0.04"/>
+
+      <!-- ── MAGNIFIER ICON ── -->
+      <!-- Outer ornate ring -->
+      <circle cx="82" cy="80" r="48" fill="none" stroke="url(#gold2)" stroke-width="1.5" opacity="0.25"/>
+
+      <!-- Main lens ring -->
+      <circle cx="82" cy="72" r="36" fill="none" stroke="url(#gold2)" stroke-width="2.8" filter="url(#glow2)"/>
+      <!-- Inner detail ring -->
+      <circle cx="82" cy="72" r="33" fill="none" stroke="#c89a20" stroke-width="0.6" opacity="0.5"/>
+
+      <!-- Lens fill -->
+      <circle cx="82" cy="72" r="32.5" fill="#060d18"/>
+
+      <!-- Inner structural rings -->
+      <circle cx="82" cy="72" r="27" fill="none" stroke="#101e30" stroke-width="1.2"/>
+      <circle cx="82" cy="72" r="19" fill="none" stroke="#101e30" stroke-width="0.8"/>
+
+      <!-- Eye whites (sclera) -->
+      <ellipse cx="82" cy="72" rx="23" ry="13" fill="#0c1e30"/>
+
+      <!-- Iris -->
+      <circle cx="82" cy="72" r="11" fill="url(#iris2)"/>
+      <circle cx="82" cy="72" r="11" fill="none" stroke="#3a9090" stroke-width="0.5" opacity="0.8"/>
+      <circle cx="82" cy="72" r="7.5" fill="none" stroke="#2a7070" stroke-width="0.4" opacity="0.6"/>
+
+      <!-- Pupil -->
+      <circle cx="82" cy="72" r="5.5" fill="#020508"/>
+
+      <!-- Iris lines (radial texture) -->
+      <line x1="82" y1="61" x2="82" y2="67" stroke="#3a9090" stroke-width="0.4" opacity="0.5"/>
+      <line x1="82" y1="77" x2="82" y2="83" stroke="#3a9090" stroke-width="0.4" opacity="0.5"/>
+      <line x1="71" y1="72" x2="77" y2="72" stroke="#3a9090" stroke-width="0.4" opacity="0.5"/>
+      <line x1="87" y1="72" x2="93" y2="72" stroke="#3a9090" stroke-width="0.4" opacity="0.5"/>
+      <line x1="74" y1="64" x2="78" y2="68" stroke="#3a9090" stroke-width="0.4" opacity="0.4"/>
+      <line x1="86" y1="76" x2="90" y2="80" stroke="#3a9090" stroke-width="0.4" opacity="0.4"/>
+      <line x1="90" y1="64" x2="86" y2="68" stroke="#3a9090" stroke-width="0.4" opacity="0.4"/>
+      <line x1="74" y1="76" x2="78" y2="80" stroke="#3a9090" stroke-width="0.4" opacity="0.4"/>
+
+      <!-- Pupil shine -->
+      <circle cx="78.5" cy="68.5" r="2" fill="white" opacity="0.7"/>
+      <circle cx="85" cy="75" r="0.9" fill="white" opacity="0.3"/>
+
+      <!-- Eyelid arcs -->
+      <path d="M 59 72 Q 70.5 62 82 60 Q 93.5 62 105 72" fill="none" stroke="#d4af37" stroke-width="1.2" opacity="0.5"/>
+      <path d="M 59 72 Q 70.5 82 82 84 Q 93.5 82 105 72" fill="none" stroke="#d4af37" stroke-width="1.2" opacity="0.5"/>
+
+      <!-- Eyelid corner ornaments -->
+      <circle cx="62" cy="68" r="1.5" fill="#c89a20" opacity="0.6"/>
+      <circle cx="62" cy="76" r="1.5" fill="#c89a20" opacity="0.6"/>
+      <circle cx="102" cy="68" r="1.5" fill="#c89a20" opacity="0.6"/>
+      <circle cx="102" cy="76" r="1.5" fill="#c89a20" opacity="0.6"/>
+
+      <!-- Lens glare -->
+      <ellipse cx="70" cy="62" rx="7" ry="4" fill="white" opacity="0.05" transform="rotate(-30 70 62)"/>
+
+      <!-- Handle -->
+      <line x1="108" y1="100" x2="130" y2="122" stroke="url(#gold2)" stroke-width="6.5" stroke-linecap="round" filter="url(#glow2)"/>
+      <line x1="108" y1="100" x2="130" y2="122" stroke="#f0d060" stroke-width="1.5" stroke-linecap="round" opacity="0.4"/>
+      <!-- Grip details -->
+      <line x1="114" y1="105" x2="119" y2="100" stroke="#c89a20" stroke-width="1" stroke-linecap="round" opacity="0.5"/>
+      <line x1="119" y1="110" x2="124" y2="105" stroke="#c89a20" stroke-width="1" stroke-linecap="round" opacity="0.5"/>
+
+      <!-- ── SMALL EYES scattered ── -->
+      <!-- Above lens left -->
+      <ellipse cx="50" cy="34" rx="7" ry="4" fill="none" stroke="#8a6010" stroke-width="0.9" opacity="0.7"/>
+      <circle cx="50" cy="34" r="2.5" fill="#1e5858" opacity="0.9"/>
+      <circle cx="50" cy="34" r="1.2" fill="#020508"/>
+      <circle cx="48.8" cy="32.8" r="0.7" fill="white" opacity="0.7"/>
+
+      <!-- Above lens right -->
+      <ellipse cx="114" cy="30" rx="6.5" ry="3.8" fill="none" stroke="#8a6010" stroke-width="0.9" opacity="0.7"/>
+      <circle cx="114" cy="30" r="2.3" fill="#1e5858" opacity="0.9"/>
+      <circle cx="114" cy="30" r="1.1" fill="#020508"/>
+      <circle cx="112.9" cy="28.9" r="0.6" fill="white" opacity="0.7"/>
+
+      <!-- Below lens left -->
+      <ellipse cx="44" cy="112" rx="6" ry="3.5" fill="none" stroke="#8a6010" stroke-width="0.8" opacity="0.6"/>
+      <circle cx="44" cy="112" r="2.1" fill="#1e5858" opacity="0.9"/>
+      <circle cx="44" cy="112" r="1" fill="#020508"/>
+      <circle cx="43.1" cy="111.1" r="0.5" fill="white" opacity="0.6"/>
+
+      <!-- Far right area -->
+      <ellipse cx="138" cy="52" rx="5.5" ry="3.2" fill="none" stroke="#8a6010" stroke-width="0.8" opacity="0.6"/>
+      <circle cx="138" cy="52" r="2" fill="#1e5858" opacity="0.9"/>
+      <circle cx="138" cy="52" r="0.9" fill="#020508"/>
+      <circle cx="137.2" cy="51.2" r="0.5" fill="white" opacity="0.6"/>
+
+      <!-- ── DECORATIVE SEPARATOR ── -->
+      <line x1="155" y1="40" x2="155" y2="120" stroke="#2a2535" stroke-width="1"/>
+      <!-- Golden dot on separator -->
+      <circle cx="155" cy="80" r="2.5" fill="#d4af37" opacity="0.5"/>
+      <circle cx="155" cy="55" r="1.2" fill="#d4af37" opacity="0.3"/>
+      <circle cx="155" cy="105" r="1.2" fill="#d4af37" opacity="0.3"/>
+
+      <!-- ── TEXT: ARGOS ── -->
+      <text x="178" y="95" font-family="'Cinzel Decorative', 'Cinzel', serif" font-weight="700" font-size="52" fill="url(#title-grad)" letter-spacing="8" filter="url(#text-glow)">ARGOS</text>
+
+      <!-- ── SUBTITLE / TAGLINE ── -->
+      <text x="181" y="120" font-family="'Cinzel', serif" font-weight="400" font-size="10" fill="url(#subtitle-grad)" letter-spacing="5">BEYOND THE VISION</text>
+
+      <!-- Small ornamental dots around tagline -->
+      <circle cx="174" cy="115" r="1" fill="#8a6010" opacity="0.7"/>
+      <circle cx="446" cy="115" r="1" fill="#8a6010" opacity="0.7"/>
+
+    </svg>

@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="favicon-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="120" height="120">
+      <defs>
+        <radialGradient id="bg-grad" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#1e1a2e"/>
+          <stop offset="100%" stop-color="#0e0c18"/>
+        </radialGradient>
+
+        <radialGradient id="gold-grad" cx="40%" cy="35%" r="60%">
+          <stop offset="0%" stop-color="#f0d060"/>
+          <stop offset="50%" stop-color="#c89a20"/>
+          <stop offset="100%" stop-color="#8a6010"/>
+        </radialGradient>
+
+        <radialGradient id="iris-grad" cx="40%" cy="35%" r="60%">
+          <stop offset="0%" stop-color="#4a8080"/>
+          <stop offset="50%" stop-color="#1e5050"/>
+          <stop offset="100%" stop-color="#0a2828"/>
+        </radialGradient>
+
+        <filter id="glow-gold">
+          <feGaussianBlur stdDeviation="1.5" result="blur"/>
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+
+        <filter id="inner-shadow">
+          <feGaussianBlur stdDeviation="2" result="blur"/>
+          <feComposite in="blur" in2="SourceGraphic" operator="in" result="shadow"/>
+          <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+
+        <clipPath id="magnifier-clip">
+          <circle cx="44" cy="44" r="28"/>
+        </clipPath>
+      </defs>
+
+      <!-- Background circle -->
+      <circle cx="50" cy="50" r="48" fill="url(#bg-grad)"/>
+      <circle cx="50" cy="50" r="48" fill="none" stroke="#2a2535" stroke-width="1"/>
+
+      <!-- Subtle golden ring outer glow -->
+      <circle cx="50" cy="50" r="46" fill="none" stroke="#d4af37" stroke-width="0.3" opacity="0.4"/>
+
+      <!-- ── MAGNIFIER LENS ── -->
+      <!-- Lens outer ring - ornate golden frame -->
+      <circle cx="44" cy="44" r="30" fill="none" stroke="url(#gold-grad)" stroke-width="2.5" filter="url(#glow-gold)"/>
+      <!-- Inner frame line -->
+      <circle cx="44" cy="44" r="27" fill="none" stroke="#c89a20" stroke-width="0.6" opacity="0.6"/>
+
+      <!-- Lens fill - dark glass -->
+      <circle cx="44" cy="44" r="26.5" fill="#0a1520"/>
+      <circle cx="44" cy="44" r="26.5" fill="none" stroke="#1a2535" stroke-width="0.5"/>
+
+      <!-- Lens internal iris/pupil pattern (decorative rings) -->
+      <circle cx="44" cy="44" r="22" fill="none" stroke="#142030" stroke-width="1"/>
+      <circle cx="44" cy="44" r="16" fill="none" stroke="#142030" stroke-width="0.8"/>
+
+      <!-- ── THE EYE inside the lens ── -->
+      <!-- Eye white / sclera (dark version) -->
+      <ellipse cx="44" cy="44" rx="18" ry="10" fill="#0d1e30"/>
+
+      <!-- Iris -->
+      <circle cx="44" cy="44" r="8.5" fill="url(#iris-grad)"/>
+
+      <!-- Iris detail rings -->
+      <circle cx="44" cy="44" r="8.5" fill="none" stroke="#3a9090" stroke-width="0.4" opacity="0.8"/>
+      <circle cx="44" cy="44" r="6" fill="none" stroke="#2a7070" stroke-width="0.3" opacity="0.6"/>
+
+      <!-- Pupil -->
+      <circle cx="44" cy="44" r="4" fill="#040810"/>
+
+      <!-- Pupil shine -->
+      <circle cx="41.5" cy="41.5" r="1.5" fill="white" opacity="0.7"/>
+      <circle cx="46.5" cy="45.5" r="0.7" fill="white" opacity="0.3"/>
+
+      <!-- Eye lashes / eyelid lines -->
+      <path d="M 26 44 Q 35 37 44 36 Q 53 37 62 44" fill="none" stroke="#d4af37" stroke-width="1" opacity="0.6"/>
+      <path d="M 26 44 Q 35 51 44 52 Q 53 51 62 44" fill="none" stroke="#d4af37" stroke-width="1" opacity="0.6"/>
+
+      <!-- Eye corner dots (multiple eyes motif) -->
+      <circle cx="30" cy="38" r="1.2" fill="#c89a20" opacity="0.5"/>
+      <circle cx="58" cy="38" r="1.2" fill="#c89a20" opacity="0.5"/>
+      <circle cx="30" cy="50" r="1.2" fill="#c89a20" opacity="0.5"/>
+      <circle cx="58" cy="50" r="1.2" fill="#c89a20" opacity="0.5"/>
+
+      <!-- Lens glare -->
+      <ellipse cx="36" cy="36" rx="5" ry="3" fill="white" opacity="0.06" transform="rotate(-30 36 36)"/>
+
+      <!-- ── HANDLE ── -->
+      <!-- Handle with golden ornate look -->
+      <line x1="65" y1="65" x2="83" y2="83" stroke="url(#gold-grad)" stroke-width="5" stroke-linecap="round" filter="url(#glow-gold)"/>
+      <!-- Handle detail line -->
+      <line x1="65" y1="65" x2="83" y2="83" stroke="#f0d060" stroke-width="1.2" stroke-linecap="round" opacity="0.5"/>
+      <!-- Handle grip notch -->
+      <line x1="71" y1="70" x2="75" y2="66" stroke="#c89a20" stroke-width="1" stroke-linecap="round" opacity="0.6"/>
+      <line x1="75" y1="74" x2="79" y2="70" stroke="#c89a20" stroke-width="1" stroke-linecap="round" opacity="0.6"/>
+
+      <!-- ── SMALL SCATTERED EYES (Argos Panoptes motif) ── -->
+      <!-- Top left small eye -->
+      <ellipse cx="18" cy="22" rx="5" ry="3" fill="none" stroke="#8a6010" stroke-width="0.8" opacity="0.7"/>
+      <circle cx="18" cy="22" r="1.8" fill="#1e5050" opacity="0.9"/>
+      <circle cx="18" cy="22" r="0.9" fill="#040810" opacity="0.9"/>
+      <circle cx="17" cy="21.2" r="0.5" fill="white" opacity="0.6"/>
+
+      <!-- Top right small eye -->
+      <ellipse cx="78" cy="18" rx="4.5" ry="2.8" fill="none" stroke="#8a6010" stroke-width="0.8" opacity="0.7"/>
+      <circle cx="78" cy="18" r="1.6" fill="#1e5050" opacity="0.9"/>
+      <circle cx="78" cy="18" r="0.8" fill="#040810" opacity="0.9"/>
+      <circle cx="77.2" cy="17.3" r="0.5" fill="white" opacity="0.6"/>
+
+      <!-- Bottom left small eye -->
+      <ellipse cx="15" cy="72" rx="4" ry="2.5" fill="none" stroke="#8a6010" stroke-width="0.7" opacity="0.6"/>
+      <circle cx="15" cy="72" r="1.5" fill="#1e5050" opacity="0.9"/>
+      <circle cx="15" cy="72" r="0.7" fill="#040810" opacity="0.9"/>
+      <circle cx="14.4" cy="71.4" r="0.4" fill="white" opacity="0.6"/>
+
+      <!-- Upper area small eye (above lens) -->
+      <ellipse cx="65" cy="28" rx="4" ry="2.5" fill="none" stroke="#8a6010" stroke-width="0.7" opacity="0.6"/>
+      <circle cx="65" cy="28" r="1.5" fill="#1e5050" opacity="0.9"/>
+      <circle cx="65" cy="28" r="0.7" fill="#040810" opacity="0.9"/>
+      <circle cx="64.3" cy="27.3" r="0.4" fill="white" opacity="0.6"/>
+
+    </svg>
