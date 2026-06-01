@@ -25,250 +25,124 @@ window.EnrichPanel = {
         return false;
     },
 
-    _openCensysServiceModal(encoded) {
-        let svc = {};
-        try { svc = JSON.parse(decodeURIComponent(escape(atob(encoded)))); }
-        catch(e) { svc = { error: "decode error" }; }
+    // ── Modal service unifié (Shodan + Censys) ────────────
 
-        const port    = svc.port      || "?";
-        const proto   = svc.transport || "tcp";
-        const service = svc.service   || svc.product || "—";
-        const title   = `${port}/${proto}${service !== "—" ? ` · ${service}` : ""}`;
+    _openServiceModal(encoded) {
+        let payload = {};
+        try { payload = JSON.parse(decodeURIComponent(escape(atob(encoded)))); } catch(e) { payload = {}; }
 
-        const section = (icon, label, rows) => `
-            <div class="border border-slate-800 rounded-lg overflow-hidden">
-                <div class="flex items-center gap-2 px-3 py-2 bg-slate-900/60 border-b border-slate-800">
-                    <i data-lucide="${icon}" class="w-3 h-3 text-slate-500 shrink-0"></i>
-                    <span class="text-[9px] text-slate-400 uppercase tracking-wider font-semibold">${label}</span>
-                </div>
-                <table class="w-full p-2">
-                    <tbody class="divide-y divide-slate-800/50">${rows}</tbody>
-                </table>
-            </div>`;
-
-        const row = (k, v, cls = "text-slate-300") => {
-            if (!v && v !== 0) return "";
-            const disp = typeof v === "string"
-                ? v.replace(/</g,"&lt;").replace(/>/g,"&gt;")
-                : (Array.isArray(v) ? v.join(", ") : String(v));
-            return `
-                <tr>
-                    <td class="text-[8.5px] text-slate-500 pr-3 py-1 pl-3 whitespace-nowrap align-top w-28">${k}</td>
-                    <td class="text-[8.5px] ${cls} font-mono py-1 pr-3 break-all">${disp}</td>
-                </tr>`;
-        };
-
-        const sections = [];
-
-        // ── Service général ───────────────────────────────
-        let genRows = "";
-        genRows += row("Port", `${port}/${proto}`);
-        if (svc.service)      genRows += row("Protocol",  svc.service);
-        if (svc.product)      genRows += row("Software",  svc.product);
-        if (svc.scan_time)    genRows += row("Scanned",   svc.scan_time);
-        if (genRows) sections.push(section("server", "Service", genRows));
-
-        // ── TLS / Certificat ──────────────────────────────
-        if (svc.tls_cn || svc.tls_fp || svc.tls_issuer) {
-            let tlsRows = "";
-            if (svc.tls_cn)      tlsRows += row("Subject CN",  svc.tls_cn,     "text-cyan-400");
-            if (svc.tls_issuer)  tlsRows += row("Issuer",      svc.tls_issuer, "text-slate-400");
-            if (svc.tls_expiry)  tlsRows += row("Expires",     svc.tls_expiry, "text-amber-400");
-            if (svc.tls_key)     tlsRows += row("Key",         svc.tls_key);
-            if (svc.tls_sig_alg) tlsRows += row("Sig Alg",    svc.tls_sig_alg);
-            if (svc.tls_fp)      tlsRows += row("SHA-256",     svc.tls_fp,     "text-slate-500 text-[7.5px]");
-            if (svc.tls_names?.length) {
-                tlsRows += row("SANs", svc.tls_names.slice(0,5).join(", "), "text-slate-400");
-            }
-            if (tlsRows) sections.push(section("lock", "TLS Certificate", tlsRows));
-        }
-
-        // ── HTTP ──────────────────────────────────────────
-        if (svc.http_status || svc.http_server) {
-            let httpRows = "";
-            if (svc.http_status) {
-                const code = parseInt(svc.http_status);
-                const cls  = code >= 500 ? "text-red-400" : code >= 400 ? "text-amber-400" : "text-green-400";
-                httpRows += row("Status", `${svc.http_status}${svc.http_reason ? " " + svc.http_reason : ""}`, cls);
-            }
-            if (svc.http_server) httpRows += row("Server", svc.http_server, "text-slate-300");
-            if (httpRows) sections.push(section("globe", "HTTP", httpRows));
-        }
-
-        // ── DNS ───────────────────────────────────────────
-        if (svc.dns_version || svc.dns_rcode) {
-            let dnsRows = "";
-            if (svc.dns_version) dnsRows += row("Version", svc.dns_version);
-            if (svc.dns_rcode)   dnsRows += row("R-Code",  svc.dns_rcode,
-                                                svc.dns_rcode === "no_error" ? "text-green-400" : "text-amber-400");
-            if (dnsRows) sections.push(section("globe-2", "DNS", dnsRows));
-        }
-
-        // ── Banner / Body ─────────────────────────────────
-        if (svc.banner) {
-            const esc = svc.banner.replace(/</g,"&lt;").replace(/>/g,"&gt;");
-            sections.push(`
-                <div class="border border-slate-800 rounded-lg overflow-hidden">
-                    <div class="flex items-center gap-2 px-3 py-2 bg-slate-900/60 border-b border-slate-800">
-                        <i data-lucide="terminal" class="w-3 h-3 text-slate-500 shrink-0"></i>
-                        <span class="text-[9px] text-slate-400 uppercase tracking-wider font-semibold">Banner / Body</span>
-                    </div>
-                    <pre class="p-3 text-[8px] font-mono text-slate-400 whitespace-pre-wrap break-all max-h-32 overflow-y-auto">${esc}</pre>
-                </div>`);
-        }
-
-        let modal = document.getElementById("censys-service-modal");
-        if (modal) modal.remove();
-        modal = document.createElement("div");
-        modal.id = "censys-service-modal";
-        modal.className = "fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4";
-        modal.innerHTML = `
-            <div class="relative w-full max-w-lg max-h-[85vh] flex flex-col
-                        bg-slate-950 border border-slate-700 rounded-xl shadow-2xl overflow-hidden">
-                <div class="flex items-center justify-between px-4 py-3 border-b border-slate-800 shrink-0">
-                    <span class="text-[11px] font-bold text-slate-200 flex items-center gap-2">
-                        <i data-lucide="scan-line" class="w-3.5 h-3.5 text-cyan-400"></i>
-                        ${title}
-                    </span>
-                    <button onclick="document.getElementById('censys-service-modal').remove()"
-                            class="text-slate-500 hover:text-white transition">
-                        <i data-lucide="x" class="w-4 h-4"></i>
-                    </button>
-                </div>
-                <div class="flex-1 overflow-auto p-4 space-y-3">
-                    ${sections.length
-                        ? sections.join("")
-                        : `<p class="text-[10px] text-slate-500 italic">No detail available.</p>`}
-                </div>
-            </div>`;
-        modal.addEventListener("click", e => { if (e.target === modal) modal.remove(); });
-        document.body.appendChild(modal);
-        lucide.createIcons({ nodes: [modal] });
-    },
-
-    _openShodanServiceModal(encoded) {
-        let svc = {};
-        try { svc = JSON.parse(decodeURIComponent(escape(atob(encoded)))); }
-        catch(e) { svc = { error: "decode error" }; }
+        const source = payload.source || "shodan";
+        const svc    = payload.svc || {};
 
         const port      = svc.port      || "?";
-        const transport = svc.transport || "tcp";
-        const product   = svc.product   || svc.module || "—";
+        const proto     = svc.transport || "tcp";
+        const product   = svc.product   || svc.module || svc.service || "";
         const version   = svc.version   || "";
-        const title     = `${port}/${transport}${product !== "—" ? ` · ${product}` : ""}`;
+        const srcLabel  = source === "shodan" ? "Shodan" : "Censys";
+        const srcColor  = source === "shodan" ? "text-amber-400" : "text-cyan-400";
+        const title     = `${port}/${proto}${product ? " — " + product : ""}`;
 
-        const section = (icon, label, rows) => `
-            <div class="border border-slate-800 rounded-lg overflow-hidden">
-                <div class="flex items-center gap-2 px-3 py-2 bg-slate-900/60 border-b border-slate-800">
+        const section = (icon, label, content) => `
+            <div>
+                <div class="flex items-center gap-2 mb-1.5">
                     <i data-lucide="${icon}" class="w-3 h-3 text-slate-500 shrink-0"></i>
                     <span class="text-[9px] text-slate-400 uppercase tracking-wider font-semibold">${label}</span>
                 </div>
-                <table class="w-full p-2">
-                    <tbody class="divide-y divide-slate-800/50">${rows}</tbody>
-                </table>
+                ${content}
             </div>`;
 
-        const row = (k, v, cls = "text-slate-300") => {
-            if (!v && v !== 0) return "";
-            const disp = typeof v === "string"
-                ? v.replace(/</g,"&lt;").replace(/>/g,"&gt;")
-                : (Array.isArray(v) ? v.join(", ") : String(v));
-            return `
-                <tr>
-                    <td class="text-[8.5px] text-slate-500 pr-3 py-1 pl-3 whitespace-nowrap align-top w-28">${k}</td>
-                    <td class="text-[8.5px] ${cls} font-mono py-1 pr-3 break-all">${disp}</td>
-                </tr>`;
-        };
+        const kv = (rows) => `<table class="w-full">${rows.map(([k,v]) =>
+            `<tr>
+                <td class="text-[9px] text-slate-500 pr-3 py-0.5 whitespace-nowrap w-28">${k}</td>
+                <td class="text-[9px] text-slate-300 font-mono py-0.5 break-all">${v}</td>
+            </tr>`
+        ).join("")}</table>`;
 
         const sections = [];
 
-        let genRows = "";
-        genRows += row("Port", `${port}/${transport}`);
-        if (product !== "—")  genRows += row("Product", `${product}${version ? ` ${version}` : ""}`);
-        if (svc.info)         genRows += row("Info", svc.info);
-        if (svc.module)       genRows += row("Module", svc.module);
-        if (svc.timestamp)    genRows += row("Last seen", svc.timestamp);
-        if (genRows) sections.push(section("server", "General", genRows));
+        // ── Info générale ──
+        const infoRows = [["Port", `${port}/${proto}`]];
+        if (product) infoRows.push(["Product", product]);
+        if (version) infoRows.push(["Version", version]);
+        if (svc.info)   infoRows.push(["Info", svc.info]);
+        if (svc.os)     infoRows.push(["OS", svc.os]);
+        if (svc.timestamp) infoRows.push(["Last Seen", svc.timestamp?.slice(0, 10)]);
+        if (svc.service_name) infoRows.push(["Service Name", svc.service_name]);
+        sections.push(section("info", "General", kv(infoRows)));
 
-        if (svc.http) {
-            let h = "";
-            h += row("Status",     svc.http.status);
-            h += row("Title",      svc.http.title);
-            h += row("Server",     svc.http.server);
-            h += row("WAF",        svc.http.waf);
-            h += row("Redirects",  svc.http.redirects ? `${svc.http.redirects} redirect(s)` : null);
-            if (svc.http.components?.length)
-                h += row("Tech",   svc.http.components.join(", "), "text-cyan-300");
-            if (h) sections.push(section("globe", "HTTP", h));
-        }
+        // ── TLS / Cert ──
+        const tlsRows = [];
+        if (svc.tls_cn)     tlsRows.push(["CN", svc.tls_cn]);
+        if (svc.tls_issuer) tlsRows.push(["Issuer", svc.tls_issuer]);
+        if (svc.tls_expiry) tlsRows.push(["Expiry", svc.tls_expiry?.slice(0, 10)]);
+        if (svc.jarm)       tlsRows.push(["JARM", svc.jarm]);
+        if (svc.cert_sha256) tlsRows.push(["SHA-256", svc.cert_sha256.slice(0, 16) + "…"]);
+        if (tlsRows.length) sections.push(section("lock", "TLS / Certificate", kv(tlsRows)));
 
-        if (svc.ssl) {
-            let s = "";
-            s += row("CN",       svc.ssl.cn);
-            s += row("Issuer",   svc.ssl.issuer);
-            s += row("Expires",  svc.ssl.expires);
-            if (svc.ssl.san?.length)
-                s += row("SAN", svc.ssl.san.slice(0, 8).join(", ") + (svc.ssl.san.length > 8 ? ` +${svc.ssl.san.length - 8}` : ""), "text-blue-300");
-            if (svc.ssl.versions?.length)
-                s += row("Protocols", svc.ssl.versions.join(", "));
-            if (s) sections.push(section("lock", "TLS / Certificate", s));
-        }
-
+        // ── SSH (Shodan) ──
         if (svc.ssh) {
-            let sh = "";
-            sh += row("Type", svc.ssh.type);
-            Object.entries(svc.ssh).forEach(([k, v]) => {
-                if (k !== "type") sh += row(k, v, "text-slate-400");
-            });
-            if (sh) sections.push(section("terminal", "SSH", sh));
+            const ssh = svc.ssh;
+            const sshRows = [];
+            if (ssh.type)        sshRows.push(["Type", ssh.type]);
+            if (ssh.fingerprint) sshRows.push(["Fingerprint", ssh.fingerprint]);
+            if (ssh.kex?.kex_algorithms) sshRows.push(["KEX", ssh.kex.kex_algorithms.slice(0,2).join(", ")]);
+            if (sshRows.length) sections.push(section("terminal-square", "SSH", kv(sshRows)));
         }
 
-        if (svc.cpe?.length) {
-            const cpeRows = svc.cpe.map(c => row("CPE", c, "text-slate-400")).join("");
-            sections.push(section("package", "CPE", cpeRows));
-        }
+        // ── HTTP ──
+        const httpRows = [];
+        if (svc.http_status)  httpRows.push(["Status", svc.http_status]);
+        if (svc.http_title)   httpRows.push(["Title", svc.http_title]);
+        if (svc.http_server)  httpRows.push(["Server", svc.http_server]);
+        if (svc.http?.title)  httpRows.push(["Title", svc.http.title]);
+        if (svc.http?.status_code) httpRows.push(["Status", svc.http.status_code]);
+        if (httpRows.length) sections.push(section("globe", "HTTP", kv(httpRows)));
 
+        // ── DNS (Censys) ──
+        const dnsRows = [];
+        if (svc.dns?.reverse_dns) dnsRows.push(["Reverse DNS", Array.isArray(svc.dns.reverse_dns) ? svc.dns.reverse_dns[0] : svc.dns.reverse_dns]);
+        if (dnsRows.length) sections.push(section("globe-2", "DNS", kv(dnsRows)));
+
+        // ── CVEs ──
         if (svc.vulns?.length) {
-            const cveRows = svc.vulns.map(cve => {
-                const yr  = parseInt(cve.match(/CVE-(\d{4})/)?.[1] || "0");
-                const cls = yr >= 2021 ? "text-red-400 font-bold" : yr >= 2018 ? "text-amber-400" : "text-slate-400";
-                return row(cve, "", cls);
-            }).join("");
-            sections.push(section("alert-triangle", "CVEs", cveRows));
+            const badges = svc.vulns.map(v =>
+                `<a href="https://nvd.nist.gov/vuln/detail/${v}" target="_blank" rel="noopener noreferrer"
+                    class="text-[9px] px-1.5 py-0.5 rounded border bg-red-500/10 border-red-500/30
+                           text-red-400 hover:text-red-300 font-mono transition">${v}</a>`
+            ).join("");
+            sections.push(section("bug", "Vulnerabilities",
+                `<div class="flex flex-wrap gap-1">${badges}</div>`));
         }
 
+        // ── Banner ──
         if (svc.banner) {
             const esc = svc.banner.replace(/</g,"&lt;").replace(/>/g,"&gt;");
-            sections.push(`
-                <div class="border border-slate-800 rounded-lg overflow-hidden">
-                    <div class="flex items-center gap-2 px-3 py-2 bg-slate-900/60 border-b border-slate-800">
-                        <i data-lucide="terminal" class="w-3 h-3 text-slate-500 shrink-0"></i>
-                        <span class="text-[9px] text-slate-400 uppercase tracking-wider font-semibold">Banner</span>
-                    </div>
-                    <pre class="p-3 text-[8px] font-mono text-slate-400 whitespace-pre-wrap break-all max-h-32 overflow-y-auto">${esc}</pre>
-                </div>`);
+            sections.push(section("terminal", "Banner",
+                `<pre class="text-[8px] font-mono text-slate-400 whitespace-pre-wrap break-all
+                             max-h-28 overflow-y-auto bg-slate-900/60 rounded p-2">${esc}</pre>`));
         }
 
-        let modal = document.getElementById("shodan-service-modal");
+        let modal = document.getElementById("service-detail-modal");
         if (modal) modal.remove();
         modal = document.createElement("div");
-        modal.id = "shodan-service-modal";
+        modal.id = "service-detail-modal";
         modal.className = "fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4";
         modal.innerHTML = `
             <div class="relative w-full max-w-lg max-h-[85vh] flex flex-col
                         bg-slate-950 border border-slate-700 rounded-xl shadow-2xl overflow-hidden">
                 <div class="flex items-center justify-between px-4 py-3 border-b border-slate-800 shrink-0">
                     <span class="text-[11px] font-bold text-slate-200 flex items-center gap-2">
-                        <i data-lucide="server" class="w-3.5 h-3.5 text-blue-400"></i>
+                        <i data-lucide="plug" class="w-3.5 h-3.5 ${srcColor}"></i>
                         ${title}
+                        <span class="text-[8px] ${srcColor} font-semibold ml-1">${srcLabel}</span>
                     </span>
-                    <button onclick="document.getElementById('shodan-service-modal').remove()"
+                    <button onclick="document.getElementById('service-detail-modal').remove()"
                             class="text-slate-500 hover:text-white transition">
                         <i data-lucide="x" class="w-4 h-4"></i>
                     </button>
                 </div>
-                <div class="flex-1 overflow-auto p-4 space-y-3">
-                    ${sections.length ? sections.join("") : '<p class="text-[9px] text-slate-600">No detail available.</p>'}
+                <div class="flex-1 overflow-auto p-4 space-y-4">
+                    ${sections.join("")}
                 </div>
             </div>`;
         modal.addEventListener("click", e => { if (e.target === modal) modal.remove(); });
@@ -343,68 +217,102 @@ window.EnrichPanel = {
 
     // ── Mapping champ → thème ─────────────────────────────
     _THEME_MAP: {
-        "Malware Family":  "threat",
-        "Threat Type":     "threat",
-        "Avg Confidence":  "threat",
-        "IOC Count":       "threat",
-        "Reporters":       "other",
-        "ThreatFox Entry": "intel",
-        "Collections":        "vt_refs",
-        "Malware Names":      "vt_refs",
-        "Threat Names":       "vt_refs",
-        "Malware Categories": "vt_refs",
-        "Collection Tags":    "vt_refs",
-        "Reports":            "vt_refs",
-        "Other Sightings":    "vt_refs",
-        "Detection Score": "threat",  "Confidence Score": "threat",
-        "Malicious":       "threat",  "Suspicious":       "threat",
-        "Reputation":      "threat",  "Scan Count":       "threat",
-        "Threat Actors":   "threat",
-        "Organization":    "host", "ASN": "host", "ASN Owner": "host",
-        "Country":         "host", "OS": "host", "Registrar": "host",
-        "Last Seen":       "host", "Last Analysis": "host", "Last Scan": "host",
-        "Usage":           "host", "Services":     "shodan_services", "Name": "host",
-        "Type":            "host", "Server Headers": "host",
-        "Scan Report":     "urlscan_meta",
-        "Screenshot":      "screenshot",
-        "HTTP Transactions": "urlscan_web",
-        "Redirects":         "urlscan_web",
-        "Links":             "urlscan_web",
-        "DOM":               "urlscan_content",
-        "Text Content":      "urlscan_content",
-        "TLS Cert Domains":  "dns",
-        "Open Ports":      "ports",
-        "Hostnames":       "dns", "Domains": "dns", "Hosted Domains": "dns",
-        "Domain Count":    "dns", "Last Resolved": "dns",
-        "Resolved IPs":    "dns", "Associated IPs": "dns", "Subdomains Seen": "dns",
-        "Vulnerabilities": "vulns",
-        "Tags":            "tags", "Categories": "tags", "Indicator Types": "tags",
-        "In OpenCTI":      "intel", "Detection": "intel", "Labels": "intel",
-        "VT Reports":      "intel", "Report Count": "intel", "OpenCTI Link": "intel",
-        "AS Name":             "host",   "BGP Prefix":          "host",
-        "Last Scanned":        "host",   "Location":            "host",
-        "Organization":        "host",
-        "Services":            "censys_services",
-        "Open Ports":          "ports",
-        "TLS Names":           "dns",    "Cert Fingerprints":   "other",
-        "JARM Fingerprints":   "other",
-        "Reverse DNS":         "dns",    "Hosted Domains":      "dns",
-        "Domain Count":        "dns",    "DNS Names":           "dns",
-        "Certificates Found":  "host",
-        "Certificate Issuers": "tags",
-        "Related Names (SAN)": "dns",
-        "Cert SHA-256":        "other",
-        "Latest Expiry":       "host",
-        "Subject DN":          "host",   "Issuer DN":           "host",
-        "SANs / Names":        "dns",
-        "Valid From":          "host",   "Valid Until":         "host",
-        "Sig Algorithm":       "other",  "Key Type":            "other",
-        "Hosts Using Cert":    "dns",
-        "Censys Results":      "host",
-        "Censys Host":         "intel",  "Censys Certs":        "intel",
-        "Censys Certificate":  "intel",  "Censys Search":       "intel",
+        // ── THREAT ──
+        "Detection Score":      "threat",
+        "Malicious":            "threat",
+        "Suspicious":           "threat",
+        "Reputation":           "threat",
+        "Scan Count":           "threat",
+        "Threat Actors":        "threat",
+        "Malware Family":       "threat",
+        "Malware Description":  "threat",
+        "Threat Type":          "threat",
+        "Avg Confidence":       "threat",
+        "IOC Count":            "threat",
+        "ThreatFox Entry":      "threat",
+
+        // ── HOST ──
+        "Organization":         "host",
+        "ASN":                  "host",
+        "OS":                   "host",
+        "Country":              "host",
+        "City":                 "host",
+        "ISP":                  "host",
+        "Network":              "host",
+        "Whois Org":            "host",
+        "IP Address":           "host",
+        "Reverse DNS":          "host",
+        "Certificates Found":   "host",
+        "Certificate Issuers":  "host",
+        "Censys Results":       "host",
+        "Censys Host":          "host",
+        "Censys Certs":         "host",
+        "Censys Certificate":   "host",
+        "Censys Search":        "host",
+        "Latest Expiry":        "host",
+        "Subject DN":           "host",
+        "Issuer DN":            "host",
+        "Valid From":           "host",
+        "Valid Until":          "host",
+        "Sig Algorithm":        "host",
+        "Key Type":             "host",
+        "Last Seen":            "host",
+        "First Seen":           "host",
+
+        // ── SERVICES ──
+        "Services":             "shodan_services",
+        "Censys Services":      "censys_services",
+
+        // ── VULNS ──
+        "Vulnerabilities":      "vulns",
+        "Open Ports":           "ports",
+
+        // ── DNS ──
+        "Passive DNS":          "dns",
+        "Hostnames":            "dns",
+        "Domains":              "dns",
+        "DNS Names":            "dns",
+        "Related Names (SAN)":  "dns",
+        "SANs / Names":         "dns",
+        "Hosts Using Cert":     "dns",
+        "Cert SHA-256":         "dns",
+        "IP Addresses":         "dns",
+
+        // ── TAGS ──
+        "Tags":                 "tags",
+        "Certificate Issuers":  "tags",
+
+        // ── WEB ──
+        "URLScan":              "urlscan_meta",
+        "HTTP Transactions":    "urlscan_web",
+        "Redirects":            "urlscan_web",
+        "Links":                "urlscan_web",
+        "DOM":                  "urlscan_content",
+        "Body Text":            "urlscan_content",
+        "Screenshot":           "screenshot",
+
+        // ── RELATIONS ──
+        "Communicating Files":       "vt_refs",
+        "Contacted IPs":             "vt_refs",
+        "Contacted Domains":         "vt_refs",
+        "Contacted URLs":            "vt_refs",
+        "Related Threat Actors":     "vt_refs",
+        "Related References":        "vt_refs",
+        "Collections":               "vt_refs",
+        "Comments":                  "vt_refs",
+        "Referrer URLs":             "vt_refs",
+        "Redirecting URLs":          "vt_refs",
+        "Redirects To":              "vt_refs",
+        "Subdomains":                "vt_refs",
+        "CNAME Records":             "vt_refs",
+        "MX Records":                "vt_refs",
+        "NS Records":                "vt_refs",
+        "SOA Records":               "vt_refs",
+        "SSL Certificates":          "vt_refs",
     },
     _getTheme(name) { return this._THEME_MAP[name] || "other"; },
+
+    // ── Rendu principal ───────────────────────────────────
 
     // ── Rendu principal ───────────────────────────────────
 
@@ -431,7 +339,7 @@ window.EnrichPanel = {
         const external = entries.filter(([k]) => !internalKeys.includes(k));
         const internal = entries.filter(([k]) =>  internalKeys.includes(k));
 
-        // Verdict global (scores uniquement — VT, AbuseIPDB)
+        // Verdict global
         let maxScore = null;
         entries.forEach(([, fields]) => (fields || []).forEach(f => {
             if (f.type === "score" && !this._isEmpty(f.value)) {
@@ -441,7 +349,7 @@ window.EnrichPanel = {
         }));
         this._injectVerdictBadge(maxScore);
 
-        // Collecter par thème
+        // Collecter tous les champs externes par thème
         const themes = {};
         external.forEach(([modKey, fields]) => {
             (fields || []).forEach(f => {
@@ -452,49 +360,113 @@ window.EnrichPanel = {
             });
         });
 
-        const ORDER = ["threat","vt_refs","host","ports","vulns","dns","tags","urlscan_meta","screenshot","urlscan_web","urlscan_content","shodan_services","censys_services","other"];
-        const sections = ORDER
-            .filter(t => themes[t]?.length)
-            .map(t => this._renderThemeSection(t, themes[t]))
-            .filter(Boolean);
+        // Ordre et config des boxes
+        const BOX_CONFIG = [
+            { key: "threat",           icon: "shield-alert",  label: "Threat",    color: "red",    open: true  },
+            { key: "host",             icon: "server",        label: "Host",      color: "blue",   open: true  },
+            { key: "services",         icon: "plug",          label: "Services",  color: "cyan",   open: false },
+            { key: "vulns",            icon: "bug",           label: "Vulns",     color: "orange", open: false },
+            { key: "dns",              icon: "globe-2",       label: "DNS",       color: "green",  open: false },
+            { key: "tags",             icon: "tag",           label: "Tags",      color: "violet", open: false },
+            { key: "web",              icon: "monitor",       label: "WEB",       color: "sky",    open: false },
+            { key: "relations",        icon: "git-fork",      label: "Relations", color: "amber",  open: false },
+            { key: "other",            icon: "info",          label: "Other",     color: "slate",  open: false },
+        ];
 
-        p.innerHTML = sections.length
-            ? sections.join(`<div class="border-t border-slate-800/40 my-2"></div>`)
+        // Fusionner shodan_services + censys_services → services
+        const mergeMap = {
+            "shodan_services":  "services",
+            "censys_services":  "services",
+            "vt_refs":          "relations",
+            "urlscan_meta":     "web",
+            "urlscan_web":      "web",
+            "urlscan_content":  "web",
+            "screenshot":       "web",
+        };
+        const mergedThemes = {};
+        Object.entries(themes).forEach(([t, items]) => {
+            const dest = mergeMap[t] || t;
+            if (!mergedThemes[dest]) mergedThemes[dest] = [];
+            // Conserve l'info du thème original dans chaque item pour le rendu interne
+            items.forEach(item => mergedThemes[dest].push({ ...item, origTheme: t }));
+        });
+
+        const colorMap = {
+            red: "text-red-400 border-red-500/20 bg-red-500/5",
+            blue: "text-blue-400 border-blue-500/20 bg-blue-500/5",
+            cyan: "text-cyan-400 border-cyan-500/20 bg-cyan-500/5",
+            orange: "text-orange-400 border-orange-500/20 bg-orange-500/5",
+            green: "text-green-400 border-green-500/20 bg-green-500/5",
+            violet: "text-violet-400 border-violet-500/20 bg-violet-500/5",
+            sky: "text-sky-400 border-sky-500/20 bg-sky-500/5",
+            amber: "text-amber-400 border-amber-500/20 bg-amber-500/5",
+            slate: "text-slate-400 border-slate-500/20 bg-slate-500/5",
+        };
+
+        const cards = BOX_CONFIG
+            .filter(cfg => mergedThemes[cfg.key]?.length)
+            .map(cfg => {
+                const items = mergedThemes[cfg.key];
+                const body  = this._renderThemeBody(cfg.key, items);
+                if (!body) return "";
+                const clr   = colorMap[cfg.color] || colorMap.slate;
+                const [iconCls, borderCls, bgCls] = clr.split(" ");
+                const boxId = `enrich-box-${cfg.key}`;
+                const isOpen = cfg.open;
+                return `
+                <div class="rounded-lg border ${borderCls} ${bgCls} overflow-hidden mb-2">
+                    <button onclick="EnrichPanel._toggleBox('${boxId}')"
+                            class="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-white/5 transition">
+                        <i data-lucide="${cfg.icon}" class="w-3 h-3 ${iconCls} shrink-0"></i>
+                        <span class="text-[10px] font-semibold uppercase tracking-widest ${iconCls} flex-1">${cfg.label}</span>
+                        <span class="text-[9px] text-slate-600">${items.length}</span>
+                        <i data-lucide="${isOpen ? 'chevron-up' : 'chevron-down'}"
+                           class="w-3 h-3 text-slate-600 shrink-0 transition-transform" id="${boxId}-chevron"></i>
+                    </button>
+                    <div id="${boxId}" class="${isOpen ? '' : 'hidden'} px-3 pb-3 pt-1">
+                        ${body}
+                    </div>
+                </div>`;
+            }).filter(Boolean);
+
+        p.innerHTML = cards.length
+            ? cards.join("")
             : `<p class="text-slate-600 text-[10px] italic py-2">No external data.</p>`;
 
         lucide.createIcons({ nodes: [p] });
         this._renderInternalSection(internal);
     },
 
-    // ── Sections thématiques ──────────────────────────────
-
-    _sectionHeader(icon, label, count) {
-        const countBadge = count != null
-            ? `<span class="ml-auto text-[9px] text-slate-600">${count}</span>` : "";
-        return `
-            <div class="flex items-center gap-1.5 mb-2">
-                <i data-lucide="${icon}" class="w-3 h-3 text-slate-500 shrink-0"></i>
-                <span class="text-[9px] text-slate-500 uppercase tracking-widest font-semibold">${label}</span>
-                ${countBadge}
-            </div>`;
+    _toggleBox(id) {
+        const el  = document.getElementById(id);
+        const chv = document.getElementById(`${id}-chevron`);
+        if (!el) return;
+        const hidden = el.classList.toggle("hidden");
+        if (chv) {
+            chv.setAttribute("data-lucide", hidden ? "chevron-down" : "chevron-up");
+            lucide.createIcons({ nodes: [chv] });
+        }
     },
 
-    _renderThemeSection(theme, items) {
+    // ── Rendu du corps d'une box ──────────────────────────
+
+    _renderThemeBody(theme, items) {
 
         // ── THREAT ──
         if (theme === "threat") {
             const scoreItems = items.filter(({ field }) => field.type === "score");
             const kvItems    = items.filter(({ field }) => field.type !== "score");
             let html = "";
+
             if (scoreItems.length) {
                 const bars = scoreItems.map(({ mod, field }) => {
-                    const pct    = Math.min(100, Math.max(0, Number(field.value)));
-                    const color  = pct > 70 ? "#ef4444" : pct > 40 ? "#f59e0b" : "#22c55e";
+                    const pct   = Math.min(100, Math.max(0, Number(field.value)));
+                    const color = pct > 70 ? "#ef4444" : pct > 40 ? "#f59e0b" : "#22c55e";
                     const txtcls = pct > 70 ? "text-red-400" : pct > 40 ? "text-amber-400" : "text-green-400";
                     return `
                         <div class="flex items-center gap-2">
                             <span class="flex items-center gap-1 text-[9px] text-slate-500 w-20 shrink-0 truncate"
-                                title="${this._modLabel(mod)}">
+                                  title="${this._modLabel(mod)}">
                                 <i data-lucide="${this._modIcon(mod)}" class="w-2.5 h-2.5 shrink-0"></i>
                                 ${this._modLabel(mod)}
                             </span>
@@ -504,8 +476,9 @@ window.EnrichPanel = {
                             <span class="text-[10px] font-bold ${txtcls} w-6 text-right shrink-0">${pct}</span>
                         </div>`;
                 }).join("");
-                html += `<div class="space-y-1.5 mb-2">${bars}</div>`;
+                html += `<div class="space-y-1.5 mb-3">${bars}</div>`;
             }
+
             if (kvItems.length) {
                 const seen = {};
                 kvItems.forEach(({ mod, field }) => {
@@ -521,30 +494,44 @@ window.EnrichPanel = {
                         ? "text-red-400 font-bold"
                         : Array.isArray(field.value) ? "text-amber-400" : "text-slate-300";
                     const display = Array.isArray(field.value)
-                        ? field.value.slice(0, 3).join(", ") + (field.value.length > 3 ? ` +${field.value.length - 3}` : "")
-                        : v;
+                        ? field.value.slice(0, 3).join(", ") + (field.value.length > 3 ? "…" : "")
+                        : v.length > 26 ? v.slice(0, 24) + "…" : v;
+
+                    // Champ texte long (ex: Malware Description)
+                    if (field.type === "text") {
+                        return `
+                            <tr>
+                                <td colspan="2" class="py-1">
+                                    <div class="text-[9px] text-slate-500 mb-0.5">${field.name}</div>
+                                    <div class="text-[9px] text-slate-300 italic leading-relaxed">${v}</div>
+                                </td>
+                            </tr>`;
+                    }
+
                     return `
                         <tr>
-                            <td class="text-[9px] text-slate-500 pr-3 py-0.5 whitespace-nowrap">${field.name}</td>
-                            <td class="text-[10px] ${cls} font-mono py-0.5">${display}</td>
-                            <td class="text-[9px] text-slate-600 pl-2 py-0.5 whitespace-nowrap">${this._modLabel(mod)}</td>
+                            <td class="text-[9px] text-slate-500 pr-3 py-0.5 whitespace-nowrap align-top">${field.name}</td>
+                            <td class="text-[9px] ${cls} font-mono py-0.5 truncate" title="${v}">${display}</td>
                         </tr>`;
-                }).join("");
-                html += `<table class="w-full">${rows}</table>`;
+                }).filter(Boolean).join("");
+                if (rows) html += `<table class="w-full">${rows}</table>`;
             }
-            return `${this._sectionHeader("shield-alert", "Threat")}${html}`;
+
+            return html || null;
         }
 
         // ── HOST ──
         if (theme === "host") {
             const seen = {};
-            items.forEach(({ mod, field }) => { if (!seen[field.name]) seen[field.name] = { mod, field }; });
+            items.forEach(({ mod, field }) => {
+                if (!seen[field.name]) seen[field.name] = { mod, field };
+            });
             const rows = Object.values(seen).map(({ mod, field }) => {
-                const v    = String(field.value);
-                const disp = v.length > 26 ? v.slice(0, 24) + "…" : v;
+                const v    = Array.isArray(field.value) ? field.value.join(", ") : String(field.value);
+                const disp = v.length > 28 ? v.slice(0, 26) + "…" : v;
                 if (field.link) return `
                     <tr>
-                        <td class="text-[9px] text-slate-500 pr-3 py-0.5 whitespace-nowrap w-20">${field.name}</td>
+                        <td class="text-[9px] text-slate-500 pr-3 py-0.5 whitespace-nowrap">${field.name}</td>
                         <td class="py-0.5">
                             <a href="${field.link}" target="_blank" rel="noopener noreferrer" title="${v}"
                                class="text-[9px] text-blue-400 hover:text-blue-300 font-mono flex items-center gap-0.5 transition">
@@ -554,30 +541,54 @@ window.EnrichPanel = {
                     </tr>`;
                 return `
                     <tr>
-                        <td class="text-[9px] text-slate-500 pr-3 py-0.5 whitespace-nowrap w-20">${field.name}</td>
+                        <td class="text-[9px] text-slate-500 pr-3 py-0.5 whitespace-nowrap">${field.name}</td>
                         <td class="text-[9px] text-slate-300 font-mono py-0.5 truncate" title="${v}">${disp}</td>
                     </tr>`;
             }).join("");
-            return `${this._sectionHeader("server", "Host")}<table class="w-full">${rows}</table>`;
+            return rows ? `<table class="w-full">${rows}</table>` : null;
         }
 
-        // ── PORTS ──
-        if (theme === "ports") {
-            const RISKY = new Set([21,22,23,25,53,80,110,135,139,143,443,445,
-                                   1433,1521,3306,3389,5432,5900,6379,8080,8443,9200,27017,6667]);
-            const allPorts = new Set();
-            items.forEach(({ field }) => {
-                (Array.isArray(field.value) ? field.value : [field.value])
-                    .forEach(p => p !== null && p !== undefined && allPorts.add(Number(p)));
+        // ── SERVICES (Shodan + Censys fusionnés) ──
+        if (theme === "services") {
+            const allServices = [];
+            items.forEach(({ mod, field, origTheme }) => {
+                (Array.isArray(field.value) ? field.value : [field.value]).forEach(v => {
+                    if (v) allServices.push({ svc: v, source: origTheme === "shodan_services" ? "shodan" : "censys" });
+                });
             });
-            const sorted = [...allPorts].sort((a, b) => a - b);
-            const tags = sorted.map(p => {
-                const cls = RISKY.has(p)
-                    ? "bg-red-500/10 border-red-500/30 text-red-400"
-                    : "bg-slate-800 border-slate-700/50 text-slate-400";
-                return `<span class="text-[9px] px-1.5 py-px rounded border font-mono ${cls}">${p}</span>`;
+            if (!allServices.length) return null;
+
+            const btns = allServices.slice(0, 30).map(({ svc, source }) => {
+                let encoded = "";
+                try { encoded = btoa(unescape(encodeURIComponent(JSON.stringify({ svc, source })))); } catch(e) { encoded = ""; }
+
+                const s       = typeof svc === "object" ? svc : {};
+                const port    = s.port || "?";
+                const proto   = s.transport || "tcp";
+                const product = s.product || s.module || s.service || "";
+                const hasVulns = s.vulns?.length > 0;
+                const hasTLS   = !!s.tls_cn;
+
+                const srcBadge = source === "shodan"
+                    ? `<span class="text-[7px] text-amber-500/70 font-semibold ml-auto shrink-0">SHD</span>`
+                    : `<span class="text-[7px] text-cyan-500/70 font-semibold ml-auto shrink-0">CSY</span>`;
+                const vulnBadge = hasVulns
+                    ? `<span class="text-[8px] text-red-400 font-bold shrink-0">${s.vulns.length} CVE</span>` : "";
+                const tlsBadge = hasTLS && !hasVulns
+                    ? `<span class="text-[7px] text-cyan-600 shrink-0">TLS</span>` : "";
+
+                return `
+                    <button onclick="EnrichPanel._openServiceModal('${encoded}')"
+                            class="flex items-center gap-2 w-full text-left rounded border border-slate-700/50
+                                   hover:border-slate-600 bg-slate-900/40 px-2 py-1 transition">
+                        <span class="text-[9px] font-mono text-cyan-400 shrink-0 w-16">${port}/${proto}</span>
+                        ${product ? `<span class="text-[9px] text-slate-400 truncate flex-1">${product}</span>` : `<span class="flex-1"></span>`}
+                        ${vulnBadge}${tlsBadge}${srcBadge}
+                    </button>`;
             }).join("");
-            return `${this._sectionHeader("plug", "Ports", sorted.length)}<div class="flex flex-wrap gap-1">${tags}</div>`;
+            const overflow = allServices.length > 30
+                ? `<div class="text-[8px] text-slate-600 pt-1">+${allServices.length - 30} more</div>` : "";
+            return `<div class="space-y-0.5">${btns}${overflow}</div>`;
         }
 
         // ── VULNS ──
@@ -587,30 +598,40 @@ window.EnrichPanel = {
                 (Array.isArray(field.value) ? field.value : [field.value]).forEach(v => v && allVulns.add(String(v)));
             });
             const arr = [...allVulns];
-            const tags = arr.slice(0, 20).map(v => {
-                const yr  = parseInt(v.match(/CVE-(\d{4})/)?.[1] || "0");
-                const cls = yr >= 2021 ? "bg-red-500/10 border-red-500/30 text-red-400"
-                          : yr >= 2018 ? "bg-amber-500/10 border-amber-500/30 text-amber-400"
-                          :              "bg-slate-800 border-slate-700/50 text-slate-500";
-                return `<span class="text-[9px] px-1.5 py-px rounded border font-mono ${cls}">${v}</span>`;
-            }).join("");
-            const overflow = arr.length > 20 ? `<span class="text-[9px] text-slate-600">+${arr.length-20}</span>` : "";
-            return `${this._sectionHeader("alert-triangle", "Vulnerabilities", arr.length)}<div class="flex flex-wrap gap-1">${tags}${overflow}</div>`;
+            if (!arr.length) return null;
+            const badges = arr.slice(0, 20).map(v =>
+                `<a href="https://nvd.nist.gov/vuln/detail/${v}" target="_blank" rel="noopener noreferrer"
+                    class="text-[9px] px-1.5 py-0.5 rounded border bg-red-500/10 border-red-500/30
+                           text-red-400 hover:text-red-300 font-mono transition">${v}</a>`
+            ).join("");
+            const overflow = arr.length > 20 ? `<span class="text-[8px] text-slate-600">+${arr.length - 20}</span>` : "";
+            return `<div class="flex flex-wrap gap-1">${badges}${overflow}</div>`;
         }
 
         // ── DNS ──
         if (theme === "dns") {
-            const allItems = new Set();
+            const byName = {};
             items.forEach(({ field }) => {
-                (Array.isArray(field.value) ? field.value : [field.value]).forEach(v => v && allItems.add(String(v)));
+                const vals = Array.isArray(field.value) ? field.value : [field.value];
+                if (!byName[field.name]) byName[field.name] = new Set();
+                vals.forEach(v => v && byName[field.name].add(String(v)));
             });
-            const arr = [...allItems];
-            const tags = arr.slice(0, 12).map(v =>
-                `<span class="text-[9px] px-1.5 py-px rounded border
-                              bg-slate-800 border-slate-700/50 text-slate-300 font-mono">${v}</span>`
-            ).join("");
-            const overflow = arr.length > 12 ? `<span class="text-[9px] text-slate-600">+${arr.length-12}</span>` : "";
-            return `${this._sectionHeader("globe", "Passive DNS", arr.length)}<div class="flex flex-wrap gap-1">${tags}${overflow}</div>`;
+            const sections = [];
+            Object.entries(byName).forEach(([name, valSet]) => {
+                const arr = [...valSet];
+                const tags = arr.slice(0, 12).map(v =>
+                    `<span class="text-[9px] px-1.5 py-0.5 rounded border bg-slate-800/60
+                                  border-slate-700/50 text-slate-300 font-mono truncate max-w-full"
+                           title="${v}">${v.length > 30 ? v.slice(0,28)+"…" : v}</span>`
+                ).join("");
+                const overflow = arr.length > 12 ? `<span class="text-[8px] text-slate-600">+${arr.length-12}</span>` : "";
+                sections.push(`
+                    <div class="mb-2">
+                        <div class="text-[8px] text-slate-500 uppercase tracking-wider mb-1">${name}</div>
+                        <div class="flex flex-wrap gap-1">${tags}${overflow}</div>
+                    </div>`);
+            });
+            return sections.length ? sections.join("") : null;
         }
 
         // ── TAGS ──
@@ -620,211 +641,151 @@ window.EnrichPanel = {
                 (Array.isArray(field.value) ? field.value : [field.value]).forEach(v => v && allItems.add(String(v)));
             });
             const arr = [...allItems];
-            const tags = arr.slice(0, 10).map(v =>
-                `<span class="text-[9px] px-1.5 py-px rounded border
-                              bg-slate-800 border-slate-700/50 text-slate-400">${v}</span>`
+            if (!arr.length) return null;
+            const tags = arr.slice(0, 15).map(v =>
+                `<span class="text-[9px] px-1.5 py-0.5 rounded border bg-slate-800 border-slate-700/50 text-slate-400">${v}</span>`
             ).join("");
-            const overflow = arr.length > 10 ? `<span class="text-[9px] text-slate-600">+${arr.length-10}</span>` : "";
-            return `${this._sectionHeader("tag", "Tags & categories")}<div class="flex flex-wrap gap-1">${tags}${overflow}</div>`;
+            const overflow = arr.length > 15 ? `<span class="text-[9px] text-slate-600">+${arr.length-15}</span>` : "";
+            return `<div class="flex flex-wrap gap-1">${tags}${overflow}</div>`;
         }
 
-        // ── URLSCAN META ──
-        if (theme === "urlscan_meta") {
-            const links = items.map(({ field }) => {
-                if (!field.link) return "";
-                return `
-                    <a href="${field.link}" target="_blank" rel="noopener noreferrer"
-                       class="flex items-center gap-1 text-[9px] text-blue-400 hover:text-blue-300 transition w-fit">
-                        <i data-lucide="external-link" class="w-2.5 h-2.5 shrink-0"></i> ${field.value}
-                    </a>`;
-            }).filter(Boolean).join("");
-            return links ? `${this._sectionHeader("scan-eye", "URLScan")}${links}` : "";
-        }
+        // ── WEB (URLScan : meta + screenshot + web activity + content) ──
+        if (theme === "web") {
+            const parts = [];
 
-        // ── SCREENSHOT ──
-        if (theme === "screenshot") {
-            const item = items[0];
-            if (!item) return "";
-            const src  = String(item.field.value);
-            const href = item.field.link || src;
-            return `
-                ${this._sectionHeader("camera", "Screenshot")}
-                <button onclick="EnrichPanel._openScreenshotModal('${src}', '${href}')"
-                        class="block rounded overflow-hidden border border-slate-700/60
-                               hover:border-blue-500/40 transition w-full text-left">
-                    <img src="${src}" alt="URLScan screenshot"
-                         class="w-full object-cover"
-                         style="max-height:120px;object-position:top"
-                         loading="lazy"
-                         onerror="this.closest('button').style.display='none'">
-                </button>`;
-        }
+            // Meta links
+            const metaItems = items.filter(i => i.origTheme === "urlscan_meta");
+            if (metaItems.length) {
+                const links = metaItems.map(({ field }) => {
+                    if (!field.link) return "";
+                    return `<a href="${field.link}" target="_blank" rel="noopener noreferrer"
+                               class="flex items-center gap-1 text-[9px] text-blue-400 hover:text-blue-300 transition w-fit">
+                                <i data-lucide="external-link" class="w-2.5 h-2.5 shrink-0"></i>${field.value}
+                            </a>`;
+                }).filter(Boolean).join("");
+                if (links) parts.push(`<div class="space-y-0.5 mb-2">${links}</div>`);
+            }
 
-        // ── URLSCAN WEB ──
-        if (theme === "urlscan_web") {
-            const iconMap = {
-                "HTTP Transactions": "arrow-right-left",
-                "Redirects":         "corner-right-down",
-                "Links":             "link",
-            };
-            const sections = [];
-            ["HTTP Transactions", "Redirects", "Links"].forEach(name => {
-                const matched = items.filter(({ field }) => field.name === name);
-                if (!matched.length) return;
-                const allVals = [];
-                matched.forEach(({ field }) => {
-                    (Array.isArray(field.value) ? field.value : [field.value]).forEach(v => v && allVals.push(String(v)));
-                });
-                if (!allVals.length) return;
-                const max = matched[0].field.max || 15;
-                const rows = allVals.slice(0, max).map(v => {
-                    const statusMatch = v.match(/^(\d{3})\s/);
-                    let statusBadge = "";
-                    let rest = v;
-                    if (statusMatch) {
-                        const code = parseInt(statusMatch[1]);
-                        const cls  = code >= 500 ? "text-red-400" : code >= 400 ? "text-amber-400" : code >= 300 ? "text-blue-400" : "text-green-400";
-                        statusBadge = `<span class="${cls} font-bold mr-1">${code}</span>`;
-                        rest = v.slice(4);
-                    }
-                    const disp = rest.length > 90 ? rest.slice(0, 88) + "…" : rest;
-                    return `<div class="text-[8.5px] font-mono text-slate-400 truncate py-px" title="${v}">${statusBadge}${disp}</div>`;
-                }).join("");
-                const overflow = allVals.length > max ? `<div class="text-[8px] text-slate-600 mt-0.5">+${allVals.length - max} more</div>` : "";
-                const icon = iconMap[name] || "activity";
-                sections.push(`
-                    <div>
-                        <div class="flex items-center gap-1 mb-1">
-                            <i data-lucide="${icon}" class="w-2.5 h-2.5 text-slate-500 shrink-0"></i>
-                            <span class="text-[8px] text-slate-500 uppercase tracking-wider">${name}</span>
-                            <span class="text-[8px] text-slate-700 ml-auto">${allVals.length}</span>
-                        </div>
-                        <div class="space-y-px">${rows}${overflow}</div>
-                    </div>`);
-            });
-            if (!sections.length) return "";
-            return `${this._sectionHeader("activity", "Web Activity")}<div class="space-y-3">${sections.join("")}</div>`;
-        }
+            // Screenshot
+            const ssItem = items.find(i => i.origTheme === "screenshot");
+            if (ssItem) {
+                const src  = String(ssItem.field.value);
+                const href = ssItem.field.link || src;
+                parts.push(`
+                    <button onclick="EnrichPanel._openScreenshotModal('${src}', '${href}')"
+                            class="block rounded overflow-hidden border border-slate-700/60
+                                   hover:border-blue-500/40 transition w-full text-left mb-2">
+                        <img src="${src}" alt="URLScan screenshot"
+                             class="w-full object-cover" style="max-height:120px;object-position:top"
+                             loading="lazy" onerror="this.closest('button').style.display='none'">
+                    </button>`);
+            }
 
-        // ── URLSCAN CONTENT ──
-        if (theme === "urlscan_content") {
-            const btns = items.map(({ field }) => {
-                if (field.type !== "text_modal") return "";
-                const val     = String(field.value || "");
-                const label   = field.name;
-                const icon    = label === "DOM" ? "code-2" : "file-text";
-                const preview = val.slice(0, 80).replace(/</g, "&lt;").replace(/>/g, "&gt;");
-                let encoded = "";
-                try { encoded = btoa(unescape(encodeURIComponent(val.slice(0, 50000)))); } catch(e) { encoded = btoa(val.slice(0, 50000)); }
-                return `
-                    <button onclick="EnrichPanel._openTextModal('${label}', '${encoded}')"
-                            class="flex items-center gap-2 w-full text-left rounded border border-slate-700/60
-                                   hover:border-blue-500/40 bg-slate-900/40 px-2 py-1.5 transition">
-                        <i data-lucide="${icon}" class="w-3 h-3 text-slate-500 shrink-0"></i>
-                        <div class="flex-1 min-w-0">
-                            <div class="text-[9px] font-semibold text-slate-300">${label}</div>
-                            <div class="text-[8px] text-slate-600 font-mono truncate">${preview}…</div>
-                        </div>
-                        <i data-lucide="maximize-2" class="w-2.5 h-2.5 text-slate-600 shrink-0"></i>
-                    </button>`;
-            }).filter(Boolean).join("");
-            return btns ? `${this._sectionHeader("file-code", "Page Content")}<div class="space-y-1.5">${btns}</div>` : "";
-        }
-
-        // ── SHODAN SERVICES ──
-        if (theme === "shodan_services") {
-            const allServices = [];
-            items.forEach(({ field }) => {
-                (Array.isArray(field.value) ? field.value : [field.value]).forEach(v => v && allServices.push(v));
-            });
-            if (!allServices.length) return "";
-            const btns = allServices.slice(0, 20).map(svcStr => {
-                let encoded = "";
-                try { encoded = btoa(unescape(encodeURIComponent(JSON.stringify(svcStr)))); } catch(e) { encoded = ""; }
-                const svc = typeof svcStr === "object" ? svcStr : {};
-                const port = svc.port || "?";
-                const proto = svc.transport || "tcp";
-                const prod = svc.product || svc.module || "";
-                const hasVulns = svc.vulns?.length > 0;
-                const vulnBadge = hasVulns
-                    ? `<span class="ml-auto text-[8px] text-red-400 font-bold">${svc.vulns.length} CVE</span>` : "";
-                return `
-                    <button onclick="EnrichPanel._openShodanServiceModal('${encoded}')"
-                            class="flex items-center gap-2 w-full text-left rounded border border-slate-700/60
-                                   hover:border-blue-500/40 bg-slate-900/40 px-2 py-1 transition">
-                        <span class="text-[9px] font-mono text-cyan-400 shrink-0">${port}/${proto}</span>
-                        ${prod ? `<span class="text-[9px] text-slate-400 truncate">${prod}</span>` : ""}
-                        ${vulnBadge}
-                    </button>`;
-            }).join("");
-            const overflow = allServices.length > 20 ? `<div class="text-[8px] text-slate-600 mt-1">+${allServices.length-20} more</div>` : "";
-            return `${this._sectionHeader("layers", "Services", allServices.length)}<div class="space-y-1">${btns}${overflow}</div>`;
-        }
-
-        // ── INTEL ──
-        if (theme === "intel") {
-            const seen = {};
-            items.forEach(({ mod, field }) => { if (!seen[field.name]) seen[field.name] = { mod, field }; });
-            const rows = Object.values(seen).map(({ mod, field }) => {
-                const v    = Array.isArray(field.value) ? field.value.join(", ") : String(field.value);
-                const disp = v.length > 28 ? v.slice(0, 26) + "…" : v;
-                if (field.link) return `
-                    <tr>
-                        <td class="text-[9px] text-slate-500 pr-3 py-0.5 whitespace-nowrap">${field.name}</td>
-                        <td class="py-0.5">
-                            <a href="${field.link}" target="_blank" rel="noopener noreferrer" title="${v}"
-                               class="text-[9px] text-violet-400 hover:text-violet-300 font-mono flex items-center gap-0.5 transition">
-                                ${disp}<i data-lucide="external-link" class="w-2 h-2 shrink-0"></i>
-                            </a>
-                        </td>
-                    </tr>`;
-                return `
-                    <tr>
-                        <td class="text-[9px] text-slate-500 pr-3 py-0.5 whitespace-nowrap">${field.name}</td>
-                        <td class="text-[9px] text-slate-300 font-mono py-0.5 truncate" title="${v}">${disp}</td>
-                    </tr>`;
-            }).join("");
-            return rows ? `${this._sectionHeader("database", "Intel")}<table class="w-full">${rows}</table>` : "";
-        }
-
-        // ── VT ASSOCIATIONS ──
-        if (theme === "vt_refs") {
-            const fieldOrder = [
-                { name: "Malware Names",      icon: "bug",         color: "text-red-400"    },
-                { name: "Threat Names",        icon: "shield-alert",color: "text-orange-400" },
-                { name: "Malware Categories",  icon: "tag",         color: "text-yellow-500" },
-                { name: "Collection Tags",     icon: "hash",        color: "text-slate-400"  },
-                { name: "Collections",         icon: "folder-open", color: "text-slate-300"  },
-                { name: "Reports",             icon: "file-text",   color: "text-blue-400"   },
-                { name: "Other Sightings",     icon: "eye",         color: "text-amber-400"  },
-            ];
-            const blocks = [];
-            fieldOrder.forEach(({ name, icon, color }) => {
-                const matched = items.filter(({ field }) => field.name === name);
-                if (!matched.length) return;
-                const vals = [];
-                matched.forEach(({ field }) => {
-                    (Array.isArray(field.value) ? field.value : [field.value])
-                        .forEach(v => v && vals.push(String(v)));
-                });
-                if (!vals.length) return;
-                const rows = vals.slice(0, 10).map(v => {
-                    const sep = v.indexOf(" — ");
-                    const title    = sep !== -1 ? v.slice(0, sep) : v;
-                    const subtitle = sep !== -1 ? v.slice(sep + 3) : "";
-                    const tDisp = title.length > 40 ? title.slice(0, 38) + "…" : title;
-                    const sDisp = subtitle.length > 60 ? subtitle.slice(0, 58) + "…" : subtitle;
-                    return `
-                        <div class="flex items-start gap-1.5 py-1 border-b border-slate-800/40 last:border-0">
-                            <i data-lucide="${icon}" class="w-2.5 h-2.5 ${color} shrink-0 mt-0.5"></i>
-                            <div class="min-w-0">
-                                <div class="text-[9px] text-slate-200 font-medium truncate" title="${title}">${tDisp}</div>
-                                ${sDisp ? `<div class="text-[8px] text-slate-500 truncate">${sDisp}</div>` : ""}
+            // Web activity (HTTP Transactions, Redirects, Links)
+            const webItems = items.filter(i => i.origTheme === "urlscan_web");
+            if (webItems.length) {
+                const iconMap = { "HTTP Transactions": "arrow-right-left", "Redirects": "corner-right-down", "Links": "link" };
+                const subsections = [];
+                ["HTTP Transactions", "Redirects", "Links"].forEach(name => {
+                    const matched = webItems.filter(({ field }) => field.name === name);
+                    if (!matched.length) return;
+                    const allVals = [];
+                    matched.forEach(({ field }) => {
+                        (Array.isArray(field.value) ? field.value : [field.value]).forEach(v => v && allVals.push(String(v)));
+                    });
+                    if (!allVals.length) return;
+                    const max = matched[0].field.max || 15;
+                    const rows = allVals.slice(0, max).map(v => {
+                        const statusMatch = v.match(/^(\d{3})\s/);
+                        let statusBadge = "", rest = v;
+                        if (statusMatch) {
+                            const code = parseInt(statusMatch[1]);
+                            const cls  = code >= 500 ? "text-red-400" : code >= 400 ? "text-amber-400" : code >= 300 ? "text-blue-400" : "text-green-400";
+                            statusBadge = `<span class="${cls} font-bold mr-1">${code}</span>`;
+                            rest = v.slice(4);
+                        }
+                        const disp = rest.length > 90 ? rest.slice(0, 88) + "…" : rest;
+                        return `<div class="text-[8.5px] font-mono text-slate-400 truncate py-px" title="${v}">${statusBadge}${disp}</div>`;
+                    }).join("");
+                    const overflow = allVals.length > max ? `<div class="text-[8px] text-slate-600 mt-0.5">+${allVals.length - max} more</div>` : "";
+                    const icon = iconMap[name] || "activity";
+                    subsections.push(`
+                        <div class="mb-2">
+                            <div class="flex items-center gap-1 mb-1">
+                                <i data-lucide="${icon}" class="w-2.5 h-2.5 text-slate-500 shrink-0"></i>
+                                <span class="text-[8px] text-slate-500 uppercase tracking-wider">${name}</span>
+                                <span class="text-[8px] text-slate-700 ml-auto">${allVals.length}</span>
                             </div>
+                            <div class="space-y-px">${rows}${overflow}</div>
+                        </div>`);
+                });
+                if (subsections.length) parts.push(subsections.join(""));
+            }
+
+            // Page content (DOM, body text modals)
+            const contentItems = items.filter(i => i.origTheme === "urlscan_content");
+            if (contentItems.length) {
+                const btns = contentItems.map(({ field }) => {
+                    if (field.type !== "text_modal") return "";
+                    const val     = String(field.value || "");
+                    const label   = field.name;
+                    const icon    = label === "DOM" ? "code-2" : "file-text";
+                    const preview = val.slice(0, 80).replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                    let encoded = "";
+                    try { encoded = btoa(unescape(encodeURIComponent(val.slice(0, 50000)))); } catch(e) { encoded = btoa(val.slice(0, 50000)); }
+                    return `
+                        <button onclick="EnrichPanel._openTextModal('${label}', '${encoded}')"
+                                class="flex items-center gap-2 w-full text-left rounded border border-slate-700/60
+                                       hover:border-blue-500/40 bg-slate-900/40 px-2 py-1.5 transition">
+                            <i data-lucide="${icon}" class="w-3 h-3 text-slate-500 shrink-0"></i>
+                            <div class="flex-1 min-w-0">
+                                <div class="text-[9px] font-semibold text-slate-300">${label}</div>
+                                <div class="text-[8px] text-slate-600 font-mono truncate">${preview}…</div>
+                            </div>
+                            <i data-lucide="maximize-2" class="w-2.5 h-2.5 text-slate-600 shrink-0"></i>
+                        </button>`;
+                }).filter(Boolean).join("");
+                if (btns) parts.push(`<div class="space-y-1.5">${btns}</div>`);
+            }
+
+            return parts.length ? parts.join("") : null;
+        }
+
+        // ── RELATIONS (VT refs) ──
+        if (theme === "relations") {
+            const typeOrder = ["communicating_files", "contacted_domains", "contacted_ips", "contacted_urls",
+                               "related_threat_actors", "related_references", "collections", "comments",
+                               "referrer_urls", "redirecting_urls", "redirects_to", "subdomains",
+                               "cname_records", "mx_records", "ns_records", "soa_records", "historical_ssl_certificates"];
+            const grouped = {};
+            items.forEach(({ field }) => {
+                if (field.type !== "vt_relation") return;
+                const vals = Array.isArray(field.value) ? field.value : [field.value];
+                if (!grouped[field.name]) grouped[field.name] = [];
+                vals.forEach(v => v && grouped[field.name].push(v));
+            });
+            const blocks = [];
+            const iconMap2 = {
+                "Communicating Files": "file-code", "Contacted IPs": "network", "Contacted Domains": "globe",
+                "Contacted URLs": "link", "Related Threat Actors": "user-x", "Collections": "folder",
+                "Comments": "message-circle", "SSL Certificates": "lock", "Subdomains": "layers",
+            };
+            Object.entries(grouped).forEach(([name, vals]) => {
+                if (!vals.length) return;
+                const icon = iconMap2[name] || "activity";
+                const rows = vals.slice(0, 10).map(item => {
+                    if (typeof item !== "object") return `<div class="text-[9px] text-slate-400 font-mono truncate">${item}</div>`;
+                    const primary   = item.sha256 || item.name || item.hostname || item.url || item.ip || item.text || item.value || "";
+                    const secondary = item.description || (item.detections != null ? `${item.detections} det.` : "") || item.date || "";
+                    const pDisp = primary.length > 32 ? primary.slice(0, 30) + "…" : primary;
+                    const sDisp = secondary.length > 28 ? secondary.slice(0, 26) + "…" : secondary;
+                    return `
+                        <div class="flex flex-col py-0.5">
+                            <span class="text-[9px] text-slate-300 font-mono truncate" title="${primary}">${pDisp}</span>
+                            ${sDisp ? `<span class="text-[8px] text-slate-500 truncate">${sDisp}</span>` : ""}
                         </div>`;
                 }).join("");
-                const overflow = vals.length > 10
-                    ? `<div class="text-[8px] text-slate-600 pt-0.5">+${vals.length - 10} more</div>` : "";
+                const overflow = vals.length > 10 ? `<div class="text-[8px] text-slate-600 pt-0.5">+${vals.length - 10} more</div>` : "";
                 blocks.push(`
                     <div class="mb-2">
                         <div class="flex items-center gap-1 mb-1">
@@ -835,55 +796,8 @@ window.EnrichPanel = {
                         ${rows}${overflow}
                     </div>`);
             });
-            return blocks.length
-                ? `${this._sectionHeader("layers", "VT Associations", items.length)}${blocks.join("")}`
-                : "";
+            return blocks.length ? blocks.join("") : null;
         }
-
-        // ── CENSYS SERVICES ──
-        if (theme === "censys_services") {
-            const allServices = [];
-            items.forEach(({ field }) => {
-                (Array.isArray(field.value) ? field.value : [field.value])
-                    .forEach(v => v && allServices.push(v));
-            });
-            if (!allServices.length) return "";
- 
-            const btns = allServices.slice(0, 25).map(svc => {
-                if (typeof svc !== "object") return "";
-                let encoded = "";
-                try { encoded = btoa(unescape(encodeURIComponent(JSON.stringify(svc)))); } catch(e) { encoded = ""; }
- 
-                const port    = svc.port     || "?";
-                const proto   = svc.transport || "tcp";
-                const service = svc.service  || "";
-                const product = svc.product  || "";
-                const hasTLS  = !!svc.tls_cn;
-                const hasJARM = !!svc.jarm;
- 
-                const badge = hasTLS
-                    ? `<span class="ml-auto text-[8px] text-cyan-500">TLS</span>`
-                    : hasJARM
-                        ? `<span class="ml-auto text-[8px] text-purple-400">JARM</span>`
-                        : "";
- 
-                const label = service || product || "";
-                return `
-                    <button onclick="EnrichPanel._openCensysServiceModal('${encoded}')"
-                            class="flex items-center gap-2 w-full text-left rounded border border-slate-700/60
-                                   hover:border-cyan-500/40 bg-slate-900/40 px-2 py-1 transition">
-                        <span class="text-[9px] font-mono text-cyan-400 shrink-0">${port}/${proto}</span>
-                        ${label ? `<span class="text-[9px] text-slate-400 truncate">${label}</span>` : ""}
-                        ${badge}
-                    </button>`;
-            }).filter(Boolean).join("");
- 
-            const overflow = allServices.length > 25
-                ? `<div class="text-[8px] text-slate-600 pt-1">+${allServices.length - 25} more</div>` : "";
- 
-            return `${this._sectionHeader("scan-line", "Censys Services", allServices.length)}<div class="space-y-0.5">${btns}${overflow}</div>`;
-        }
-
 
         // ── OTHER / FALLBACK ──
         const seen = {};
@@ -898,7 +812,7 @@ window.EnrichPanel = {
                     <td class="text-[9px] text-slate-300 font-mono py-0.5 truncate" title="${v}">${disp}</td>
                 </tr>`;
         }).filter(Boolean).join("");
-        return rows ? `${this._sectionHeader("info", "Other")}<table class="w-full">${rows}</table>` : "";
+        return rows ? `<table class="w-full">${rows}</table>` : null;
     },
 
     // ── Internal intel ────────────────────────────────────

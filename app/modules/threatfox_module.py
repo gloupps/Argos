@@ -143,6 +143,13 @@ class ThreatFoxModule(Module):
                 if i.get("malware_printable") or i.get("malware")
             }
         )
+
+        # Description malpedia (première non-vide trouvée)
+        malware_desc = next(
+            (i.get("malware_malpedia") for i in iocs if i.get("malware_malpedia")),
+            None,
+        )
+
         threat_types = list(
             {
                 i.get("threat_type_desc") or i.get("threat_type", "")
@@ -153,7 +160,6 @@ class ThreatFoxModule(Module):
         tags = list(
             {t for i in iocs for t in (i.get("tags") or []) if isinstance(t, str)}
         )
-        reporters = list({i["reporter"] for i in iocs if i.get("reporter")})
 
         confidences = [
             int(i["confidence_level"])
@@ -166,11 +172,9 @@ class ThreatFoxModule(Module):
 
         # ── Construction des champs ───────────────────────
 
-        # Nombre d'entrées (ou nombre de combinaisons ip:port)
         label = f"{len(iocs)} entries ({len(ports)} ports)" if ports else str(len(iocs))
         res.append(self._f(indicator, "IOC Count", "label-capsule", label))
 
-        # Ports regroupés → thème "ports" dans qualif.js
         if ports:
             res.append(
                 self._f(indicator, "Open Ports", "list", [str(p) for p in ports])
@@ -180,6 +184,9 @@ class ThreatFoxModule(Module):
             res.append(
                 self._f(indicator, "Malware Family", "list", malware_printable[:10])
             )
+
+        if malware_desc:
+            res.append(self._f(indicator, "Malware Description", "text", malware_desc))
 
         if threat_types:
             res.append(self._f(indicator, "Threat Type", "list", threat_types[:5]))
@@ -200,9 +207,6 @@ class ThreatFoxModule(Module):
 
         if tags:
             res.append(self._f(indicator, "Tags", "list", tags[:15]))
-
-        if reporters:
-            res.append(self._f(indicator, "Reporters", "list", reporters[:5]))
 
         # Lien vers la fiche du premier IOC
         first = iocs[0]
