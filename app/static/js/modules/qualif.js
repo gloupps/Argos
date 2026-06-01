@@ -452,7 +452,7 @@ window.EnrichPanel = {
             });
         });
 
-        const ORDER = ["threat","vt_refs","host","ports","vulns","dns","tags","urlscan_meta","screenshot","urlscan_web","urlscan_content","shodan_services","other"];
+        const ORDER = ["threat","vt_refs","host","ports","vulns","dns","tags","urlscan_meta","screenshot","urlscan_web","urlscan_content","shodan_services","censys_services","other"];
         const sections = ORDER
             .filter(t => themes[t]?.length)
             .map(t => this._renderThemeSection(t, themes[t]))
