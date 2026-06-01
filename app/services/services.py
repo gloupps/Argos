@@ -33,6 +33,7 @@ class Services:
         from app.modules.misp_module import MISPModule
         from app.modules.threatfox_module import ThreatFoxModule
         from app.modules.elasticsearch_module import ElasticsearchModule
+        from app.modules.censys_module import CensysModule
 
         self.modules = {
             "shodan": ShodanModule(self.requester),
@@ -43,6 +44,7 @@ class Services:
             "misp": MISPModule(self.requester),
             "threatfox": ThreatFoxModule(self.requester),
             "elasticsearch": ElasticsearchModule(self.requester),
+            "censys": CensysModule(self.requester),
         }
 
     # ── Public ────────────────────────────────────────────

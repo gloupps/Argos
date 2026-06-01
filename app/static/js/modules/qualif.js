@@ -16,7 +16,7 @@ window.EnrichPanel = {
         if (i) return i;
         return { virustotal:"shield", shodan:"radar", abuseipdb:"ban",
             urlscan:"scan-eye", viewdns:"globe", opencti:"database", misp:"share-2",
-            threatfox:"bug", elasticsearch:"database" }[k] || "box";
+            threatfox:"bug", elasticsearch:"database", censys:"scan-line" }[k] || "box";
     },
     _isEmpty(v) {
         if (v === null || v === undefined || v === "") return true;
@@ -24,6 +24,104 @@ window.EnrichPanel = {
         if (Array.isArray(v) && v.filter(x => x !== "" && x !== null && typeof x !== "object").length === 0 && !v.some(x => x && typeof x === "object")) return true;
         return false;
     },
+
+    _openCensysServiceModal(encoded) {
+        let svc = {};
+        try { svc = JSON.parse(decodeURIComponent(escape(atob(encoded)))); }
+        catch(e) { svc = { error: "decode error" }; }
+ 
+        const port    = svc.port      || "?";
+        const proto   = svc.transport || "tcp";
+        const service = svc.service   || svc.product || "—";
+        const title   = `${port}/${proto}${service !== "—" ? ` · ${service}` : ""}`;
+ 
+        const section = (icon, label, rows) => `
+            <div class="border border-slate-800 rounded-lg overflow-hidden">
+                <div class="flex items-center gap-2 px-3 py-2 bg-slate-900/60 border-b border-slate-800">
+                    <i data-lucide="${icon}" class="w-3 h-3 text-slate-500 shrink-0"></i>
+                    <span class="text-[9px] text-slate-400 uppercase tracking-wider font-semibold">${label}</span>
+                </div>
+                <table class="w-full p-2">
+                    <tbody class="divide-y divide-slate-800/50">${rows}</tbody>
+                </table>
+            </div>`;
+ 
+        const row = (k, v, cls = "text-slate-300") => {
+            if (!v && v !== 0) return "";
+            const disp = typeof v === "string"
+                ? v.replace(/</g,"&lt;").replace(/>/g,"&gt;")
+                : (Array.isArray(v) ? v.join(", ") : String(v));
+            return `
+                <tr>
+                    <td class="text-[8.5px] text-slate-500 pr-3 py-1 pl-3 whitespace-nowrap align-top w-28">${k}</td>
+                    <td class="text-[8.5px] ${cls} font-mono py-1 pr-3 break-all">${disp}</td>
+                </tr>`;
+        };
+ 
+        const sections = [];
+ 
+        // Infos générales
+        let genRows = "";
+        genRows += row("Port", `${port}/${proto}`);
+        if (svc.service && svc.service !== "—") genRows += row("Service", svc.service);
+        if (svc.product) genRows += row("Product", svc.product);
+        if (genRows) sections.push(section("server", "Service", genRows));
+ 
+        // TLS
+        if (svc.tls_cn || svc.tls_fp) {
+            let tlsRows = "";
+            if (svc.tls_cn) tlsRows += row("Common Name", svc.tls_cn, "text-cyan-400");
+            if (svc.tls_fp) tlsRows += row("Fingerprint", svc.tls_fp, "text-slate-400 font-mono text-[7.5px]");
+            if (tlsRows) sections.push(section("lock", "TLS Certificate", tlsRows));
+        }
+ 
+        // JARM
+        if (svc.jarm) {
+            sections.push(section("fingerprint", "JARM", row("Fingerprint", svc.jarm, "text-purple-400 font-mono text-[7.5px]")));
+        }
+ 
+        // Banner
+        if (svc.banner) {
+            const esc = svc.banner.replace(/</g,"&lt;").replace(/>/g,"&gt;");
+            sections.push(`
+                <div class="border border-slate-800 rounded-lg overflow-hidden">
+                    <div class="flex items-center gap-2 px-3 py-2 bg-slate-900/60 border-b border-slate-800">
+                        <i data-lucide="terminal" class="w-3 h-3 text-slate-500 shrink-0"></i>
+                        <span class="text-[9px] text-slate-400 uppercase tracking-wider font-semibold">Banner</span>
+                    </div>
+                    <pre class="p-3 text-[8px] font-mono text-slate-400 whitespace-pre-wrap break-all max-h-32 overflow-y-auto">${esc}</pre>
+                </div>`);
+        }
+ 
+        let modal = document.getElementById("censys-service-modal");
+        if (modal) modal.remove();
+        modal = document.createElement("div");
+        modal.id = "censys-service-modal";
+        modal.className = "fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4";
+        modal.innerHTML = `
+            <div class="relative w-full max-w-lg max-h-[85vh] flex flex-col
+                        bg-slate-950 border border-slate-700 rounded-xl shadow-2xl overflow-hidden">
+                <div class="flex items-center justify-between px-4 py-3 border-b border-slate-800 shrink-0">
+                    <span class="text-[11px] font-bold text-slate-200 flex items-center gap-2">
+                        <i data-lucide="scan-line" class="w-3.5 h-3.5 text-cyan-400"></i>
+                        ${title}
+                    </span>
+                    <button onclick="document.getElementById('censys-service-modal').remove()"
+                            class="text-slate-500 hover:text-white transition">
+                        <i data-lucide="x" class="w-4 h-4"></i>
+                    </button>
+                </div>
+                <div class="flex-1 overflow-auto p-4 space-y-3">
+                    ${sections.length
+                        ? sections.join("")
+                        : `<p class="text-[10px] text-slate-500 italic">No detail available.</p>`}
+                </div>
+            </div>`;
+        modal.addEventListener("click", e => { if (e.target === modal) modal.remove(); });
+        document.body.appendChild(modal);
+        lucide.createIcons({ nodes: [modal] });
+    },
+
 
     _openShodanServiceModal(encoded) {
         let svc = {};
@@ -260,6 +358,24 @@ window.EnrichPanel = {
         "Tags":            "tags", "Categories": "tags", "Indicator Types": "tags",
         "In OpenCTI":      "intel", "Detection": "intel", "Labels": "intel",
         "VT Reports":      "intel", "Report Count": "intel", "OpenCTI Link": "intel",
+        "AS Name":           "host",  "BGP Prefix":       "host",
+        "Last Scanned":      "host",
+        "Services":          "censys_services",
+        "TLS Names":         "dns",   "Cert Fingerprints": "other",
+        "JARM Fingerprints": "other",
+        "Certificates Found": "host",
+        "Certificate Issuers": "tags",
+        "Related Names (SAN)": "dns",
+        "Cert SHA-256":      "other",
+        "Latest Expiry":     "host",
+        "Subject DN":        "host",  "Issuer DN":        "host",
+        "SANs / Names":      "dns",
+        "Valid From":        "host",  "Valid Until":      "host",
+        "Sig Algorithm":     "other", "Key Type":         "other",
+        "Hosts Using Cert":  "dns",
+        "Censys Host":       "intel", "Censys Certs":     "intel",
+        "Censys Certificate": "intel",
+
     },
     _getTheme(name) { return this._THEME_MAP[name] || "other"; },
 
@@ -309,7 +425,7 @@ window.EnrichPanel = {
             });
         });
 
-        const ORDER = ["threat","vt_refs","host","ports","vulns","dns","tags","urlscan_meta","screenshot","urlscan_web","urlscan_content","shodan_services","other"];
+        const ORDER = ["threat","vt_refs","host","ports","vulns","dns","tags","urlscan_meta","screenshot","urlscan_web","urlscan_content","shodan_services","censys_services", "other"];
         const sections = ORDER
             .filter(t => themes[t]?.length)
             .map(t => this._renderThemeSection(t, themes[t]))
@@ -696,6 +812,51 @@ window.EnrichPanel = {
                 ? `${this._sectionHeader("layers", "VT Associations", items.length)}${blocks.join("")}`
                 : "";
         }
+
+        // ── CENSYS SERVICES ──
+        if (theme === "censys_services") {
+            const allServices = [];
+            items.forEach(({ field }) => {
+                (Array.isArray(field.value) ? field.value : [field.value])
+                    .forEach(v => v && allServices.push(v));
+            });
+            if (!allServices.length) return "";
+ 
+            const btns = allServices.slice(0, 25).map(svc => {
+                if (typeof svc !== "object") return "";
+                let encoded = "";
+                try { encoded = btoa(unescape(encodeURIComponent(JSON.stringify(svc)))); } catch(e) { encoded = ""; }
+ 
+                const port    = svc.port     || "?";
+                const proto   = svc.transport || "tcp";
+                const service = svc.service  || "";
+                const product = svc.product  || "";
+                const hasTLS  = !!svc.tls_cn;
+                const hasJARM = !!svc.jarm;
+ 
+                const badge = hasTLS
+                    ? `<span class="ml-auto text-[8px] text-cyan-500">TLS</span>`
+                    : hasJARM
+                        ? `<span class="ml-auto text-[8px] text-purple-400">JARM</span>`
+                        : "";
+ 
+                const label = service || product || "";
+                return `
+                    <button onclick="EnrichPanel._openCensysServiceModal('${encoded}')"
+                            class="flex items-center gap-2 w-full text-left rounded border border-slate-700/60
+                                   hover:border-cyan-500/40 bg-slate-900/40 px-2 py-1 transition">
+                        <span class="text-[9px] font-mono text-cyan-400 shrink-0">${port}/${proto}</span>
+                        ${label ? `<span class="text-[9px] text-slate-400 truncate">${label}</span>` : ""}
+                        ${badge}
+                    </button>`;
+            }).filter(Boolean).join("");
+ 
+            const overflow = allServices.length > 25
+                ? `<div class="text-[8px] text-slate-600 pt-1">+${allServices.length - 25} more</div>` : "";
+ 
+            return `${this._sectionHeader("scan-line", "Censys Services", allServices.length)}<div class="space-y-0.5">${btns}${overflow}</div>`;
+        }
+
 
         // ── OTHER / FALLBACK ──
         const seen = {};
