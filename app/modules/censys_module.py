@@ -1,23 +1,23 @@
 # app/modules/censys_module.py
 import asyncio
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
 from .module import Module
 
 
 class CensysModule(Module):
     """
-    Module Censys — Internet-wide scan data.
-    Couvre : IP (hosts), domaines (certificates + DNS), certificats (SHA-256).
+    Module Censys — Platform API v3.
+    Auth : Personal Access Token (PAT) en Bearer header.
 
-    Endpoints utilisés :
-        - /v2/hosts/{ip}                         → enrichissement IP
-        - /v2/certificates/search                → enrichissement domaine (CN/SAN)
-        - /v1/view/certificates/{sha256}         → enrichissement hash de certificat
-        - /v2/hosts/search                       → corrélation IP (pivot AS, port, cert, JARM)
-        - /v2/certificates/search (bulk)         → corrélation domaine (co-SAN pivot)
-
-    Auth : HTTP Basic (API_ID:API_SECRET) passés dans le contexte comme
-           api_key = "<app_id>:<secret>"
+    Structure réponse /v3/global/asset/host/{ip} :
+        raw["result"]["resource"] → host data
+            .autonomous_system   → asn, name, bgp_prefix, country_code
+            .location            → country, city, continent
+            .services[]          → port, protocol, transport_protocol,
+                                   cert.parsed, tls.fingerprint_sha256,
+                                   software[], dns{}, http{}
+            .dns                 → reverse_dns.names[], names[], forward_dns{}
+            .whois               → organization.name, network.cidrs
     """
 
     name = "Censys"
@@ -25,15 +25,11 @@ class CensysModule(Module):
     src_type = "external"
     supported_types = ["ip", "domain", "hash"]
     icon = "scan-line"
-    url_v2 = "https://search.censys.io/api/v2"
-    url_v1 = "https://search.censys.io/api/v1"
+    base_url = "https://api.platform.censys.io"
 
     def __init__(self, requester):
         self.requester = requester
 
-    # ─────────────────────────────────────────────────────
-    # get_fields / key override
-    # ─────────────────────────────────────────────────────
     def get_fields(self) -> Dict[str, Any]:
         base = super().get_fields()
         base["key"] = "censys"
@@ -50,14 +46,6 @@ class CensysModule(Module):
                 "default": 10,
             },
             {
-                "key": "censys_max_certs",
-                "type": "range",
-                "label": "Max certs per domain pivot",
-                "min": 2,
-                "max": 30,
-                "default": 10,
-            },
-            {
                 "key": "censys_pivot_asn",
                 "type": "checkbox",
                 "label": "Pivot on shared ASN (IP)",
@@ -66,62 +54,55 @@ class CensysModule(Module):
             {
                 "key": "censys_pivot_cert",
                 "type": "checkbox",
-                "label": "Pivot on shared TLS certificate (IP/domain)",
+                "label": "Pivot on shared TLS certificate",
                 "default": True,
             },
             {
                 "key": "censys_pivot_jarm",
                 "type": "checkbox",
-                "label": "Pivot on JARM fingerprint (IP)",
+                "label": "Pivot on JARM fingerprint",
                 "default": False,
             },
         ]
 
     # ─────────────────────────────────────────────────────
-    # get_info — dispatcher selon type IOC
+    # get_info
     # ─────────────────────────────────────────────────────
     async def get_info(
         self, indicator: str, context: Dict[str, Any]
     ) -> List[Dict[str, Any]]:
         ioc_type = context.get("ioc_type", "ip")
-        auth = self._auth(context)
-        if not auth:
+        headers = self._headers(context)
+        if not headers:
             return []
 
         if ioc_type == "ip":
-            return await self._info_ip(indicator, auth)
+            return await self._info_ip(indicator, headers)
         elif ioc_type == "domain":
-            return await self._info_domain(indicator, auth)
+            return await self._info_domain(indicator, headers)
         elif ioc_type == "hash":
-            return await self._info_certificate(indicator, auth)
+            return await self._info_certificate(indicator, headers)
         return []
 
     # ─────────────────────────────────────────────────────
-    # get_info — IP  (/v2/hosts/{ip})
-    # Structure réelle : {"code": 200, "status": "OK", "result": {"ip": ..., "services": [...], ...}}
+    # IP — GET /v3/global/asset/host/{ip}
     # ─────────────────────────────────────────────────────
-    async def _info_ip(
-        self, indicator: str, auth: Tuple[str, str]
-    ) -> List[Dict[str, Any]]:
+    async def _info_ip(self, indicator: str, headers: dict) -> List[Dict[str, Any]]:
         raw = await self.requester.get(
-            f"{self.url_v2}/hosts/{indicator}",
-            auth=auth,
+            f"{self.base_url}/v3/global/asset/host/{indicator}",
+            headers=headers,
         )
-        print(f"[Censys] raw={raw}")  # ← ajoute ça
-
         if not raw or not isinstance(raw, dict):
-            print(f"[Censys] guard 1 — raw invalide: {type(raw)}")  # ← et ça
-            return []
-        if "result" not in raw:
-            print(
-                f"[Censys] guard 2 — pas de 'result', clés présentes: {list(raw.keys())}"
-            )  # ← et ça
             return []
 
-        host = raw["result"]
+        # Désencapsulation : result.resource contient le vrai host
+        host = (raw.get("result") or {}).get("resource") or {}
+        if not host:
+            return []
+
         results: List[Dict[str, Any]] = []
 
-        # ── Identité réseau ───────────────────────────────
+        # ── ASN / Réseau ──────────────────────────────────
         asn = host.get("autonomous_system") or {}
         if asn.get("asn"):
             results.append(
@@ -138,35 +119,67 @@ class CensysModule(Module):
                 self._f(indicator, "Country", "label-capsule", asn["country_code"])
             )
 
+        # ── Localisation ──────────────────────────────────
+        loc = host.get("location") or {}
+        if loc.get("city") and loc.get("country"):
+            results.append(
+                self._f(
+                    indicator,
+                    "Location",
+                    "label-capsule",
+                    f"{loc['city']}, {loc['country']}",
+                )
+            )
+
+        # ── WHOIS organisation ────────────────────────────
+        whois_org = ((host.get("whois") or {}).get("organization") or {}).get(
+            "name"
+        ) or ""
+        if whois_org and whois_org != asn.get("name", ""):
+            results.append(
+                self._f(indicator, "Organization", "label-capsule", whois_org)
+            )
+
         # ── Services ──────────────────────────────────────
         services = host.get("services") or []
         if services:
             svc_list = []
             tls_names: set = set()
             cert_fps: set = set()
-            jarm_fps: set = set()
 
             for svc in services:
                 entry = self._parse_service(svc)
                 if entry:
                     svc_list.append(entry)
-                    # Collecter les noms TLS pour la section dns
-                    tls = svc.get("tls") or {}
-                    leaf = (tls.get("certificates") or {}).get("leaf_data") or {}
-                    for name in leaf.get("names") or []:
-                        if name:
-                            tls_names.add(name)
-                    fp = leaf.get("fingerprint_sha256") or leaf.get("fingerprint")
-                    if fp:
-                        cert_fps.add(fp)
-                    # JARM
-                    jarm = svc.get("jarm") or {}
-                    if jarm.get("fingerprint"):
-                        jarm_fps.add(jarm["fingerprint"])
+
+                # Collecte des noms TLS depuis cert.parsed.names
+                cert_obj = svc.get("cert") or {}
+                for n in cert_obj.get("names") or []:
+                    if n and not n.replace(".", "").isdigit():  # exclure les IPs
+                        tls_names.add(n)
+
+                # Fingerprint depuis tls.fingerprint_sha256
+                tls_obj = svc.get("tls") or {}
+                fp = tls_obj.get("fingerprint_sha256") or ""
+                if fp:
+                    cert_fps.add(fp)
 
             if svc_list:
                 results.append(
                     self._f(indicator, "Services", "censys_services", svc_list)
+                )
+
+            # Ports ouverts résumé
+            ports = sorted({s["port"] for s in svc_list if s.get("port")})
+            if ports:
+                results.append(
+                    self._f(
+                        indicator,
+                        "Open Ports",
+                        "list",
+                        [str(p) for p in ports],
+                        max_=20,
+                    )
                 )
 
             if tls_names:
@@ -185,31 +198,51 @@ class CensysModule(Module):
                         max_=3,
                     )
                 )
-            if jarm_fps:
-                results.append(
-                    self._f(
-                        indicator,
-                        "JARM Fingerprints",
-                        "list",
-                        list(jarm_fps)[:3],
-                        max_=3,
-                    )
-                )
 
-        # ── Open ports résumé ─────────────────────────────
-        ports = sorted({s["port"] for s in services if s.get("port")})
-        if ports:
+        # ── DNS ───────────────────────────────────────────
+        dns = host.get("dns") or {}
+
+        # Reverse DNS
+        rdns_names = (dns.get("reverse_dns") or {}).get("names") or []
+        if rdns_names:
+            results.append(
+                self._f(indicator, "Reverse DNS", "list", rdns_names[:5], max_=5)
+            )
+
+        # Forward DNS (domaines qui pointent vers cette IP)
+        fwd_names = list((dns.get("forward_dns") or {}).keys())
+        if fwd_names:
             results.append(
                 self._f(
-                    indicator, "Open Ports", "list", [str(p) for p in ports], max_=20
+                    indicator, "Hosted Domains", "list", sorted(fwd_names)[:20], max_=20
                 )
+            )
+            results.append(
+                self._f(indicator, "Domain Count", "label-capsule", str(len(fwd_names)))
+            )
+
+        # DNS names (passive DNS étendu)
+        all_dns_names = dns.get("names") or []
+        # Filtrer pour ne garder que les noms "intéressants" (pas les zoomonprem.com etc.)
+        notable = [
+            n
+            for n in all_dns_names
+            if not any(noise in n for noise in ["zoomonprem.com", "pubmmr-", "pubzc-"])
+        ]
+        if notable:
+            results.append(
+                self._f(indicator, "DNS Names", "list", notable[:15], max_=15)
             )
 
         # ── Dernière mise à jour ──────────────────────────
-        last_updated = host.get("last_updated_at") or ""
-        if last_updated:
+        # scan_time est dans chaque service, on prend le plus récent
+        scan_times = [
+            svc.get("scan_time", "") for svc in services if svc.get("scan_time")
+        ]
+        if scan_times:
+            last_scan = sorted(scan_times)[-1]
             results.append(
-                self._f(indicator, "Last Scanned", "label-capsule", last_updated[:10])
+                self._f(indicator, "Last Scanned", "label-capsule", last_scan[:10])
             )
 
         # ── Lien Censys ───────────────────────────────────
@@ -229,17 +262,15 @@ class CensysModule(Module):
         return results
 
     # ─────────────────────────────────────────────────────
-    # _parse_service — construit le dict d'un service Censys
-    # Structure réelle d'un service :
-    # {
-    #   "port": 443,
-    #   "transport_protocol": "TCP",
-    #   "service_name": "HTTP",
-    #   "extended_service_name": "HTTPS",
-    #   "software": [{"uniform_resource_identifier": "cpe:...", "product": "nginx", "version": "1.x"}],
-    #   "tls": {"certificates": {"leaf_data": {"fingerprint_sha256": "...", "names": [...], "subject": {...}}}},
-    #   "jarm": {"fingerprint": "..."},
-    #   "banner": "...",
+    # _parse_service — structure v3
+    # svc = {
+    #   port, protocol, transport_protocol,
+    #   cert: { parsed: { subject_dn, issuer_dn, subject.common_name[], names[] },
+    #           names[] },
+    #   tls: { fingerprint_sha256 },
+    #   software: [{ vendor, product }],
+    #   dns: { version, r_code },
+    #   scan_time
     # }
     # ─────────────────────────────────────────────────────
     @staticmethod
@@ -248,180 +279,163 @@ class CensysModule(Module):
         if not port:
             return None
 
-        proto = (svc.get("transport_protocol") or "TCP").lower()
-        svc_name = svc.get("extended_service_name") or svc.get("service_name") or ""
+        proto = (svc.get("transport_protocol") or "tcp").lower()
+        svc_name = svc.get("protocol") or ""
 
-        entry: Dict[str, Any] = {
-            "port": port,
-            "transport": proto,
-        }
+        entry: Dict[str, Any] = {"port": port, "transport": proto}
         if svc_name:
             entry["service"] = svc_name
 
-        # Produit / version depuis le tableau software
+        # ── Software ──────────────────────────────────────
         software = svc.get("software") or []
         if software and isinstance(software, list):
             first = software[0] if isinstance(software[0], dict) else {}
             product = first.get("product") or ""
-            version = first.get("version") or ""
-            if not product:
-                # Fallback : parser le CPE "cpe:2.3:a:vendor:product:version:..."
-                cpe = first.get("uniform_resource_identifier") or ""
-                parts = cpe.split(":")
-                if len(parts) >= 5:
-                    product = parts[4].replace("_", " ").title()
-                    if len(parts) >= 6 and parts[5] not in ("*", "-", ""):
-                        version = parts[5]
+            vendor = first.get("vendor") or ""
             if product:
-                entry["product"] = product
-            if version:
-                entry["version"] = version
+                entry["product"] = f"{vendor} {product}".strip() if vendor else product
 
-        # TLS
-        tls = svc.get("tls") or {}
-        leaf = (tls.get("certificates") or {}).get("leaf_data") or {}
-        if leaf:
-            subject = leaf.get("subject") or {}
+        # ── Certificat TLS (cert.parsed) ──────────────────
+        cert_obj = svc.get("cert") or {}
+        parsed = cert_obj.get("parsed") or {}
+        if parsed:
+            subject = parsed.get("subject") or {}
             cn_list = subject.get("common_name") or []
-            cn = (
-                cn_list[0]
-                if isinstance(cn_list, list) and cn_list
-                else (cn_list if isinstance(cn_list, str) else "")
-            )
-            fp = leaf.get("fingerprint_sha256") or leaf.get("fingerprint") or ""
+            cn = cn_list[0] if isinstance(cn_list, list) and cn_list else ""
             if cn:
                 entry["tls_cn"] = cn
-            if fp:
-                entry["tls_fp"] = fp[:32] + ("…" if len(fp) > 32 else "")
 
-        # JARM
-        jarm_fp = (svc.get("jarm") or {}).get("fingerprint") or ""
-        if jarm_fp:
-            entry["jarm"] = jarm_fp
+            issuer = parsed.get("issuer") or {}
+            issuer_cn_list = issuer.get("common_name") or []
+            issuer_cn = (
+                issuer_cn_list[0]
+                if isinstance(issuer_cn_list, list) and issuer_cn_list
+                else ""
+            )
+            if issuer_cn:
+                entry["tls_issuer"] = issuer_cn
 
-        # Banner
-        banner = svc.get("banner") or ""
-        if banner and len(banner) > 4:
-            entry["banner"] = banner[:300]
+            validity = parsed.get("validity_period") or {}
+            if validity.get("not_after"):
+                entry["tls_expiry"] = validity["not_after"][:10]
+
+            sig_alg = (parsed.get("signature") or {}).get(
+                "signature_algorithm", {}
+            ).get("name") or ""
+            if sig_alg:
+                entry["tls_sig_alg"] = sig_alg
+
+            key_info = parsed.get("subject_key_info") or {}
+            key_alg = (key_info.get("key_algorithm") or {}).get("name") or ""
+            key_len = (key_info.get("ecdsa") or key_info.get("rsa") or {}).get(
+                "length"
+            ) or ""
+            if key_alg:
+                entry["tls_key"] = (
+                    f"{key_alg} {key_len}".strip() if key_len else key_alg
+                )
+
+            # SANs (noms du cert) — utile pour le pivot
+            names = cert_obj.get("names") or []
+            if names:
+                entry["tls_names"] = [
+                    n for n in names if not n.replace(".", "").isdigit()
+                ][:10]
+
+        # TLS fingerprint
+        tls_fp = (svc.get("tls") or {}).get("fingerprint_sha256") or ""
+        if tls_fp:
+            entry["tls_fp"] = tls_fp
+
+        # ── HTTP (endpoints[0]) ───────────────────────────
+        endpoints = svc.get("endpoints") or []
+        if endpoints:
+            http = endpoints[0].get("http") or {}
+            if http.get("status_code"):
+                entry["http_status"] = str(http["status_code"])
+            if http.get("status_reason"):
+                entry["http_reason"] = http["status_reason"]
+            # Headers intéressants
+            headers_raw = http.get("headers") or {}
+            server = (headers_raw.get("Server") or {}).get("headers", [])
+            if server:
+                entry["http_server"] = server[0]
+            # Body snippet
+            body = http.get("body") or ""
+            if body and len(body) > 10:
+                entry["banner"] = body[:300]
+
+        # ── DNS service ───────────────────────────────────
+        dns_info = svc.get("dns") or {}
+        if dns_info:
+            if dns_info.get("version"):
+                entry["dns_version"] = dns_info["version"]
+            if dns_info.get("r_code"):
+                entry["dns_rcode"] = dns_info["r_code"]
+
+        # ── Scan time ─────────────────────────────────────
+        if svc.get("scan_time"):
+            entry["scan_time"] = svc["scan_time"][:10]
 
         return entry
 
     # ─────────────────────────────────────────────────────
-    # get_info — Domaine  (/v2/certificates/search)
+    # Domaine — search via POST /v3/global/search/query
     # ─────────────────────────────────────────────────────
-    async def _info_domain(
-        self, indicator: str, auth: Tuple[str, str]
-    ) -> List[Dict[str, Any]]:
-        data = await self.requester.get(
-            f"{self.url_v2}/certificates/search",
-            params={"q": f'names: "{indicator}"', "per_page": 20},
-            auth=auth,
+    async def _info_domain(self, indicator: str, headers: dict) -> List[Dict[str, Any]]:
+        data = await self.requester.post(
+            f"{self.base_url}/v3/global/search/query",
+            headers=headers,
+            json={
+                "query": f'host.dns.names: "{indicator}"',
+                "page_size": 10,
+            },
         )
 
         results: List[Dict[str, Any]] = []
-        hits = ((data or {}).get("result") or {}).get("hits") or []
+        hits = (data or {}).get("results") or []
 
         if not hits:
+            results.append(self._f(indicator, "Censys Results", "label-capsule", "0"))
+        else:
             results.append(
-                self._f(indicator, "Certificates Found", "label-capsule", "0")
+                self._f(indicator, "Censys Results", "label-capsule", str(len(hits)))
             )
-            return results
-
-        results.append(
-            self._f(indicator, "Certificates Found", "label-capsule", str(len(hits)))
-        )
-
-        issuers: set = set()
-        all_names: set = set()
-        fps: List[str] = []
-        validity_info: List[str] = []
-
-        for cert in hits[:20]:
-            parsed = cert.get("parsed") or {}
-
-            # Issuer
-            issuer_org = (parsed.get("issuer") or {}).get("organization") or []
-            if isinstance(issuer_org, list) and issuer_org:
-                issuers.add(issuer_org[0])
-            elif isinstance(issuer_org, str) and issuer_org:
-                issuers.add(issuer_org)
-
-            # SANs / noms
-            for n in parsed.get("names") or []:
-                if n and n != indicator:
-                    all_names.add(n)
-
-            # Fingerprint
-            fp = (
-                parsed.get("fingerprint_sha256") or cert.get("fingerprint_sha256") or ""
-            )
-            if fp and fp not in fps:
-                fps.append(fp)
-
-            # Expiry
-            not_after = (parsed.get("validity_period") or {}).get("not_after") or ""
-            if not_after:
-                validity_info.append(not_after)
-
-        if issuers:
-            results.append(
-                self._f(
-                    indicator,
-                    "Certificate Issuers",
-                    "list",
-                    sorted(issuers)[:5],
-                    max_=5,
+            ips = list({h.get("ip") for h in hits if h.get("ip")})
+            if ips:
+                results.append(
+                    self._f(indicator, "Associated IPs", "list", ips[:10], max_=10)
                 )
-            )
-
-        related = sorted(n for n in all_names if indicator not in n)[:10]
-        if related:
-            results.append(
-                self._f(indicator, "Related Names (SAN)", "list", related, max_=10)
-            )
-
-        if fps:
-            results.append(self._f(indicator, "Cert SHA-256", "list", fps[:3], max_=3))
-
-        if validity_info:
-            results.append(
-                self._f(
-                    indicator,
-                    "Latest Expiry",
-                    "label-capsule",
-                    sorted(validity_info)[-1][:10],
-                )
-            )
 
         results.append(
             {
                 "indicator": indicator,
                 "indicator_type": "domain",
-                "field_name": "Censys Certs",
+                "field_name": "Censys Search",
                 "field_type": "label-capsule",
                 "value": "Search on Censys",
                 "icon": "external-link",
-                "link": f"https://search.censys.io/certificates?q=names%3A%22{indicator}%22",
+                "link": f"https://search.censys.io/search?resource=hosts&q=host.dns.names%3A{indicator}",
                 "max": None,
             }
         )
-
         return results
 
     # ─────────────────────────────────────────────────────
-    # get_info — Certificat SHA-256  (/v1/view/certificates/{sha256})
+    # Certificat — GET /v3/global/asset/certificate/{fp}
     # ─────────────────────────────────────────────────────
     async def _info_certificate(
-        self, indicator: str, auth: Tuple[str, str]
+        self, indicator: str, headers: dict
     ) -> List[Dict[str, Any]]:
         raw = await self.requester.get(
-            f"{self.url_v1}/view/certificates/{indicator}",
-            auth=auth,
+            f"{self.base_url}/v3/global/asset/certificate/{indicator}",
+            headers=headers,
         )
         if not raw or not isinstance(raw, dict):
             return []
 
-        parsed = raw.get("parsed") or {}
+        resource = (raw.get("result") or {}).get("resource") or raw
+        parsed = resource.get("parsed") or {}
         results: List[Dict[str, Any]] = []
 
         for field, label in [("subject_dn", "Subject DN"), ("issuer_dn", "Issuer DN")]:
@@ -455,25 +469,6 @@ class CensysModule(Module):
                 )
             )
 
-        sig_alg = (parsed.get("signature_algorithm") or {}).get("name") or ""
-        if sig_alg:
-            results.append(
-                self._f(indicator, "Sig Algorithm", "label-capsule", sig_alg)
-            )
-
-        key_type = (
-            (parsed.get("subject_key_info") or {}).get("key_algorithm") or {}
-        ).get("name") or ""
-        if key_type:
-            results.append(self._f(indicator, "Key Type", "label-capsule", key_type))
-
-        # Hosts présentant ce cert
-        host_ips = [h.get("ip") for h in (raw.get("hosts") or []) if h.get("ip")]
-        if host_ips:
-            results.append(
-                self._f(indicator, "Hosts Using Cert", "list", host_ips[:10], max_=10)
-            )
-
         results.append(
             {
                 "indicator": indicator,
@@ -486,31 +481,27 @@ class CensysModule(Module):
                 "max": None,
             }
         )
-
         return results
 
     # ─────────────────────────────────────────────────────
-    # get_correlation — dispatcher
+    # get_correlation
     # ─────────────────────────────────────────────────────
     async def get_correlation(
         self, indicator: str, context: Dict[str, Any]
     ) -> List[Dict[str, Any]]:
         ioc_type = context.get("ioc_type", "ip")
-        auth = self._auth(context)
-        if not auth:
+        headers = self._headers(context)
+        if not headers:
             return []
 
         if ioc_type == "ip":
-            return await self._correlate_ip(indicator, context, auth)
+            return await self._correlate_ip(indicator, context, headers)
         elif ioc_type == "domain":
-            return await self._correlate_domain(indicator, context, auth)
+            return await self._correlate_domain(indicator, context, headers)
         return []
 
-    # ─────────────────────────────────────────────────────
-    # Corrélation IP — ASN + cert TLS + JARM
-    # ─────────────────────────────────────────────────────
     async def _correlate_ip(
-        self, indicator: str, context: Dict[str, Any], auth: Tuple[str, str]
+        self, indicator: str, context: Dict[str, Any], headers: dict
     ) -> List[Dict[str, Any]]:
 
         max_hosts = int(context.get("censys_max_hosts", 10))
@@ -519,72 +510,51 @@ class CensysModule(Module):
         do_jarm = bool(context.get("censys_pivot_jarm", False))
 
         raw = await self.requester.get(
-            f"{self.url_v2}/hosts/{indicator}",
-            auth=auth,
+            f"{self.base_url}/v3/global/asset/host/{indicator}",
+            headers=headers,
         )
-        if not raw or "result" not in raw:
+        if not raw or not isinstance(raw, dict):
             return []
 
-        host = raw["result"]
+        host = (raw.get("result") or {}).get("resource") or {}
         services = host.get("services") or []
         asn_info = host.get("autonomous_system") or {}
+        pivot_tasks = []  # list of (label, query)
 
-        pivot_tasks = []  # list of (pivot_label, query_string)
-
-        # ── Pivot 1 : ASN ────────────────────────────────
+        # ── Pivot ASN + ports communs ─────────────────────
         if do_asn and asn_info.get("asn"):
             asn_num = asn_info["asn"]
             open_ports = sorted({s["port"] for s in services if s.get("port")})[:4]
             if open_ports:
-                port_clause = " OR ".join(f"services.port={p}" for p in open_ports)
+                port_clause = " OR ".join(f"host.services.port={p}" for p in open_ports)
                 pivot_tasks.append(
                     (
                         f"AS{asn_num}",
-                        f"autonomous_system.asn={asn_num} AND ({port_clause})",
+                        f"host.autonomous_system.asn={asn_num} AND ({port_clause})",
                     )
                 )
 
-        # ── Pivot 2 : Certificat TLS ─────────────────────
+        # ── Pivot certificat TLS ──────────────────────────
         if do_cert:
             seen_fps: set = set()
             for svc in services:
-                leaf = ((svc.get("tls") or {}).get("certificates") or {}).get(
-                    "leaf_data"
-                ) or {}
-                fp = leaf.get("fingerprint_sha256") or leaf.get("fingerprint") or ""
+                fp = (svc.get("tls") or {}).get("fingerprint_sha256") or ""
                 if fp and fp not in seen_fps:
                     seen_fps.add(fp)
                     pivot_tasks.append(
                         (
                             f"TLS cert {fp[:16]}…",
-                            f'services.tls.certificates.leaf_data.fingerprint_sha256: "{fp}"',
+                            f'host.services.tls.fingerprint_sha256="{fp}"',
                         )
                     )
                 if len(seen_fps) >= 2:
-                    break  # Limiter à 2 certs pour ne pas exploser les requêtes
-
-        # ── Pivot 3 : JARM ───────────────────────────────
-        if do_jarm:
-            seen_jarm: set = set()
-            for svc in services:
-                jarm_fp = (svc.get("jarm") or {}).get("fingerprint") or ""
-                port = svc.get("port")
-                if jarm_fp and port and jarm_fp not in seen_jarm:
-                    seen_jarm.add(jarm_fp)
-                    pivot_tasks.append(
-                        (
-                            f"JARM {jarm_fp[:16]}…",
-                            f'services.jarm.fingerprint: "{jarm_fp}" AND services.port={port}',
-                        )
-                    )
-                if len(seen_jarm) >= 2:
                     break
 
         if not pivot_tasks:
             return []
 
         responses = await asyncio.gather(
-            *[self._search_hosts(q, max_hosts, auth) for (_, q) in pivot_tasks],
+            *[self._search_hosts(q, max_hosts, headers) for (_, q) in pivot_tasks],
             return_exceptions=True,
         )
 
@@ -612,122 +582,71 @@ class CensysModule(Module):
 
         return results
 
-    # ─────────────────────────────────────────────────────
-    # Corrélation Domaine — co-SAN via certificats partagés
-    # ─────────────────────────────────────────────────────
     async def _correlate_domain(
-        self, indicator: str, context: Dict[str, Any], auth: Tuple[str, str]
+        self, indicator: str, context: Dict[str, Any], headers: dict
     ) -> List[Dict[str, Any]]:
-
-        max_certs = int(context.get("censys_max_certs", 10))
-
-        data = await self.requester.get(
-            f"{self.url_v2}/certificates/search",
-            params={"q": f'names: "{indicator}"', "per_page": 10},
-            auth=auth,
+        data = await self.requester.post(
+            f"{self.base_url}/v3/global/search/query",
+            headers=headers,
+            json={"query": f'host.dns.names: "{indicator}"', "page_size": 20},
         )
         if not data:
             return []
 
-        hits = (data.get("result") or {}).get("hits") or []
-        if not hits:
-            return []
-
         results: List[Dict[str, Any]] = []
-        seen_domains: set = {indicator}
+        seen_ips: set = set()
 
-        for cert in hits[:5]:
-            parsed = cert.get("parsed") or {}
-            fp = (
-                parsed.get("fingerprint_sha256") or cert.get("fingerprint_sha256") or ""
-            )
-            label = f"Shared TLS cert ({fp[:12]}…)" if fp else "Shared TLS cert"
-
-            for name in parsed.get("names") or []:
-                if not name or name in seen_domains:
-                    continue
-                # Dé-wildcarder
-                clean = name[2:] if name.startswith("*.") else name
-                if not clean or clean in seen_domains:
-                    continue
-                seen_domains.add(clean)
+        for hit in data.get("results") or []:
+            ip = hit.get("ip") or ""
+            if ip and ip not in seen_ips:
+                seen_ips.add(ip)
                 results.append(
                     {
                         "source_indicator": indicator,
                         "source_type": "domain",
-                        "target_indicator": clean,
-                        "target_type": "domain",
+                        "target_indicator": ip,
+                        "target_type": "ip",
                         "score": 1,
                         "pivot": True,
-                        "pivot_reason": label,
+                        "pivot_reason": f"Hosts {indicator}",
                     }
                 )
-
-            if len(results) >= max_certs:
-                break
 
         return results
 
     # ─────────────────────────────────────────────────────
-    # get_quotas  — /v2/account
+    # get_quotas
     # ─────────────────────────────────────────────────────
     async def get_quotas(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        auth = self._auth(context)
-        if not auth:
+        headers = self._headers(context)
+        if not headers:
             return {}
-
-        data = await self.requester.get(f"{self.url_v2}/account", auth=auth)
-        if not data or not isinstance(data, dict):
-            return {"plan_type": "unknown"}
-
-        quota = data.get("quota") or {}
-        allowance = int(quota.get("allowance") or 0)
-        used = int(quota.get("used") or 0)
-        reset_date = quota.get("reset_timestamp") or ""
-
-        plan = (
-            "free" if allowance <= 250 else ("starter" if allowance <= 2000 else "pro")
+        data = await self.requester.get(
+            f"{self.base_url}/v3/global/asset/host/1.1.1.1",
+            headers=headers,
         )
-
-        return {
-            "used": used,
-            "limit": allowance,
-            "remaining": max(0, allowance - used),
-            "plan_type": plan,
-            "reset": reset_date[:10] if reset_date else None,
-        }
+        return {"plan_type": "platform", "reachable": data is not None}
 
     # ─────────────────────────────────────────────────────
-    # Helpers privés
+    # Helpers
     # ─────────────────────────────────────────────────────
-    def _auth(self, context: Dict[str, Any]) -> Optional[Tuple[str, str]]:
-        """
-        Censys utilise HTTP Basic Auth : app_id:api_secret.
-        La clé dans SecretStore doit être au format "app_id:api_secret".
-        """
+    def _headers(self, context: Dict[str, Any]) -> Optional[dict]:
         api_key = (context.get("api_key") or "").strip()
         if not api_key:
             return None
-        if ":" in api_key:
-            app_id, secret = api_key.split(":", 1)
-            return (app_id.strip(), secret.strip()) if app_id.strip() else None
-        return None  # Sans secret, l'auth Basic échouera — on retourne None directement
+        return {"Authorization": f"Bearer {api_key}"}
 
     async def _search_hosts(
-        self, query: str, max_results: int, auth: Tuple[str, str]
+        self, query: str, max_results: int, headers: dict
     ) -> List[str]:
-        data = await self.requester.get(
-            f"{self.url_v2}/hosts/search",
-            params={"q": query, "per_page": max_results},
-            auth=auth,
+        data = await self.requester.post(
+            f"{self.base_url}/v3/global/search/query",
+            headers=headers,
+            json={"query": query, "page_size": max_results},
         )
         if not data or not isinstance(data, dict):
             return []
-        return [
-            h.get("ip")
-            for h in ((data.get("result") or {}).get("hits") or [])
-            if h.get("ip")
-        ]
+        return [h.get("ip") for h in (data.get("results") or []) if h.get("ip")]
 
     @staticmethod
     def _f(
@@ -747,3 +666,17 @@ class CensysModule(Module):
             "link": None,
             "max": max_,
         }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PATCH qualif.js — _THEME_MAP
+# Ajouter ces entrées (les nouvelles par rapport à l'ancienne version) :
+#
+#     "Location":       "host",
+#     "Reverse DNS":    "dns",
+#     "Hosted Domains": "dns",
+#     "Domain Count":   "dns",
+#     "DNS Names":      "dns",
+#     "Organization":   "host",   ← déjà présent normalement
+#     "Censys Search":  "intel",
+# ─────────────────────────────────────────────────────────────────────────────

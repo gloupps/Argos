@@ -29,12 +29,12 @@ window.EnrichPanel = {
         let svc = {};
         try { svc = JSON.parse(decodeURIComponent(escape(atob(encoded)))); }
         catch(e) { svc = { error: "decode error" }; }
- 
+
         const port    = svc.port      || "?";
         const proto   = svc.transport || "tcp";
         const service = svc.service   || svc.product || "—";
         const title   = `${port}/${proto}${service !== "—" ? ` · ${service}` : ""}`;
- 
+
         const section = (icon, label, rows) => `
             <div class="border border-slate-800 rounded-lg overflow-hidden">
                 <div class="flex items-center gap-2 px-3 py-2 bg-slate-900/60 border-b border-slate-800">
@@ -45,7 +45,7 @@ window.EnrichPanel = {
                     <tbody class="divide-y divide-slate-800/50">${rows}</tbody>
                 </table>
             </div>`;
- 
+
         const row = (k, v, cls = "text-slate-300") => {
             if (!v && v !== 0) return "";
             const disp = typeof v === "string"
@@ -57,42 +57,66 @@ window.EnrichPanel = {
                     <td class="text-[8.5px] ${cls} font-mono py-1 pr-3 break-all">${disp}</td>
                 </tr>`;
         };
- 
+
         const sections = [];
- 
-        // Infos générales
+
+        // ── Service général ───────────────────────────────
         let genRows = "";
         genRows += row("Port", `${port}/${proto}`);
-        if (svc.service && svc.service !== "—") genRows += row("Service", svc.service);
-        if (svc.product) genRows += row("Product", svc.product);
+        if (svc.service)      genRows += row("Protocol",  svc.service);
+        if (svc.product)      genRows += row("Software",  svc.product);
+        if (svc.scan_time)    genRows += row("Scanned",   svc.scan_time);
         if (genRows) sections.push(section("server", "Service", genRows));
- 
-        // TLS
-        if (svc.tls_cn || svc.tls_fp) {
+
+        // ── TLS / Certificat ──────────────────────────────
+        if (svc.tls_cn || svc.tls_fp || svc.tls_issuer) {
             let tlsRows = "";
-            if (svc.tls_cn) tlsRows += row("Common Name", svc.tls_cn, "text-cyan-400");
-            if (svc.tls_fp) tlsRows += row("Fingerprint", svc.tls_fp, "text-slate-400 font-mono text-[7.5px]");
+            if (svc.tls_cn)      tlsRows += row("Subject CN",  svc.tls_cn,     "text-cyan-400");
+            if (svc.tls_issuer)  tlsRows += row("Issuer",      svc.tls_issuer, "text-slate-400");
+            if (svc.tls_expiry)  tlsRows += row("Expires",     svc.tls_expiry, "text-amber-400");
+            if (svc.tls_key)     tlsRows += row("Key",         svc.tls_key);
+            if (svc.tls_sig_alg) tlsRows += row("Sig Alg",    svc.tls_sig_alg);
+            if (svc.tls_fp)      tlsRows += row("SHA-256",     svc.tls_fp,     "text-slate-500 text-[7.5px]");
+            if (svc.tls_names?.length) {
+                tlsRows += row("SANs", svc.tls_names.slice(0,5).join(", "), "text-slate-400");
+            }
             if (tlsRows) sections.push(section("lock", "TLS Certificate", tlsRows));
         }
- 
-        // JARM
-        if (svc.jarm) {
-            sections.push(section("fingerprint", "JARM", row("Fingerprint", svc.jarm, "text-purple-400 font-mono text-[7.5px]")));
+
+        // ── HTTP ──────────────────────────────────────────
+        if (svc.http_status || svc.http_server) {
+            let httpRows = "";
+            if (svc.http_status) {
+                const code = parseInt(svc.http_status);
+                const cls  = code >= 500 ? "text-red-400" : code >= 400 ? "text-amber-400" : "text-green-400";
+                httpRows += row("Status", `${svc.http_status}${svc.http_reason ? " " + svc.http_reason : ""}`, cls);
+            }
+            if (svc.http_server) httpRows += row("Server", svc.http_server, "text-slate-300");
+            if (httpRows) sections.push(section("globe", "HTTP", httpRows));
         }
- 
-        // Banner
+
+        // ── DNS ───────────────────────────────────────────
+        if (svc.dns_version || svc.dns_rcode) {
+            let dnsRows = "";
+            if (svc.dns_version) dnsRows += row("Version", svc.dns_version);
+            if (svc.dns_rcode)   dnsRows += row("R-Code",  svc.dns_rcode,
+                                                svc.dns_rcode === "no_error" ? "text-green-400" : "text-amber-400");
+            if (dnsRows) sections.push(section("globe-2", "DNS", dnsRows));
+        }
+
+        // ── Banner / Body ─────────────────────────────────
         if (svc.banner) {
             const esc = svc.banner.replace(/</g,"&lt;").replace(/>/g,"&gt;");
             sections.push(`
                 <div class="border border-slate-800 rounded-lg overflow-hidden">
                     <div class="flex items-center gap-2 px-3 py-2 bg-slate-900/60 border-b border-slate-800">
                         <i data-lucide="terminal" class="w-3 h-3 text-slate-500 shrink-0"></i>
-                        <span class="text-[9px] text-slate-400 uppercase tracking-wider font-semibold">Banner</span>
+                        <span class="text-[9px] text-slate-400 uppercase tracking-wider font-semibold">Banner / Body</span>
                     </div>
                     <pre class="p-3 text-[8px] font-mono text-slate-400 whitespace-pre-wrap break-all max-h-32 overflow-y-auto">${esc}</pre>
                 </div>`);
         }
- 
+
         let modal = document.getElementById("censys-service-modal");
         if (modal) modal.remove();
         modal = document.createElement("div");
@@ -121,7 +145,6 @@ window.EnrichPanel = {
         document.body.appendChild(modal);
         lucide.createIcons({ nodes: [modal] });
     },
-
 
     _openShodanServiceModal(encoded) {
         let svc = {};
@@ -358,24 +381,28 @@ window.EnrichPanel = {
         "Tags":            "tags", "Categories": "tags", "Indicator Types": "tags",
         "In OpenCTI":      "intel", "Detection": "intel", "Labels": "intel",
         "VT Reports":      "intel", "Report Count": "intel", "OpenCTI Link": "intel",
-        "AS Name":           "host",  "BGP Prefix":       "host",
-        "Last Scanned":      "host",
-        "Services":          "censys_services",
-        "TLS Names":         "dns",   "Cert Fingerprints": "other",
-        "JARM Fingerprints": "other",
-        "Certificates Found": "host",
+        "AS Name":             "host",   "BGP Prefix":          "host",
+        "Last Scanned":        "host",   "Location":            "host",
+        "Organization":        "host",
+        "Services":            "censys_services",
+        "Open Ports":          "ports",
+        "TLS Names":           "dns",    "Cert Fingerprints":   "other",
+        "JARM Fingerprints":   "other",
+        "Reverse DNS":         "dns",    "Hosted Domains":      "dns",
+        "Domain Count":        "dns",    "DNS Names":           "dns",
+        "Certificates Found":  "host",
         "Certificate Issuers": "tags",
         "Related Names (SAN)": "dns",
-        "Cert SHA-256":      "other",
-        "Latest Expiry":     "host",
-        "Subject DN":        "host",  "Issuer DN":        "host",
-        "SANs / Names":      "dns",
-        "Valid From":        "host",  "Valid Until":      "host",
-        "Sig Algorithm":     "other", "Key Type":         "other",
-        "Hosts Using Cert":  "dns",
-        "Censys Host":       "intel", "Censys Certs":     "intel",
-        "Censys Certificate": "intel",
-
+        "Cert SHA-256":        "other",
+        "Latest Expiry":       "host",
+        "Subject DN":          "host",   "Issuer DN":           "host",
+        "SANs / Names":        "dns",
+        "Valid From":          "host",   "Valid Until":         "host",
+        "Sig Algorithm":       "other",  "Key Type":            "other",
+        "Hosts Using Cert":    "dns",
+        "Censys Results":      "host",
+        "Censys Host":         "intel",  "Censys Certs":        "intel",
+        "Censys Certificate":  "intel",  "Censys Search":       "intel",
     },
     _getTheme(name) { return this._THEME_MAP[name] || "other"; },
 
@@ -425,7 +452,7 @@ window.EnrichPanel = {
             });
         });
 
-        const ORDER = ["threat","vt_refs","host","ports","vulns","dns","tags","urlscan_meta","screenshot","urlscan_web","urlscan_content","shodan_services","censys_services", "other"];
+        const ORDER = ["threat","vt_refs","host","ports","vulns","dns","tags","urlscan_meta","screenshot","urlscan_web","urlscan_content","shodan_services","other"];
         const sections = ORDER
             .filter(t => themes[t]?.length)
             .map(t => this._renderThemeSection(t, themes[t]))
