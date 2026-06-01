@@ -1,3 +1,5 @@
+// app/static/js/modules/qualif.js
+
 window.EnrichPanel = {
 
     _current:   null,
@@ -14,7 +16,7 @@ window.EnrichPanel = {
         if (i) return i;
         return { virustotal:"shield", shodan:"radar", abuseipdb:"ban",
             urlscan:"scan-eye", viewdns:"globe", opencti:"database", misp:"share-2",
-            threatfox:"bug" }[k] || "box";
+            threatfox:"bug", elasticsearch:"database" }[k] || "box";
     },
     _isEmpty(v) {
         if (v === null || v === undefined || v === "") return true;
@@ -23,18 +25,17 @@ window.EnrichPanel = {
         return false;
     },
 
-        _openShodanServiceModal(encoded) {
+    _openShodanServiceModal(encoded) {
         let svc = {};
         try { svc = JSON.parse(decodeURIComponent(escape(atob(encoded)))); }
         catch(e) { svc = { error: "decode error" }; }
- 
+
         const port      = svc.port      || "?";
         const transport = svc.transport || "tcp";
         const product   = svc.product   || svc.module || "—";
         const version   = svc.version   || "";
         const title     = `${port}/${transport}${product !== "—" ? ` · ${product}` : ""}`;
- 
-        // Helper pour rendre une section de détails
+
         const section = (icon, label, rows) => `
             <div class="border border-slate-800 rounded-lg overflow-hidden">
                 <div class="flex items-center gap-2 px-3 py-2 bg-slate-900/60 border-b border-slate-800">
@@ -45,7 +46,7 @@ window.EnrichPanel = {
                     <tbody class="divide-y divide-slate-800/50">${rows}</tbody>
                 </table>
             </div>`;
- 
+
         const row = (k, v, cls = "text-slate-300") => {
             if (!v && v !== 0) return "";
             const disp = typeof v === "string"
@@ -57,10 +58,9 @@ window.EnrichPanel = {
                     <td class="text-[8.5px] ${cls} font-mono py-1 pr-3 break-all">${disp}</td>
                 </tr>`;
         };
- 
+
         const sections = [];
- 
-        // ── Général ──
+
         let genRows = "";
         genRows += row("Port", `${port}/${transport}`);
         if (product !== "—")  genRows += row("Product", `${product}${version ? ` ${version}` : ""}`);
@@ -68,8 +68,7 @@ window.EnrichPanel = {
         if (svc.module)       genRows += row("Module", svc.module);
         if (svc.timestamp)    genRows += row("Last seen", svc.timestamp);
         if (genRows) sections.push(section("server", "General", genRows));
- 
-        // ── HTTP ──
+
         if (svc.http) {
             let h = "";
             h += row("Status",     svc.http.status);
@@ -81,8 +80,7 @@ window.EnrichPanel = {
                 h += row("Tech",   svc.http.components.join(", "), "text-cyan-300");
             if (h) sections.push(section("globe", "HTTP", h));
         }
- 
-        // ── SSL/TLS ──
+
         if (svc.ssl) {
             let s = "";
             s += row("CN",       svc.ssl.cn);
@@ -94,8 +92,7 @@ window.EnrichPanel = {
                 s += row("Protocols", svc.ssl.versions.join(", "));
             if (s) sections.push(section("lock", "TLS / Certificate", s));
         }
- 
-        // ── SSH ──
+
         if (svc.ssh) {
             let sh = "";
             sh += row("Type", svc.ssh.type);
@@ -104,37 +101,33 @@ window.EnrichPanel = {
             });
             if (sh) sections.push(section("terminal", "SSH", sh));
         }
- 
-        // ── CPE ──
+
         if (svc.cpe?.length) {
             const cpeRows = svc.cpe.map(c => row("CPE", c, "text-slate-400")).join("");
             sections.push(section("package", "CPE", cpeRows));
         }
- 
-        // ── CVEs ──
+
         if (svc.vulns?.length) {
             const cveRows = svc.vulns.map(cve => {
                 const yr  = parseInt(cve.match(/CVE-(\d{4})/)?.[1] || "0");
-                const cls = yr >= 2021 ? "text-red-400" : "text-amber-400";
-                return row("CVE", cve, cls);
+                const cls = yr >= 2021 ? "text-red-400 font-bold" : yr >= 2018 ? "text-amber-400" : "text-slate-400";
+                return row(cve, "", cls);
             }).join("");
-            sections.push(section("bug", `Vulnerabilities (${svc.vulns.length})`, cveRows));
+            sections.push(section("alert-triangle", "CVEs", cveRows));
         }
- 
-        // ── Banner ──
+
         if (svc.banner) {
-            const escaped = svc.banner.replace(/</g,"&lt;").replace(/>/g,"&gt;");
+            const esc = svc.banner.replace(/</g,"&lt;").replace(/>/g,"&gt;");
             sections.push(`
                 <div class="border border-slate-800 rounded-lg overflow-hidden">
                     <div class="flex items-center gap-2 px-3 py-2 bg-slate-900/60 border-b border-slate-800">
                         <i data-lucide="terminal" class="w-3 h-3 text-slate-500 shrink-0"></i>
                         <span class="text-[9px] text-slate-400 uppercase tracking-wider font-semibold">Banner</span>
                     </div>
-                    <pre class="text-[8px] font-mono text-slate-400 p-3 overflow-auto max-h-40 whitespace-pre-wrap break-all leading-relaxed">${escaped}</pre>
+                    <pre class="p-3 text-[8px] font-mono text-slate-400 whitespace-pre-wrap break-all max-h-32 overflow-y-auto">${esc}</pre>
                 </div>`);
         }
- 
-        // ── Rendu modal ──
+
         let modal = document.getElementById("shodan-service-modal");
         if (modal) modal.remove();
         modal = document.createElement("div");
@@ -145,7 +138,7 @@ window.EnrichPanel = {
                         bg-slate-950 border border-slate-700 rounded-xl shadow-2xl overflow-hidden">
                 <div class="flex items-center justify-between px-4 py-3 border-b border-slate-800 shrink-0">
                     <span class="text-[11px] font-bold text-slate-200 flex items-center gap-2">
-                        <i data-lucide="layers" class="w-3.5 h-3.5 text-blue-400"></i>
+                        <i data-lucide="server" class="w-3.5 h-3.5 text-blue-400"></i>
                         ${title}
                     </span>
                     <button onclick="document.getElementById('shodan-service-modal').remove()"
@@ -161,7 +154,7 @@ window.EnrichPanel = {
         document.body.appendChild(modal);
         lucide.createIcons({ nodes: [modal] });
     },
- 
+
     async load(nodeData, caseId) {
         if (this._abortCtrl) this._abortCtrl.abort();
         this._abortCtrl = new AbortController();
@@ -245,11 +238,11 @@ window.EnrichPanel = {
         "Detection Score": "threat",  "Confidence Score": "threat",
         "Malicious":       "threat",  "Suspicious":       "threat",
         "Reputation":      "threat",  "Scan Count":       "threat",
-        "Threat Actors":   "threat", 
+        "Threat Actors":   "threat",
         "Organization":    "host", "ASN": "host", "ASN Owner": "host",
         "Country":         "host", "OS": "host", "Registrar": "host",
         "Last Seen":       "host", "Last Analysis": "host", "Last Scan": "host",
-        "Usage":           "host", "Services": "shodan_services", "Name": "host",
+        "Usage":           "host", "Services":     "shodan_services", "Name": "host",
         "Type":            "host", "Server Headers": "host",
         "Scan Report":     "urlscan_meta",
         "Screenshot":      "screenshot",
@@ -431,17 +424,17 @@ window.EnrichPanel = {
                                    1433,1521,3306,3389,5432,5900,6379,8080,8443,9200,27017,6667]);
             const allPorts = new Set();
             items.forEach(({ field }) => {
-                (Array.isArray(field.value) ? field.value : [field.value]).forEach(v => v && allPorts.add(String(v)));
+                (Array.isArray(field.value) ? field.value : [field.value])
+                    .forEach(p => p !== null && p !== undefined && allPorts.add(Number(p)));
             });
-            const sorted = [...allPorts].sort((a,b) => Number(a) - Number(b));
-            const tags = sorted.slice(0, 20).map(port => {
-                const cls = RISKY.has(Number(port))
+            const sorted = [...allPorts].sort((a, b) => a - b);
+            const tags = sorted.map(p => {
+                const cls = RISKY.has(p)
                     ? "bg-red-500/10 border-red-500/30 text-red-400"
                     : "bg-slate-800 border-slate-700/50 text-slate-400";
-                return `<span class="text-[9px] font-mono px-1.5 py-px rounded border ${cls}">${port}</span>`;
+                return `<span class="text-[9px] px-1.5 py-px rounded border font-mono ${cls}">${p}</span>`;
             }).join("");
-            const overflow = sorted.length > 20 ? `<span class="text-[9px] text-slate-600">+${sorted.length-20}</span>` : "";
-            return `${this._sectionHeader("plug-zap", "Open ports", sorted.length)}<div class="flex flex-wrap gap-1">${tags}${overflow}</div>`;
+            return `${this._sectionHeader("plug", "Ports", sorted.length)}<div class="flex flex-wrap gap-1">${tags}</div>`;
         }
 
         // ── VULNS ──
@@ -450,90 +443,17 @@ window.EnrichPanel = {
             items.forEach(({ field }) => {
                 (Array.isArray(field.value) ? field.value : [field.value]).forEach(v => v && allVulns.add(String(v)));
             });
-            const sorted = [...allVulns].sort();
-            const tags = sorted.slice(0, 15).map(cve => {
-                const yr  = parseInt(cve.match(/CVE-(\d{4})/)?.[1] || "0");
-                const cls = yr >= 2021
-                    ? "bg-red-500/10 border-red-500/30 text-red-400"
-                    : "bg-amber-500/10 border-amber-500/30 text-amber-400";
-                return `<span class="text-[9px] font-mono px-1.5 py-px rounded border ${cls}">${cve}</span>`;
+            const arr = [...allVulns];
+            const tags = arr.slice(0, 20).map(v => {
+                const yr  = parseInt(v.match(/CVE-(\d{4})/)?.[1] || "0");
+                const cls = yr >= 2021 ? "bg-red-500/10 border-red-500/30 text-red-400"
+                          : yr >= 2018 ? "bg-amber-500/10 border-amber-500/30 text-amber-400"
+                          :              "bg-slate-800 border-slate-700/50 text-slate-500";
+                return `<span class="text-[9px] px-1.5 py-px rounded border font-mono ${cls}">${v}</span>`;
             }).join("");
-            const overflow = sorted.length > 15 ? `<span class="text-[9px] text-slate-600">+${sorted.length-15}</span>` : "";
-            return `${this._sectionHeader("bug", "Vulnerabilities", sorted.length)}<div class="flex flex-wrap gap-1">${tags}${overflow}</div>`;
+            const overflow = arr.length > 20 ? `<span class="text-[9px] text-slate-600">+${arr.length-20}</span>` : "";
+            return `${this._sectionHeader("alert-triangle", "Vulnerabilities", arr.length)}<div class="flex flex-wrap gap-1">${tags}${overflow}</div>`;
         }
-        
-        // ── SHODAN SERVICES ──
-        if (theme === "shodan_services") {
-            // La value est un tableau d'objets service
-            const services = [];
-            items.forEach(({ field }) => {
-                const val = field.value;
-                if (Array.isArray(val)) services.push(...val);
-                else if (val && typeof val === "object") services.push(val);
-            });
-            if (!services.length) return "";
- 
-            const btns = services.map((svc, idx) => {
-                const port      = svc.port      || "?";
-                const transport = svc.transport || "tcp";
-                const product   = svc.product   || svc.module || "";
-                const version   = svc.version   || "";
-                const httpTitle = svc.http?.title || "";
-                const vulnCount = (svc.vulns || []).length;
-                const hasSSL    = !!svc.ssl;
-                const hasHTTP   = !!svc.http;
- 
-                // Couleur du badge port selon protocole/risque
-                const RISKY = new Set([21,22,23,25,53,80,110,135,139,143,443,445,
-                                       1433,1521,3306,3389,5432,5900,6379,8080,8443,9200,27017,6667]);
-                const portCls = RISKY.has(Number(port))
-                    ? "bg-red-500/15 border-red-500/40 text-red-400"
-                    : "bg-slate-800/80 border-slate-700/60 text-slate-300";
- 
-                // Ligne principale : port + transport + product
-                const productLabel = product
-                    ? `<span class="text-slate-400 truncate">${product}${version ? ` <span class="text-slate-600">${version}</span>` : ""}</span>`
-                    : `<span class="text-slate-600 italic text-[8px]">unknown</span>`;
- 
-                // Badges contextuels
-                const badges = [];
-                if (hasSSL)    badges.push(`<span class="text-[7.5px] px-1 py-px rounded bg-blue-500/10 border border-blue-500/30 text-blue-400">TLS</span>`);
-                if (hasHTTP)   badges.push(`<span class="text-[7.5px] px-1 py-px rounded bg-cyan-500/10 border border-cyan-500/30 text-cyan-400">HTTP</span>`);
-                if (vulnCount) badges.push(`<span class="text-[7.5px] px-1 py-px rounded bg-red-500/10 border border-red-500/30 text-red-400">${vulnCount} CVE${vulnCount > 1 ? "s" : ""}</span>`);
- 
-                // Sous-titre : title HTTP ou banner preview
-                const subtitle = httpTitle
-                    ? `<div class="text-[8px] text-slate-500 font-mono truncate mt-0.5">${httpTitle.replace(/</g,"&lt;").replace(/>/g,"&gt;")}</div>`
-                    : (svc.banner
-                        ? `<div class="text-[8px] text-slate-600 font-mono truncate mt-0.5">${svc.banner.slice(0,60).replace(/[\r\n]+/g," ").replace(/</g,"&lt;")}</div>`
-                        : "");
- 
-                // Encodage du service pour la modal
-                let encoded = "";
-                try { encoded = btoa(unescape(encodeURIComponent(JSON.stringify(svc)))); }
-                catch(e) { encoded = btoa(JSON.stringify(svc).replace(/[^\x00-\x7F]/g,"?")); }
- 
-                return `
-                    <button onclick="EnrichPanel._openShodanServiceModal('${encoded}')"
-                            class="flex items-start gap-2 w-full text-left rounded border border-slate-700/50
-                                   hover:border-blue-500/40 bg-slate-900/30 hover:bg-slate-900/60
-                                   px-2 py-1.5 transition group">
-                        <span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border shrink-0 mt-0.5 ${portCls}">${port}</span>
-                        <div class="flex-1 min-w-0">
-                            <div class="flex items-center gap-1.5 flex-wrap">
-                                <span class="text-[8.5px] text-slate-500">${transport}</span>
-                                ${productLabel}
-                                ${badges.join("")}
-                            </div>
-                            ${subtitle}
-                        </div>
-                        <i data-lucide="chevron-right" class="w-2.5 h-2.5 text-slate-700 group-hover:text-slate-400 shrink-0 mt-1 transition"></i>
-                    </button>`;
-            }).join("");
- 
-            return `${this._sectionHeader("layers", "Services", services.length)}<div class="space-y-1">${btns}</div>`;
-        }
-
 
         // ── DNS ──
         if (theme === "dns") {
@@ -542,11 +462,10 @@ window.EnrichPanel = {
                 (Array.isArray(field.value) ? field.value : [field.value]).forEach(v => v && allItems.add(String(v)));
             });
             const arr = [...allItems];
-            const tags = arr.slice(0, 12).map(v => {
-                const disp = v.length > 32 ? v.slice(0,30)+"…" : v;
-                return `<span class="text-[9px] font-mono px-1.5 py-px rounded border
-                               bg-slate-800 border-slate-700/50 text-slate-400" title="${v}">${disp}</span>`;
-            }).join("");
+            const tags = arr.slice(0, 12).map(v =>
+                `<span class="text-[9px] px-1.5 py-px rounded border
+                              bg-slate-800 border-slate-700/50 text-slate-300 font-mono">${v}</span>`
+            ).join("");
             const overflow = arr.length > 12 ? `<span class="text-[9px] text-slate-600">+${arr.length-12}</span>` : "";
             return `${this._sectionHeader("globe", "Passive DNS", arr.length)}<div class="flex flex-wrap gap-1">${tags}${overflow}</div>`;
         }
@@ -598,7 +517,7 @@ window.EnrichPanel = {
                 </button>`;
         }
 
-        // ── URLSCAN WEB : transactions / redirects / links ──
+        // ── URLSCAN WEB ──
         if (theme === "urlscan_web") {
             const iconMap = {
                 "HTTP Transactions": "arrow-right-left",
@@ -644,7 +563,7 @@ window.EnrichPanel = {
             return `${this._sectionHeader("activity", "Web Activity")}<div class="space-y-3">${sections.join("")}</div>`;
         }
 
-        // ── URLSCAN CONTENT : DOM + Text Content → modal ──
+        // ── URLSCAN CONTENT ──
         if (theme === "urlscan_content") {
             const btns = items.map(({ field }) => {
                 if (field.type !== "text_modal") return "";
@@ -667,6 +586,36 @@ window.EnrichPanel = {
                     </button>`;
             }).filter(Boolean).join("");
             return btns ? `${this._sectionHeader("file-code", "Page Content")}<div class="space-y-1.5">${btns}</div>` : "";
+        }
+
+        // ── SHODAN SERVICES ──
+        if (theme === "shodan_services") {
+            const allServices = [];
+            items.forEach(({ field }) => {
+                (Array.isArray(field.value) ? field.value : [field.value]).forEach(v => v && allServices.push(v));
+            });
+            if (!allServices.length) return "";
+            const btns = allServices.slice(0, 20).map(svcStr => {
+                let encoded = "";
+                try { encoded = btoa(unescape(encodeURIComponent(JSON.stringify(svcStr)))); } catch(e) { encoded = ""; }
+                const svc = typeof svcStr === "object" ? svcStr : {};
+                const port = svc.port || "?";
+                const proto = svc.transport || "tcp";
+                const prod = svc.product || svc.module || "";
+                const hasVulns = svc.vulns?.length > 0;
+                const vulnBadge = hasVulns
+                    ? `<span class="ml-auto text-[8px] text-red-400 font-bold">${svc.vulns.length} CVE</span>` : "";
+                return `
+                    <button onclick="EnrichPanel._openShodanServiceModal('${encoded}')"
+                            class="flex items-center gap-2 w-full text-left rounded border border-slate-700/60
+                                   hover:border-blue-500/40 bg-slate-900/40 px-2 py-1 transition">
+                        <span class="text-[9px] font-mono text-cyan-400 shrink-0">${port}/${proto}</span>
+                        ${prod ? `<span class="text-[9px] text-slate-400 truncate">${prod}</span>` : ""}
+                        ${vulnBadge}
+                    </button>`;
+            }).join("");
+            const overflow = allServices.length > 20 ? `<div class="text-[8px] text-slate-600 mt-1">+${allServices.length-20} more</div>` : "";
+            return `${this._sectionHeader("layers", "Services", allServices.length)}<div class="space-y-1">${btns}${overflow}</div>`;
         }
 
         // ── INTEL ──
@@ -695,7 +644,7 @@ window.EnrichPanel = {
             return rows ? `${this._sectionHeader("database", "Intel")}<table class="w-full">${rows}</table>` : "";
         }
 
-        // ── VT ASSOCIATIONS (Collections, Malware, Reports, Sightings) ──
+        // ── VT ASSOCIATIONS ──
         if (theme === "vt_refs") {
             const fieldOrder = [
                 { name: "Malware Names",      icon: "bug",         color: "text-red-400"    },
@@ -779,6 +728,16 @@ window.EnrichPanel = {
         panel.innerHTML = "";
         filtered.forEach(([modKey, fields]) => {
             const visible = (fields || []).filter(f => !this._isEmpty(f.value));
+            const card = document.createElement("div");
+
+            // ── Elasticsearch : renderer dédié ───────────
+            if (modKey === "elasticsearch") {
+                card.innerHTML = this._renderElasticsearchCard(visible);
+                panel.appendChild(card);
+                return;
+            }
+
+            // ── Rendu générique (OpenCTI, MISP, etc.) ────
             const seen = {};
             visible.forEach(f => { if (!seen[f.name]) seen[f.name] = f; });
             const rows = Object.values(seen).map(f => {
@@ -800,7 +759,6 @@ window.EnrichPanel = {
                         <td class="text-[9px] text-slate-300 font-mono py-0.5 truncate" title="${v}">${disp}</td>
                     </tr>`;
             }).join("");
-            const card = document.createElement("div");
             card.innerHTML = `
                 <div class="flex items-center gap-1.5 mb-1.5">
                     <i data-lucide="${this._modIcon(modKey)}" class="w-3 h-3 text-violet-400 shrink-0"></i>
@@ -811,6 +769,143 @@ window.EnrichPanel = {
         });
         lucide.createIcons({ nodes: [panel] });
         section.classList.remove("hidden");
+    },
+
+    // ── Elasticsearch — renderer dédié ───────────────────
+
+    _renderElasticsearchCard(fields) {
+        const byName  = {};
+        fields.forEach(f => { if (!byName[f.name]) byName[f.name] = f; });
+
+        const get     = name => byName[name]?.value ?? null;
+        const getList = name => { const v = get(name); if (!v) return []; return Array.isArray(v) ? v : [v]; };
+
+        const inEs      = get("In Elasticsearch");
+        const totalHits = get("Total Hits");
+        const firstSeen = get("First Seen");
+        const lastSeen  = get("Last Seen");
+        const indices   = getList("Indices");
+        const events    = getList("Recent Events");
+        const hosts     = getList("Hosts Observed");
+        const users     = getList("Users Observed");
+        const procs     = getList("Processes Observed");
+
+        const found = inEs && inEs.includes("Yes");
+        const presenceCls = found
+            ? "bg-green-500/15 text-green-400 border border-green-500/25"
+            : "bg-slate-800 text-slate-500 border border-slate-700/40";
+        const presenceDot = found ? "bg-green-500" : "bg-slate-600";
+        const presenceTxt = found ? `Found · <span class="font-bold">${totalHits}</span> hits` : "Not found";
+
+        let html = `
+            <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center gap-1.5">
+                    <i data-lucide="database" class="w-3 h-3 text-amber-400 shrink-0"></i>
+                    <span class="text-[9px] text-amber-400 uppercase tracking-widest font-semibold">Elasticsearch</span>
+                </div>
+                <span class="flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded ${presenceCls}">
+                    <span class="w-1.5 h-1.5 rounded-full ${presenceDot} inline-block"></span>
+                    ${presenceTxt}
+                </span>
+            </div>`;
+
+        if (!found) return html;
+
+        // Dates first / last seen
+        if (firstSeen || lastSeen) {
+            html += `<div class="flex gap-2 mb-2">`;
+            if (firstSeen) html += `
+                <div class="flex-1 bg-slate-900/60 border border-slate-800 rounded px-2 py-1">
+                    <div class="text-[8px] text-slate-600 uppercase tracking-wider mb-0.5">First seen</div>
+                    <div class="text-[9px] text-slate-300 font-mono">${firstSeen}</div>
+                </div>`;
+            if (lastSeen) html += `
+                <div class="flex-1 bg-slate-900/60 border border-slate-800 rounded px-2 py-1">
+                    <div class="text-[8px] text-slate-600 uppercase tracking-wider mb-0.5">Last seen</div>
+                    <div class="text-[9px] text-slate-300 font-mono">${lastSeen}</div>
+                </div>`;
+            html += `</div>`;
+        }
+
+        // Indices
+        if (indices.length) {
+            const tags = indices.slice(0, 8).map(idx => {
+                const short = idx.length > 28 ? idx.slice(0, 26) + "…" : idx;
+                return `<span class="text-[8px] px-1.5 py-px rounded border bg-slate-900 border-amber-900/40
+                                     text-amber-500/80 font-mono" title="${idx}">${short}</span>`;
+            }).join("");
+            const overflow = indices.length > 8 ? `<span class="text-[8px] text-slate-600">+${indices.length - 8}</span>` : "";
+            html += `
+                <div class="mb-2">
+                    <div class="text-[8px] text-slate-600 uppercase tracking-wider mb-1">Indices</div>
+                    <div class="flex flex-wrap gap-1">${tags}${overflow}</div>
+                </div>`;
+        }
+
+        // Metadata : hosts / users / processes
+        const metaRows = [
+            { label: "Hosts",     icon: "monitor",  items: hosts },
+            { label: "Users",     icon: "user",      items: users },
+            { label: "Processes", icon: "terminal",  items: procs },
+        ].filter(r => r.items.length);
+
+        if (metaRows.length) {
+            const rows = metaRows.map(r => {
+                const vals = r.items.slice(0, 5).join(", ");
+                const more = r.items.length > 5 ? ` +${r.items.length - 5}` : "";
+                return `
+                    <tr>
+                        <td class="py-0.5 pr-2 whitespace-nowrap align-top w-20">
+                            <span class="flex items-center gap-1 text-[9px] text-slate-500">
+                                <i data-lucide="${r.icon}" class="w-2.5 h-2.5 shrink-0"></i>${r.label}
+                            </span>
+                        </td>
+                        <td class="text-[9px] text-slate-300 font-mono py-0.5 break-all">
+                            ${vals}<span class="text-slate-600">${more}</span>
+                        </td>
+                    </tr>`;
+            }).join("");
+            html += `<table class="w-full mb-2">${rows}</table>`;
+        }
+
+        // Événements récents
+        if (events.length) {
+            html += `
+                <div class="text-[8px] text-slate-600 uppercase tracking-wider mb-1">Recent events</div>
+                <div class="space-y-1">`;
+            events.slice(0, 5).forEach(ev => {
+                const parts = String(ev).split(" | ");
+                const ts    = parts[0] || "";
+                const rest  = parts.slice(1);
+                const badges = rest.map(p => {
+                    const eq = p.indexOf("=");
+                    if (eq === -1) {
+                        const short = p.length > 60 ? p.slice(0, 58) + "…" : p;
+                        const esc   = short.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                        return `<span class="text-[8px] text-slate-400 italic">${esc}</span>`;
+                    }
+                    const k      = p.slice(0, eq);
+                    const v      = p.slice(eq + 1).replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                    const vShort = v.length > 32 ? v.slice(0, 30) + "…" : v;
+                    return `<span class="inline-flex items-baseline gap-0.5">
+                        <span class="text-[7.5px] text-slate-600">${k}</span>
+                        <span class="text-[8px] text-slate-200 font-mono">${vShort}</span>
+                    </span>`;
+                }).join(`<span class="text-slate-700 mx-0.5 select-none">·</span>`);
+                html += `
+                    <div class="bg-slate-900/50 border border-slate-800/60 rounded px-2 py-1.5">
+                        <div class="text-[8px] text-slate-600 font-mono mb-1">${ts}</div>
+                        <div class="flex flex-wrap items-baseline gap-x-1 gap-y-0.5 leading-snug">
+                            ${badges || '<span class="text-[8px] text-slate-600 italic">no context fields</span>'}
+                        </div>
+                    </div>`;
+            });
+            html += `</div>`;
+            if (events.length > 5)
+                html += `<div class="text-[8px] text-slate-600 mt-1 text-right">+${events.length - 5} more events</div>`;
+        }
+
+        return html;
     },
 
     // ── Modals ────────────────────────────────────────────

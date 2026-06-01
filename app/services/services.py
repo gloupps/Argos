@@ -32,6 +32,7 @@ class Services:
         from app.modules.opencti_module import OpenCTIModule
         from app.modules.misp_module import MISPModule
         from app.modules.threatfox_module import ThreatFoxModule
+        from app.modules.elasticsearch_module import ElasticsearchModule
 
         self.modules = {
             "shodan": ShodanModule(self.requester),
@@ -41,6 +42,7 @@ class Services:
             "opencti": OpenCTIModule(self.requester),
             "misp": MISPModule(self.requester),
             "threatfox": ThreatFoxModule(self.requester),
+            "elasticsearch": ElasticsearchModule(self.requester),
         }
 
     # ── Public ────────────────────────────────────────────
