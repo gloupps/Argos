@@ -31,17 +31,39 @@ window.CaseModule = {
         const fd         = new FormData(form);
         const sourceMode = fd.get("source_mode") || "ioc";
 
+        // ── STIX2 file : lire et parser côté client ──────────
+        let stixIocList = "";
+        if (sourceMode === "file") {
+            const fileInput = form.querySelector('[name="stix_file"]');
+            const file = fileInput?.files?.[0];
+            if (!file) { this._showError(form, "Please select a STIX2 JSON file."); return; }
+            try {
+                stixIocList = await this._parseStix2File(file);
+            } catch (e) {
+                this._showError(form, `STIX2 parse error: ${e.message}`);
+                return;
+            }
+            if (!stixIocList) { this._showError(form, "No indicators found in this STIX2 bundle."); return; }
+        }
+
         const payload = {
-            action:        "create_case",
-            case_name:     fd.get("case_name")     || "",
-            source_mode:   sourceMode,
-            existing_case: fd.get("existing_case") || "",
-            source_url:    fd.get("source_url")    || "",
-            ioc_list:      fd.get("ioc_list")      || "",
-            auto_enrich:   form.querySelector('[name="auto_enrich"]')?.checked ?? false,
-            siem:          form.querySelector('[name="siem"]')?.checked         ?? false,
-            correlation:   form.querySelector('[name="correlation"]')?.checked  ?? false,
+            action:               "create_case",
+            case_name:            fd.get("case_name")           || "",
+            source_mode:          sourceMode === "file" ? "ioc" : sourceMode,
+            existing_case:        fd.get("existing_case")        || "",
+            source_url:           fd.get("source_url")           || "",
+            internal_source_url:  fd.get("internal_source_url") || "",
+            internal_source_type: fd.get("internal_source_type") || "opencti",
+            ioc_list:             sourceMode === "file" ? stixIocList : (fd.get("ioc_list") || ""),
+            auto_enrich:          form.querySelector('[name="auto_enrich"]')?.checked ?? false,
+            siem:                 form.querySelector('[name="siem"]')?.checked         ?? false,
+            correlation:          form.querySelector('[name="correlation"]')?.checked  ?? false,
         };
+
+        // Pour internal_source, on passe le mode tel quel au backend
+        if (sourceMode === "internal_source") {
+            payload.source_mode = "internal_source";
+        }
 
         if (sourceMode !== "db" && !payload.case_name) {
             this._showError(form, "Please enter a case name.");
@@ -97,6 +119,46 @@ window.CaseModule = {
             });
         });
     },
+    
+    // ── Parser STIX2 côté client ─────────────────────────────
+    async _parseStix2File(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const raw    = JSON.parse(e.target.result);
+                    // Accepte bundle {type:"bundle", objects:[]} ou tableau direct
+                    const objects = raw.objects ?? (Array.isArray(raw) ? raw : [raw]);
+                    const iocs   = [];
+                    for (const obj of objects) {
+                        if (!obj || obj.type !== "indicator") continue;
+                        const pattern = obj.pattern || "";
+                        // Extrait toutes les valeurs = '...' dans le pattern
+                        const matches = [...pattern.matchAll(/=\s*['"]([^'"]+)['"]/g)];
+                        for (const m of matches) {
+                            const val = m[1].trim();
+                            if (val) iocs.push(val);
+                        }
+                    }
+                    resolve(iocs.join("\n"));
+                } catch (err) {
+                    reject(err);
+                }
+            };
+            reader.onerror = () => reject(new Error("File read failed"));
+            reader.readAsText(file);
+        });
+    },
+
+    _extractPatternValue(pattern) {
+        // Patterns STIX2 courants :
+        // [domain-name:value = 'evil.com']
+        // [ipv4-addr:value = '1.2.3.4']
+        // [file:hashes.MD5 = 'abc123']
+        // [url:value = 'http://...']
+        const m = pattern.match(/=\s*['"]([^'"]+)['"]/);
+        return m ? m[1] : null;
+    },
 
     _initModeSwitch() {
         const buttons     = document.querySelectorAll(".mode-btn");
@@ -124,6 +186,30 @@ window.CaseModule = {
                 if (configSect) configSect.style.display = mode === "db" ? "none" : "";
                 if (nameInput)  nameInput.required = mode !== "db";
             });
+        });
+        
+        document.getElementById("stix-file-input")?.addEventListener("change", async (e) => {
+            const file = e.target.files?.[0];
+            const preview = document.getElementById("stix-preview");
+            if (!file || !preview) return;
+            try {
+                const text = await file.text();
+                const bundle = JSON.parse(text);
+                const objects = bundle.objects || [];
+                const indicators = objects.filter(o => o.type === "indicator");
+                const names = indicators.slice(0, 10).map(o => {
+                    const m = (o.pattern||"").match(/=\s*['"]([^'"]+)['"]/);
+                    return m ? m[1] : o.name || "?";
+                });
+                preview.innerHTML = `
+                    <span class="text-green-400 font-medium">${indicators.length} indicator(s) found</span>
+                    ${indicators.length > 0 ? `<div class="mt-1 space-y-0.5 mono">${names.map(n => `<div>• ${n}</div>`).join("")}${indicators.length > 10 ? `<div class="text-slate-600">… and ${indicators.length - 10} more</div>` : ""}</div>` : ""}
+                `;
+                preview.classList.remove("hidden");
+            } catch(err) {
+                preview.innerHTML = `<span class="text-red-400">⚠ Invalid JSON: ${err.message}</span>`;
+                preview.classList.remove("hidden");
+            }
         });
 
         document.querySelector('[data-mode="ioc"]')?.click();
