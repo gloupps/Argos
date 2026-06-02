@@ -99,12 +99,26 @@ window.Modules = {
                         icon:   "share-2",
                         fields: [
                             {
+                                key:     "misp_min_shared_roots",
+                                type:    "range",
+                                label:   "Min graph IOCs in same co-event to pivot",
+                                min:     1,
+                                max:     10,
+                                default: 2,
+                            },
+                            {
                                 key:     "misp_max_events",
                                 type:    "range",
-                                label:   "Max events per pivot",
+                                label:   "Max reports per pivot",
                                 min:     1,
                                 max:     20,
                                 default: 3,
+                            },
+                            {
+                                key:     "misp_include_correlated",
+                                type:    "checkbox",
+                                label:   "Include correlated IOCs (not only roots)",
+                                default: false,
                             },
                         ],
                     };
@@ -148,6 +162,19 @@ window.Modules = {
                 container.appendChild(this._buildSidebarItem(mod, hasKey, on));
             });
         });
+        
+        // ── Injecter les instances MISP externes dans External Sources ──
+        if (externalEl) {
+            const instances = SecretStore.getJSON?.("misp_instances", []) ?? [];
+            instances.forEach(inst => {
+                const key    = `misp_ext_${inst.id}`;
+                const mod    = this.registry[key];
+                if (!mod) return;
+                const hasKey = SecretStore?.has?.(key) ?? false;
+                const on     = hasKey && (this.state.enabled[key] !== false);
+                externalEl.appendChild(this._buildSidebarItem(mod, hasKey, on));
+            });
+        }
 
         lucide.createIcons();
         document.dispatchEvent(new Event("modules:rendered"));
