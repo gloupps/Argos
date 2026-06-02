@@ -677,15 +677,23 @@ def register_routes(app, services, job_manager):
             source_mode = data.get("source_mode", "ioc")
             job_ids = {}
             if source_mode == "internal_source":
-                # Job dédié pour aller chercher les IOCs depuis OpenCTI ou MISP
+                # S'assurer que la clé du bon module est présente
+                # (elle peut arriver soit dans api_keys soit dans extra_config selon comment le front l'envoie)
+                source_type = data.get("internal_source_type", "opencti")
+                merged_keys = dict(api_keys)
+                # Fallback : si la clé n'est pas dans api_keys, essayer extra_config
+                if source_type not in merged_keys:
+                    fallback = extra_config.get(source_type) or extra_config.get(f"{source_type}_api_key", "")
+                    if fallback:
+                        merged_keys[source_type] = fallback
+
                 job_ids["fetch_internal"] = services.start_job({
                     "action":               "fetch_internal_source",
                     "case_id":              case_id,
                     "internal_source_url":  data.get("internal_source_url", ""),
-                    "internal_source_type": data.get("internal_source_type", "opencti"),
-                    "api_keys":             api_keys,
+                    "internal_source_type": source_type,
+                    "api_keys":             merged_keys,
                     "extra_config":         extra_config,
-                    # auto-enrich + correlate seront chaînés après ce job
                     "chain_enrich":         data.get("auto_enrich", False),
                     "chain_correlate":      data.get("correlation", False),
                     "correlation_config":   cfg,
