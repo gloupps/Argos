@@ -196,10 +196,10 @@ window.Modules = {
         // Badge quota (EXHAUSTED / LOW) — alimenté par _quotaCache via _updateSidebarQuotaBadge()
         const qc = this._quotaCache[mod.key];
         const quotaBadgeClass = qc?.exhausted
-            ? "text-[9px] px-1.5 py-0.5 rounded-full font-semibold shrink-0 bg-red-500/20 text-red-400 border border-red-500/30"
+            ? "text-[11px] px-1.5 py-0.5 rounded-full font-semibold shrink-0 bg-red-500/20 text-red-400 border border-red-500/30"
             : qc?.low
-            ? "text-[9px] px-1.5 py-0.5 rounded-full font-semibold shrink-0 bg-amber-500/20 text-amber-400 border border-amber-500/30"
-            : "text-[9px] px-1.5 py-0.5 rounded-full font-semibold shrink-0 hidden";
+            ? "text-[11px] px-1.5 py-0.5 rounded-full font-semibold shrink-0 bg-amber-500/20 text-amber-400 border border-amber-500/30"
+            : "text-[11px] px-1.5 py-0.5 rounded-full font-semibold shrink-0 hidden";
         const quotaBadgeText = qc?.exhausted ? "EXHAUSTED" : qc?.low ? "LOW" : "";
 
         labelSpan.innerHTML = `
@@ -221,7 +221,7 @@ window.Modules = {
         if (!hasKey) {
             // Juste un badge NO KEY, pas de toggle
             const badge = document.createElement("span");
-            badge.className = "text-[10px] px-2 py-0.5 rounded bg-red-500/10 text-red-500 shrink-0";
+            badge.className = "text-[12px] px-2 py-0.5 rounded bg-red-500/10 text-red-500 shrink-0";
             badge.textContent = "NO KEY";
             wrap.appendChild(badge);
             return wrap;
@@ -325,7 +325,7 @@ window.Modules = {
 
                     if (field.type === "range") {
                         fieldEl.innerHTML = `
-                            <div class="flex justify-between text-[10px] mb-1">
+                            <div class="flex justify-between text-[12px] mb-1">
                                 <span class="text-slate-400">${field.label}</span>
                                 <span class="${valColor} font-bold" id="${id}_val">${value}</span>
                             </div>
@@ -343,7 +343,7 @@ window.Modules = {
                         fieldEl.innerHTML = `
                             <label class="flex items-center gap-2 cursor-pointer">
                                 <input type="checkbox" ${value ? "checked" : ""} class="${rangeAccent}">
-                                <span class="text-[10px] text-slate-300">${field.label}</span>
+                                <span class="text-[12px] text-slate-300">${field.label}</span>
                             </label>
                         `;
                         fieldEl.querySelector("input[type=checkbox]").addEventListener("change", e => {
@@ -354,7 +354,7 @@ window.Modules = {
                     body.appendChild(fieldEl);
                 });
             } else {
-                body.innerHTML = `<p class="text-[10px] text-slate-600 italic">No configurable parameters.</p>`;
+                body.innerHTML = `<p class="text-[12px] text-slate-600 italic">No configurable parameters.</p>`;
             }
 
             // Toggle checkbox → show/hide body + persist
@@ -440,7 +440,7 @@ window.Modules = {
 
         Object.entries(this._grouped).forEach(([group, modules]) => {
             const title = document.createElement("p");
-            title.className = "text-[10px] text-slate-500 uppercase tracking-wider mt-4 mb-2 font-semibold";
+            title.className = "text-[12px] text-slate-500 uppercase tracking-wider mt-4 mb-2 font-semibold";
             title.textContent = group;
             container.appendChild(title);
 
@@ -463,7 +463,7 @@ window.Modules = {
             const stored = SecretStore?.get(`extra_${sf.key}`) || "";
             return `
                 <div class="mt-2">
-                    <label class="text-[10px] text-slate-500 block mb-1">${sf.label}</label>
+                    <label class="text-[12px] text-slate-500 block mb-1">${sf.label}</label>
                     <input type="${sf.type === 'url' ? 'url' : 'text'}"
                            id="extra-input-${sf.key}"
                            data-extra-key="${sf.key}"
@@ -488,7 +488,7 @@ window.Modules = {
                 </div>
                 <span class="flex-1 text-sm font-semibold text-slate-200 truncate">${mod.name}</span>
                 <span id="status-badge-${mod.key}"
-                      class="text-[9px] px-2 py-0.5 rounded-full font-semibold shrink-0 ${
+                      class="text-[11px] px-2 py-0.5 rounded-full font-semibold shrink-0 ${
                           isSet ? 'bg-green-500/15 text-green-400 border border-green-500/20'
                                 : 'bg-red-500/15 text-red-400 border border-red-500/20'}">
                     ${isSet ? "SET" : "MISSING"}
@@ -555,7 +555,7 @@ window.Modules = {
             this._updateSidebarQuotaBadge(modKey);
             this._renderQuota(row, quota);
         } else {
-            row.innerHTML = `<p class="text-[10px] text-slate-600 italic">No quota data available.</p>`;
+            row.innerHTML = `<p class="text-[12px] text-slate-600 italic">No quota data available.</p>`;
             row.classList.remove("hidden");
         }
     },
@@ -568,12 +568,12 @@ window.Modules = {
         const q = this._quotaCache[modKey];
         if (!q) { existing.classList.add("hidden"); return; }
         if (q.exhausted) {
-            existing.className = "text-[9px] px-1.5 py-0.5 rounded-full font-semibold shrink-0 " +
+            existing.className = "text-[11px] px-1.5 py-0.5 rounded-full font-semibold shrink-0 " +
                 "bg-red-500/20 text-red-400 border border-red-500/30";
             existing.textContent = "EXHAUSTED";
             existing.classList.remove("hidden");
         } else if (q.low) {
-            existing.className = "text-[9px] px-1.5 py-0.5 rounded-full font-semibold shrink-0 " +
+            existing.className = "text-[11px] px-1.5 py-0.5 rounded-full font-semibold shrink-0 " +
                 "bg-amber-500/20 text-amber-400 border border-amber-500/30";
             existing.textContent = "LOW";
             existing.classList.remove("hidden");
@@ -587,7 +587,7 @@ window.Modules = {
 
         if (quota.error) {
             row.innerHTML = `
-                <div class="flex items-center gap-1.5 text-[10px] text-red-400 bg-red-500/10
+                <div class="flex items-center gap-1.5 text-[12px] text-red-400 bg-red-500/10
                             border border-red-500/20 rounded-md px-2.5 py-1.5">
                     <i data-lucide="alert-circle" class="w-3 h-3 shrink-0"></i>
                     <span>${quota.error}</span>
@@ -599,7 +599,7 @@ window.Modules = {
         if (quota.plan_type === "internal") {
             row.innerHTML = `
                 <div class="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-violet-500/10
-                            border border-violet-500/20 text-[10px]">
+                            border border-violet-500/20 text-[12px]">
                     <i data-lucide="server" class="w-3 h-3 text-violet-400 shrink-0"></i>
                     <span class="text-violet-400 font-semibold">Internal instance</span>
                     ${quota.version ? `<span class="ml-auto text-slate-500 font-mono">${quota.version}</span>` : ""}
@@ -611,7 +611,7 @@ window.Modules = {
         if (quota.plan_type === "public" || (quota.remaining == null && quota.limit == null)) {
             row.innerHTML = `
                 <div class="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-slate-800/60
-                            border border-slate-700/40 text-[10px] text-slate-400">
+                            border border-slate-700/40 text-[12px] text-slate-400">
                     <i data-lucide="globe" class="w-3 h-3 shrink-0"></i>
                     Public / no quota tracking
                 </div>`;
@@ -638,18 +638,18 @@ window.Modules = {
             <div class="rounded-md border border-slate-700/40 bg-slate-950/60 px-3 py-2.5 space-y-2">
                 <!-- Plan + counters -->
                 <div class="flex items-center justify-between gap-3">
-                    <span class="text-[9px] px-1.5 py-0.5 rounded-full border font-semibold uppercase ${planColor}">
+                    <span class="text-[11px] px-1.5 py-0.5 rounded-full border font-semibold uppercase ${planColor}">
                         ${quota.plan_type || "unknown"}
                     </span>
                     ${quota.limit != null ? `
-                    <span class="text-[10px] font-mono text-slate-300 ml-auto">
+                    <span class="text-[12px] font-mono text-slate-300 ml-auto">
                         ${exhausted
                             ? `<span class="text-red-400 font-bold">0</span> / ${quota.limit}`
                             : `<span class="${low ? 'text-amber-400 font-semibold' : 'text-slate-200'}">${quota.remaining ?? "–"}</span>
                                <span class="text-slate-600"> / ${quota.limit}</span>`
                         }
                     </span>
-                    <span class="text-[10px] text-slate-500">${pct !== null ? pct + "%" : ""}</span>
+                    <span class="text-[12px] text-slate-500">${pct !== null ? pct + "%" : ""}</span>
                     ` : ""}
                 </div>
                 <!-- Progress bar -->
@@ -660,11 +660,11 @@ window.Modules = {
                 </div>` : ""}
                 <!-- Alert banner si exhausted ou low -->
                 ${exhausted ? `
-                <div class="flex items-center gap-1.5 text-[10px] text-red-400">
+                <div class="flex items-center gap-1.5 text-[12px] text-red-400">
                     <i data-lucide="ban" class="w-3 h-3 shrink-0"></i>
                     <span>Credits exhausted — enrichment will fail for this module</span>
                 </div>` : low ? `
-                <div class="flex items-center gap-1.5 text-[10px] text-amber-400">
+                <div class="flex items-center gap-1.5 text-[12px] text-amber-400">
                     <i data-lucide="triangle-alert" class="w-3 h-3 shrink-0"></i>
                     <span>Low credits — consider renewing soon</span>
                 </div>` : ""}
