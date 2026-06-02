@@ -39,20 +39,20 @@ class MISPModule(Module):
     def get_correlation_fields(self) -> List[Dict[str, Any]]:
         return [
             {
-                "key": "misp_max_events",
-                "type": "range",
-                "label": "Max events per pivot",
-                "min": 1,
-                "max": 20,
-                "default": 3,
-            },
-            {
                 "key": "misp_min_shared_roots",
                 "type": "range",
                 "label": "Min graph IOCs in same co-event to pivot",
                 "min": 1,
                 "max": 10,
                 "default": 2,
+            },
+            {
+                "key": "misp_max_events",
+                "type": "range",
+                "label": "Max reports per pivot",
+                "min": 1,
+                "max": 20,
+                "default": 3,
             },
             {
                 "key": "misp_include_correlated",
@@ -428,8 +428,29 @@ class MISPModule(Module):
             "reachable": True,
             "version": body.get("version", "unknown"),
         }
-
-
+    
+    # ──────────────────────────────────────────────────────
+    # _f  — helper construction d'un champ UI
+    # ──────────────────────────────────────────────────────
+    @staticmethod
+    def _f(
+        indicator: str,
+        name: str,
+        field_type: str,
+        value: Any,
+        max_: int | None = None,
+    ) -> Dict[str, Any]:
+        return {
+            "indicator": indicator,
+            "indicator_type": "ioc",
+            "field_name": name,
+            "field_type": field_type,
+            "value": value,
+            "icon": None,
+            "link": None,
+            "max": None if max_ is None else max_,
+        }
+    
 # ──────────────────────────────────────────────────────────────
 # ExternalMISPModule  — instance MISP externe (multi-instance)
 # ──────────────────────────────────────────────────────────────
@@ -497,6 +518,27 @@ class ExternalMISPModule(MISPModule):
                 "misp_url": context.get(url_key, ""),
             }
         )
+    # ──────────────────────────────────────────────────────
+    # _f  — helper construction d'un champ UI
+    # ──────────────────────────────────────────────────────
+    @staticmethod
+    def _f(
+        indicator: str,
+        name: str,
+        field_type: str,
+        value: Any,
+        max_: int | None = None,
+    ) -> Dict[str, Any]:
+        return {
+            "indicator": indicator,
+            "indicator_type": "ioc",
+            "field_name": name,
+            "field_type": field_type,
+            "value": value,
+            "icon": None,
+            "link": None,
+            "max": None if max_ is None else max_,
+        }
 
 
 # ──────────────────────────────────────────────────────────────
