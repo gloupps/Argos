@@ -676,7 +676,21 @@ def register_routes(app, services, job_manager):
             cfg = data.get("correlation_config", {})
             source_mode = data.get("source_mode", "ioc")
             job_ids = {}
-            if source_mode != "db":
+            if source_mode == "internal_source":
+                # Job dédié pour aller chercher les IOCs depuis OpenCTI ou MISP
+                job_ids["fetch_internal"] = services.start_job({
+                    "action":               "fetch_internal_source",
+                    "case_id":              case_id,
+                    "internal_source_url":  data.get("internal_source_url", ""),
+                    "internal_source_type": data.get("internal_source_type", "opencti"),
+                    "api_keys":             api_keys,
+                    "extra_config":         extra_config,
+                    # auto-enrich + correlate seront chaînés après ce job
+                    "chain_enrich":         data.get("auto_enrich", False),
+                    "chain_correlate":      data.get("correlation", False),
+                    "correlation_config":   cfg,
+                })
+            elif source_mode != "db":
                 if data.get("auto_enrich") and api_keys:
                     job_ids["enrich"] = services.start_job({
                         "action": "enrich",
