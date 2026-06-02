@@ -512,3 +512,170 @@ class Database:
             (case_id, limit),
         )
         return [dict(r) for r in await cursor.fetchall()]
+    
+    async def export_stix(self, case_id):
+        """
+        Export STIX2 bundle :
+          - Root IOCs         → indicator objects
+          - Correlated/pivot IOCs → observed-data + SCO (cyber observable)
+          - Pivots             → relationship avec description du pivot
+        """
+        import datetime, hashlib
+
+        now = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        case = await self.get_case(case_id)
+        case_name = (case or {}).get("name", case_id)
+
+        # ── Charger tous les indicateurs ────────────────────────
+        ind_cur = await self.db.execute(
+            "SELECT id, value, type, node_type FROM indicators WHERE case_id=?",
+            (case_id,),
+        )
+        indicators = [dict(r) for r in await ind_cur.fetchall()]
+
+        # ── Charger pivots + pivot_links ─────────────────────────
+        piv_cur = await self.db.execute(
+            "SELECT id, label, module FROM pivots WHERE case_id=?", (case_id,)
+        )
+        pivots = {r["id"]: dict(r) for r in await piv_cur.fetchall()}
+
+        lnk_cur = await self.db.execute(
+            """SELECT pl.pivot_id, pl.indicator_id, pl.direction, i.value as ind_value
+               FROM pivot_links pl
+               JOIN indicators i ON i.id = pl.indicator_id
+               WHERE pl.case_id=?""",
+            (case_id,),
+        )
+        pivot_links = [dict(r) for r in await lnk_cur.fetchall()]
+
+        objects = []
+        ind_stix_id = {}  # indicator db_id → stix_id
+
+        # ── Helper : STIX2 deterministic ID ─────────────────────
+        def _stix_id(obj_type, value):
+            h = hashlib.sha256(f"{obj_type}:{value}".encode()).hexdigest()
+            return f"{obj_type}--{h[:8]}-{h[8:12]}-{h[12:16]}-{h[16:20]}-{h[20:32]}"
+
+        # ── Helper : pattern STIX2 par type ─────────────────────
+        def _pattern(ioc_type, value):
+            mapping = {
+                "ip":     f"[ipv4-addr:value = '{value}']",
+                "domain": f"[domain-name:value = '{value}']",
+                "url":    f"[url:value = '{value}']",
+                "hash":   f"[file:hashes.SHA256 = '{value}']",
+            }
+            return mapping.get(ioc_type, f"[network-traffic:value = '{value}']")
+
+        # ── Helper : SCO type ─────────────────────────────────────
+        def _sco_type(ioc_type):
+            return {
+                "ip": "ipv4-addr", "domain": "domain-name",
+                "url": "url", "hash": "file",
+            }.get(ioc_type, "network-traffic")
+
+        # ── 1. Root IOCs → indicator ─────────────────────────────
+        for ind in indicators:
+            if ind["node_type"] != "root":
+                continue
+            sid = _stix_id("indicator", ind["value"])
+            ind_stix_id[ind["id"]] = sid
+            objects.append({
+                "type":            "indicator",
+                "spec_version":    "2.1",
+                "id":              sid,
+                "created":         now,
+                "modified":        now,
+                "name":            ind["value"],
+                "description":     f"Root IOC from PivotLens case: {case_name}",
+                "pattern":         _pattern(ind["type"], ind["value"]),
+                "pattern_type":    "stix",
+                "valid_from":      now,
+                "indicator_types": ["malicious-activity"],
+            })
+
+        # ── 2. Correlated/pivot IOCs → observable + observed-data ─
+        for ind in indicators:
+            if ind["node_type"] == "root":
+                continue
+            sco_type = _sco_type(ind["type"])
+            sco_id   = _stix_id(sco_type, ind["value"])
+            ind_stix_id[ind["id"]] = sco_id
+
+            # SCO (Cyber Observable)
+            sco: dict = {
+                "type":         sco_type,
+                "spec_version": "2.1",
+                "id":           sco_id,
+            }
+            if sco_type == "ipv4-addr":
+                sco["value"] = ind["value"]
+            elif sco_type == "domain-name":
+                sco["value"] = ind["value"]
+            elif sco_type == "url":
+                sco["value"] = ind["value"]
+            elif sco_type == "file":
+                sco["hashes"] = {"SHA256": ind["value"]}
+            else:
+                sco["value"] = ind["value"]
+
+            objects.append(sco)
+
+            # observed-data wrapper
+            obs_id = _stix_id("observed-data", ind["value"])
+            objects.append({
+                "type":             "observed-data",
+                "spec_version":     "2.1",
+                "id":               obs_id,
+                "created":          now,
+                "modified":         now,
+                "first_observed":   now,
+                "last_observed":    now,
+                "number_observed":  1,
+                "object_refs":      [sco_id],
+                "description":      f"Pivoted/correlated IOC — case: {case_name}",
+            })
+
+        # ── 3. Pivots → relationship avec description ─────────────
+        # Grouper les liens par pivot_id
+        pivot_outs  = {}  # pivot_id → [indicator_id]
+        pivot_ins   = {}
+        for lk in pivot_links:
+            pid = lk["pivot_id"]
+            if lk["direction"] == "out":
+                pivot_outs.setdefault(pid, []).append(lk["indicator_id"])
+            else:
+                pivot_ins.setdefault(pid, []).append(lk["indicator_id"])
+
+        for pid, pivot in pivots.items():
+            outs = pivot_outs.get(pid, [])
+            ins  = pivot_ins.get(pid, [])
+            pivot_desc = f"Pivot: {pivot['label']} (module: {pivot['module']})"
+
+            # Créer une relationship entre chaque paire out→in
+            for out_id in outs:
+                for in_id in ins:
+                    src_stix = ind_stix_id.get(out_id)
+                    tgt_stix = ind_stix_id.get(in_id)
+                    if not src_stix or not tgt_stix:
+                        continue
+                    rel_id = _stix_id("relationship", f"{src_stix}-{tgt_stix}-{pivot['label']}")
+                    objects.append({
+                        "type":              "relationship",
+                        "spec_version":      "2.1",
+                        "id":                rel_id,
+                        "created":           now,
+                        "modified":          now,
+                        "relationship_type": "related-to",
+                        "source_ref":        src_stix,
+                        "target_ref":        tgt_stix,
+                        "description":       pivot_desc,
+                    })
+
+        bundle_id = _stix_id("bundle", case_id)
+        return {
+            "type":         "bundle",
+            "id":           f"bundle--{case_id}",
+            "spec_version": "2.1",
+            "objects":      objects,
+        }
