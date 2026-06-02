@@ -1100,7 +1100,12 @@ window.EnrichPanel = {
         if (!this._current) return;
         const { nodeData, caseId } = this._current;
         JobLog?.push?.({ message: `🔍 Enrich ${nodeData.label}…`, status: "running" });
-        const result = await App.runAction({ action: "enrich", case_id: caseId, indicator_filter: nodeData.label });
+        const result = await App.runAction({
+            action:           "enrich",
+            case_id:          caseId,
+            indicator_filter: nodeData.label,
+            api_keys:         App._collectAllApiKeys(),
+        });
         if (result?.job_id) {
             App.socket?.on?.("job_update", function handler(d) {
                 if (d.job_id === result.job_id && d.status === "done") {
