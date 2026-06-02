@@ -248,21 +248,33 @@ window.Modules = {
     // Modules sans clé API : section absente
     // ══════════════════════════════════════════
     _renderCorrelationPanel(schema) {
-        const container = document.getElementById("correlation-container");
-        if (!container) return;
-        container.innerHTML = "";
+        // Modules pivot (recon surface) vs corrélation (cross-IOC intel)
+        const PIVOT_KEYS = new Set(["shodan", "censys", "viewdns", "urlscan"]);
+
+        const pivotEl = document.getElementById("pivot-container");
+        const corrEl  = document.getElementById("correlation-container");
+        if (pivotEl) pivotEl.innerHTML = "";
+        if (corrEl)  corrEl.innerHTML  = "";
 
         const entries = Object.entries(schema);
         if (!entries.length) {
-            container.innerHTML = `<p class="text-slate-600 text-xs italic">No correlation modules.</p>`;
+            if (corrEl) corrEl.innerHTML = `<p class="text-slate-600 text-xs italic">No correlation modules.</p>`;
             return;
         }
 
-        // Un bloc par module de corrélation
         entries.forEach(([modKey, mod]) => {
-            // Ne pas afficher si pas de clé API
             const hasKey = SecretStore?.has?.(modKey) ?? false;
             if (!hasKey) return;
+
+            const isPivot   = PIVOT_KEYS.has(modKey);
+            const container = isPivot ? pivotEl : corrEl;
+            if (!container) return;
+
+            // Couleur selon le type de module
+            const accentColor  = isPivot ? "text-amber-400"  : "text-violet-400";
+            const toggleColor  = isPivot ? "peer-checked:bg-amber-500"  : "peer-checked:bg-violet-500";
+            const rangeAccent  = isPivot ? "accent-amber-500"  : "accent-violet-500";
+            const valColor     = isPivot ? "text-amber-500"   : "text-violet-400";
 
             const isOn = this._correlateEnabled[modKey] !== false;
 
@@ -274,13 +286,13 @@ window.Modules = {
             header.className = "flex items-center justify-between px-3 py-2.5 cursor-pointer " +
                                "bg-slate-900/60 hover:bg-slate-900 transition select-none";
             header.innerHTML = `
-                <span class="flex items-center gap-2 text-xs font-bold text-amber-400">
+                <span class="flex items-center gap-2 text-xs font-bold ${accentColor}">
                     <i data-lucide="${mod.icon}" class="w-3.5 h-3.5"></i>
                     ${mod.name}
                 </span>
                 <div class="relative shrink-0">
                     <input type="checkbox" class="sr-only peer" ${isOn ? "checked" : ""}>
-                    <div class="w-8 h-4 bg-slate-700 rounded-full peer-checked:bg-amber-500 transition-colors"></div>
+                    <div class="w-8 h-4 bg-slate-700 rounded-full ${toggleColor} transition-colors"></div>
                     <div class="absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full shadow-sm
                                 transition-transform peer-checked:translate-x-4"></div>
                 </div>
@@ -303,11 +315,11 @@ window.Modules = {
                         fieldEl.innerHTML = `
                             <div class="flex justify-between text-[10px] mb-1">
                                 <span class="text-slate-400">${field.label}</span>
-                                <span class="text-amber-500 font-bold" id="${id}_val">${value}</span>
+                                <span class="${valColor} font-bold" id="${id}_val">${value}</span>
                             </div>
                             <input type="range" id="${id}"
                                    min="${field.min}" max="${field.max}" value="${value}"
-                                   class="w-full accent-amber-500">
+                                   class="w-full ${rangeAccent}">
                         `;
                         fieldEl.querySelector("input[type=range]").addEventListener("input", e => {
                             document.getElementById(`${id}_val`).textContent = e.target.value;
@@ -318,7 +330,7 @@ window.Modules = {
                     if (field.type === "checkbox") {
                         fieldEl.innerHTML = `
                             <label class="flex items-center gap-2 cursor-pointer">
-                                <input type="checkbox" ${value ? "checked" : ""} class="accent-amber-500">
+                                <input type="checkbox" ${value ? "checked" : ""} class="${rangeAccent}">
                                 <span class="text-[10px] text-slate-300">${field.label}</span>
                             </label>
                         `;
@@ -333,7 +345,7 @@ window.Modules = {
                 body.innerHTML = `<p class="text-[10px] text-slate-600 italic">No configurable parameters.</p>`;
             }
 
-            // Toggle checkbox → show/hide body
+            // Toggle checkbox → show/hide body + persist
             header.querySelector("input[type=checkbox]").addEventListener("change", e => {
                 this._setCorrelateEnabled(modKey, e.target.checked);
                 if (e.target.checked) body.classList.remove("hidden");
