@@ -91,11 +91,19 @@ window.EnrichPanel = {
 
         // ── HTTP ──
         const httpRows = [];
-        if (svc.http_status)  httpRows.push(["Status", svc.http_status]);
-        if (svc.http_title)   httpRows.push(["Title", svc.http_title]);
-        if (svc.http_server)  httpRows.push(["Server", svc.http_server]);
-        if (svc.http?.title)  httpRows.push(["Title", svc.http.title]);
-        if (svc.http?.status_code) httpRows.push(["Status", svc.http.status_code]);
+        if (svc.http_status)       httpRows.push(["Status",       svc.http_status]);
+        if (svc.http_reason)       httpRows.push(["Reason",       svc.http_reason]);
+        if (svc.http_title)        httpRows.push(["Title",        svc.http_title]);
+        if (svc.http_server)       httpRows.push(["Server",       svc.http_server]);
+        if (svc.http?.title)       httpRows.push(["Title",        svc.http.title]);
+        if (svc.http?.status_code) httpRows.push(["Status",       svc.http.status_code]);
+        if (svc.http_content_type) httpRows.push(["Content-Type", svc.http_content_type]);
+        if (svc.http_powered_by)   httpRows.push(["X-Powered-By", svc.http_powered_by]);
+        if (svc.http_location)     httpRows.push(["Location",     svc.http_location]);
+        if (svc.http_auth)         httpRows.push(["Auth",         svc.http_auth]);
+        if (svc.http_x_frame)      httpRows.push(["X-Frame",      svc.http_x_frame]);
+        if (svc.http_hsts)         httpRows.push(["HSTS",         svc.http_hsts]);
+        if (svc.http_body_hash)    httpRows.push(["Body SHA256",  svc.http_body_hash]);
         if (httpRows.length) sections.push(section("globe", "HTTP", kv(httpRows)));
 
         // ── DNS (Censys) ──
