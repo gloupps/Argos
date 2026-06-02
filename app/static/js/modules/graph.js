@@ -56,11 +56,6 @@ window.GraphModule = {
         cy.on("viewport", () => ContextMenu.hide());
 
         // ── Drag-to-link : clic droit maintenu ──────────────
-        // mousedown  → hit-test manuel → start()
-        // mousemove  → update SVG line (toujours actif sur container)
-        // mouseup    → sur document pour capturer même hors container
-        // contextmenu → annuler si drag actif
-
         const _hitNode = (clientX, clientY) => {
             const rect = container.getBoundingClientRect();
             const x = clientX - rect.left;
@@ -85,7 +80,6 @@ window.GraphModule = {
             LinkDrag.move(e, cy);
         });
 
-        // mouseup sur document pour capturer le relâché hors container
         const _onDocMouseUp = e => {
             if (e.button !== 2) return;
             if (!LinkDrag.isActive()) return;
@@ -132,7 +126,7 @@ window.GraphModule = {
         if (tabId) this._mergeRender(tabId, graphData);
     },
 
-    // ── Helpers de construction d'éléments ────────────────
+    // ── Construction des éléments ─────────────────────────
 
     _buildElements(data, savedPos) {
         const elements  = [];
@@ -152,8 +146,7 @@ window.GraphModule = {
             elements.push(el);
         });
 
-        // ── Pivot nodes depuis la table pivots ──────────────
-        // Indexer les pivots par id pour déduplication dans legacy_edges
+        // ── Pivot nodes ────────────────────────────────────
         const pivotById = {};
         (data.pivots || []).forEach(p => {
             const pivotId = `pivot::${p.id}`;
@@ -173,9 +166,7 @@ window.GraphModule = {
             }
         });
 
-        // ── Edges pivot↔IOC depuis pivot_links (avec direction) ──
-        // direction="out" → IOC --→ pivot   (l'analyste est parti de l'IOC)
-        // direction="in"  → pivot --→ IOC   (le pivot a découvert l'IOC)
+        // ── Edges pivot↔IOC ────────────────────────────────
         const edgeIndex = new Set();
         (data.edges || []).forEach(e => {
             const pivotId = `pivot::${e.pivot_id}`;
@@ -193,9 +184,7 @@ window.GraphModule = {
             }});
         });
 
-        // ── Legacy edges (table correlation) ─────────────
-        // Seulement les edges dont le pivot n'est PAS déjà dans data.pivots
-        // pour éviter le double rendu
+        // ── Legacy edges ───────────────────────────────────
         const pivotLabelToId = {};
         (data.pivots || []).forEach(p => { pivotLabelToId[p.label] = `pivot::${p.id}`; });
 
@@ -207,10 +196,7 @@ window.GraphModule = {
 
             const pivotText = e.pivot;
             if (pivotText && pivotText !== "true" && pivotText !== "True") {
-                // Si ce pivot est déjà dans pivot_links → ses edges sont déjà rendus, skip
                 if (pivotLabelToId[pivotText]) return;
-
-                // Pivot legacy non migré
                 const pivotId = `pivot::legacy::${pivotText}`;
                 if (!nodeIndex.has(pivotId)) {
                     nodeIndex.add(pivotId);
@@ -265,27 +251,52 @@ window.GraphModule = {
 
         if (cy.nodes().length <= unsettled.length) {
             this._runLayout(cy, elements.length);
-        } else {
-            unsettled.forEach(n => {
-                const neighbors = n.neighborhood("node").filter(nb => savedPos[nb.id()]);
-                if (neighbors.length > 0) {
-                    const avg = neighbors.reduce((acc, nb) => {
-                        const p = nb.position();
-                        return { x: acc.x + p.x, y: acc.y + p.y };
-                    }, { x: 0, y: 0 });
-                    n.position({
-                        x: avg.x / neighbors.length + (Math.random() - 0.5) * 80,
-                        y: avg.y / neighbors.length + (Math.random() - 0.5) * 80,
-                    });
-                } else {
-                    const ext = cy.extent();
-                    n.position({
-                        x: ext.x1 + Math.random() * (ext.x2 - ext.x1),
-                        y: ext.y1 + Math.random() * (ext.y2 - ext.y1),
-                    });
-                }
-            });
+            return;
         }
+
+        // Positionner les nouveaux nœuds près de leurs voisins connus
+        unsettled.forEach(n => {
+            const neighbors = n.neighborhood("node").filter(nb => savedPos[nb.id()]);
+            if (neighbors.length > 0) {
+                const avg = neighbors.reduce((acc, nb) => {
+                    const p = nb.position();
+                    return { x: acc.x + p.x, y: acc.y + p.y };
+                }, { x: 0, y: 0 });
+                n.position({
+                    x: avg.x / neighbors.length + (Math.random() - 0.5) * 100,
+                    y: avg.y / neighbors.length + (Math.random() - 0.5) * 100,
+                });
+            } else {
+                const ext = cy.extent();
+                n.position({
+                    x: ext.x1 + Math.random() * (ext.x2 - ext.x1),
+                    y: ext.y1 + Math.random() * (ext.y2 - ext.y1),
+                });
+            }
+        });
+
+        // Mini-layout animé sur les nouveaux nœuds + voisins directs
+        const subgraph = unsettled.union(unsettled.neighborhood());
+        try {
+            subgraph.layout({
+                name: "cose",
+                animate: true,
+                animationDuration: 500,
+                animationEasing: "ease-out-cubic",
+                fit: false,
+                padding: 20,
+                nodeRepulsion: () => 8000,
+                idealEdgeLength: () => 110,
+                edgeElasticity: () => 80,
+                gravity: 0.2,
+                numIter: 300,
+                randomize: false,
+            }).run();
+        } catch (_) { /* fallback silencieux */ }
+
+        // Effet "pulse" sur les nouveaux nœuds
+        unsettled.addClass("new-node");
+        setTimeout(() => unsettled.removeClass("new-node"), 1400);
     },
 
     _selectNode(tabId, nodeId) {
@@ -303,9 +314,21 @@ window.GraphModule = {
         } else {
             try {
                 layout = cy.layout({
-                    name: "cose", animate: false, fit: true, padding: 40,
-                    nodeRepulsion: () => 8000, idealEdgeLength: () => 100,
-                    gravity: 0.4, numIter: 500,
+                    name: "cose",
+                    animate: true,
+                    animationDuration: 700,
+                    animationEasing: "ease-out-cubic",
+                    fit: true,
+                    padding: 50,
+                    nodeRepulsion: () => 12000,
+                    idealEdgeLength: () => 120,
+                    edgeElasticity: () => 100,
+                    gravity: 0.3,
+                    numIter: 800,
+                    initialTemp: 200,
+                    coolingFactor: 0.95,
+                    minTemp: 1.0,
+                    randomize: false,
                 });
             } catch (_) {
                 layout = cy.layout({ name: "grid", fit: true, padding: 40 });
@@ -317,39 +340,69 @@ window.GraphModule = {
     _styles() {
         return [
             { selector: "node", style: {
-                "label": "data(label)", "font-size": 9, "color": "#e2e8f0",
-                "text-valign": "bottom", "text-halign": "center", "text-margin-y": 4,
-                "background-color": "#3b82f6", "width": 36, "height": 36,
+                "label":        "data(label)",
+                "font-size":    9,
+                "color":        "#e2e8f0",
+                "text-valign":  "bottom",
+                "text-halign":  "center",
+                "text-margin-y": 4,
+                "background-color": "#3b82f6",
+                "width":  36, "height": 36,
                 "border-width": 2, "border-color": "#1e40af",
+                "transition-property": "background-color, border-color, width, height",
+                "transition-duration": "0.25s",
             }},
             { selector: "node.root", style: {
-                "background-color": "#ef4444", "border-color": "#7f1d1d",
-                "width": 48, "height": 48, "font-size": 10, "font-weight": "bold",
+                "background-color": "#ef4444",
+                "border-color":     "#7f1d1d",
+                "width": 48, "height": 48,
+                "font-size": 10, "font-weight": "bold",
             }},
             { selector: "node.pivot", style: {
-                "background-color": "#f59e0b", "border-color": "#78350f",
-                "width": 34, "height": 34, "font-size": 8,
-                "color": "#fef3c7", "shape": "diamond",
+                "background-color": "#f59e0b",
+                "border-color":     "#78350f",
+                "width": 32, "height": 32,
+                "font-size": 8,
+                "color":  "#fef3c7",
+                "shape":  "diamond",
             }},
             { selector: "node.correlated", style: {
-                "background-color": "#8b5cf6", "border-color": "#4c1d95",
+                "background-color": "#8b5cf6",
+                "border-color":     "#4c1d95",
             }},
             { selector: "node.selected-node", style: {
-                "border-width": 3, "border-color": "#ffffff",
-                "overlay-color": "#ffffff", "overlay-opacity": 0.12,
+                "border-width":    3,
+                "border-color":    "#ffffff",
+                "overlay-color":   "#ffffff",
+                "overlay-opacity": 0.12,
             }},
             { selector: "node.link-source", style: {
-                "border-width": 3, "border-color": "#3b82f6",
-                "overlay-color": "#3b82f6", "overlay-opacity": 0.2,
+                "border-width":    3,
+                "border-color":    "#3b82f6",
+                "overlay-color":   "#3b82f6",
+                "overlay-opacity": 0.22,
+            }},
+            { selector: "node.new-node", style: {
+                "border-width":    3,
+                "border-color":    "#22d3ee",
+                "overlay-color":   "#22d3ee",
+                "overlay-opacity": 0.28,
+                "transition-property": "overlay-opacity, border-color",
+                "transition-duration": "1.4s",
             }},
             { selector: "edge", style: {
-                "width": 1.5, "line-color": "#334155",
-                "target-arrow-color": "#334155", "target-arrow-shape": "triangle",
-                "curve-style": "bezier", "opacity": 0.7,
+                "width":                1.5,
+                "line-color":           "#334155",
+                "target-arrow-color":   "#334155",
+                "target-arrow-shape":   "triangle",
+                "curve-style":          "bezier",
+                "opacity":              0.7,
             }},
             { selector: "edge.manual", style: {
-                "line-color": "#3b82f6", "target-arrow-color": "#3b82f6",
-                "line-style": "dashed", "opacity": 0.9,
+                "line-color":         "#3b82f6",
+                "target-arrow-color": "#3b82f6",
+                "line-style":         "dashed",
+                "opacity":            0.9,
             }},
         ];
     },
@@ -360,20 +413,20 @@ window.GraphModule = {
 // ══════════════════════════════════════════════════════════
 window.LinkDrag = {
 
-    _srcNode:  null,
-    _srcData:  null,   // copie des data() avant cancel()
-    _caseId:   null,
-    _cy:       null,
-    _tabId:    null,
-    _line:     null,
-    _active:   false,
+    _srcNode: null,
+    _srcData: null,
+    _caseId:  null,
+    _cy:      null,
+    _tabId:   null,
+    _line:    null,
+    _active:  false,
 
     isActive() { return this._active; },
     srcId()    { return this._srcNode?.id(); },
 
     start(node, caseId, cy, tabId) {
         this._srcNode = node;
-        this._srcData = { ...node.data() };   // snapshot immédiat
+        this._srcData = { ...node.data() };
         this._caseId  = caseId;
         this._cy      = cy;
         this._tabId   = tabId;
@@ -407,10 +460,10 @@ window.LinkDrag = {
 
         this.cancel();
 
-        // ── IOC → IOC : créer un nouveau pivot ───────────
+        // ── IOC → IOC : créer un nouveau pivot ────────────
         if (!srcIsPivot && !tgtIsPivot) {
             const pivotName = prompt(`Create a pivot between "${srcLabel}" and "${tgtLabel}":\nPivot name:`, "manual");
-            if (pivotName === null) return;  // annulé par l'utilisateur
+            if (pivotName === null) return;
             const result = await App.runAction({
                 action:      "add_manual_edge",
                 case_id:     caseId,
@@ -427,8 +480,7 @@ window.LinkDrag = {
             return;
         }
 
-        // ── IOC → Pivot (drag depuis l'IOC vers le pivot) ──
-        // IOC --→ pivot : direction "out"
+        // ── IOC → Pivot ────────────────────────────────────
         if (!srcIsPivot && tgtIsPivot) {
             const result = await App.runAction({
                 action:        "add_manual_edge",
@@ -437,7 +489,7 @@ window.LinkDrag = {
                 pivot_label:   tgtLabel,
                 pivot_db_id:   tgtData.pivotDbId ?? null,
                 link_type:     "manual_directed",
-                src_direction: "out",   // IOC → pivot
+                src_direction: "out",
             });
             if (result?.ok) {
                 JobLog?.push?.({ message: `✓ ${srcLabel} → pivot "${tgtLabel}"`, status: "done" });
@@ -447,17 +499,16 @@ window.LinkDrag = {
             return;
         }
 
-        // ── Pivot → IOC (drag depuis le pivot vers l'IOC) ──
-        // pivot --→ IOC : direction "in" (du point de vue de l'IOC)
+        // ── Pivot → IOC ────────────────────────────────────
         if (srcIsPivot && !tgtIsPivot) {
             const result = await App.runAction({
                 action:        "add_manual_edge",
                 case_id:       caseId,
-                src:           tgtLabel,       // on garde src=IOC pour cohérence
+                src:           tgtLabel,
                 pivot_label:   srcLabel,
                 pivot_db_id:   srcData.pivotDbId ?? null,
                 link_type:     "manual_directed",
-                src_direction: "in",    // pivot → IOC (l'IOC "reçoit" du pivot)
+                src_direction: "in",
             });
             if (result?.ok) {
                 JobLog?.push?.({ message: `✓ pivot "${srcLabel}" → ${tgtLabel}`, status: "done" });
@@ -467,9 +518,10 @@ window.LinkDrag = {
             return;
         }
 
-        // ── Pivot → Pivot : non supporté ──
+        // ── Pivot → Pivot : non supporté ──────────────────
         JobLog?.push?.({ message: "Cannot link two pivots directly", status: "failed" });
     },
+
     cancel() {
         this._active = false;
         this._srcNode?.removeClass("link-source");
@@ -521,7 +573,7 @@ window.ContextMenu = {
         this.hide();
         const menu = document.createElement("div");
         menu.id = "ctx-menu";
-        menu.className = "fixed z-50 bg-slate-900 border border-slate-700 rounded-lg shadow-2xl py-1 min-w-[190px] text-sm";
+        menu.className = "fixed z-50 bg-slate-900 border border-slate-700 rounded-lg shadow-2xl py-1 min-w-[200px] text-sm";
         menu.style.left = `${x}px`;
         menu.style.top  = `${y}px`;
         items.forEach(item => menu.appendChild(item));
@@ -544,23 +596,33 @@ window.ContextMenu = {
         items.push(this._header(label, iocType));
 
         if (nodeType === "pivot") {
-            items.push(this._item("pencil",  "Rename pivot", "Rename this pivot label", "blue",
+            items.push(this._item("pencil",  "Rename pivot", "Rename this pivot label",       "blue",
                 () => this._runRenamePivot(nodeData, caseId)));
-            items.push(this._item("share-2", "Re-pivot",     "Re-run correlation",      "amber",
+            items.push(this._item("radar",   "Re-pivot",     "Re-run pivot/surface recon",     "amber",
                 () => this._runPivot(label, iocType, caseId)));
             items.push(this._separator());
-            items.push(this._item("trash-2", "Delete pivot", "Remove pivot and its edges", "red",
+            items.push(this._item("trash-2", "Delete pivot", "Remove pivot and its edges",     "red",
                 () => this._runDeleteNode(nodeData, caseId)));
+
         } else if (nodeType === "root" || nodeType === "correlated") {
-            items.push(this._item("zap",       "Qualify",         "Enrich via all active modules", "blue",
-                () => this._runQualify(label, iocType, caseId, nodeData)));
-            items.push(this._item("share-2",   "Pivot",           "Find correlated indicators",    "amber",
+            // ── Section : Enrichment ──────────────────────
+            items.push(this._sectionLabel("Enrichment"));
+            items.push(this._item("zap",       "Enrich",            "Enrich via enrichment modules (VT, Shodan…)", "blue",
+                () => this._runEnrich(label, iocType, caseId, nodeData)));
+
+            // ── Section : Recon / Pivot ───────────────────
+            items.push(this._sectionLabel("Recon & Correlation"));
+            items.push(this._item("radar",     "Pivot",             "Surface recon — Shodan, Censys, URLScan…",   "amber",
                 () => this._runPivot(label, iocType, caseId)));
-            items.push(this._item("crosshair", "Qualify + Pivot", "Enrich then correlate",         "violet",
-                () => this._runQualifyAndPivot(label, iocType, caseId, nodeData)));
+            items.push(this._item("git-merge", "Correlate",         "Cross-IOC intel — VT, MISP, OpenCTI…",      "violet",
+                () => this._runCorrelate(label, iocType, caseId)));
+            items.push(this._item("crosshair", "Pivot + Correlate", "Pivot then correlate",                       "cyan",
+                () => this._runPivotAndCorrelate(label, iocType, caseId, nodeData)));
+
             items.push(this._separator());
-            items.push(this._item("trash-2", "Delete node", "Remove this indicator", "red",
+            items.push(this._item("trash-2",   "Delete node",       "Remove this indicator",                      "red",
                 () => this._runDeleteNode(nodeData, caseId)));
+
         } else {
             items.push(this._sectionLabel("Add indicator"));
             items.push(this._item("circle-dot", "Root",       "Add as root indicator",       "red",
@@ -586,7 +648,9 @@ window.ContextMenu = {
         return items;
     },
 
-    async _runQualify(label, iocType, caseId, nodeData) {
+    // ── Actions ───────────────────────────────────────────
+
+    async _runEnrich(label, iocType, caseId, nodeData) {
         this.hide();
         const result = await App.runAction({ action: "enrich", case_id: caseId, indicator_filter: label });
         if (result?.job_id) {
@@ -605,7 +669,13 @@ window.ContextMenu = {
         await App.runAction({ action: "correlate", case_id: caseId, indicator_filter: label, correlation_config: corrConfig });
     },
 
-    async _runQualifyAndPivot(label, iocType, caseId, nodeData) {
+    async _runCorrelate(label, iocType, caseId) {
+        this.hide();
+        const corrConfig = Modules?.collectCorrelationConfig?.() || {};
+        await App.runAction({ action: "correlate", case_id: caseId, indicator_filter: label, correlation_config: corrConfig });
+    },
+
+    async _runPivotAndCorrelate(label, iocType, caseId, nodeData) {
         this.hide();
         const corrConfig = Modules?.collectCorrelationConfig?.() || {};
         const result = await App.runAction({
@@ -666,8 +736,7 @@ window.ContextMenu = {
         if (!value?.trim()) return;
         const tabId = App?.state?.activeTab;
 
-        // Un pivot est une entité de la table pivots, pas un indicateur
-        const action = nodeType === "pivot" ? "add_pivot" : "add_ioc";
+        const action  = nodeType === "pivot" ? "add_pivot" : "add_ioc";
         const payload = nodeType === "pivot"
             ? { action, case_id: caseId, label: value.trim() }
             : { action, case_id: caseId, value: value.trim(), node_type: nodeType };
@@ -683,11 +752,13 @@ window.ContextMenu = {
         }
     },
 
+    // ── UI helpers ────────────────────────────────────────
+
     _header(label, type) {
         const el = document.createElement("div");
         el.className = "px-3 py-2 border-b border-slate-800 flex items-center gap-2";
         el.innerHTML = `
-            <span class="text-slate-200 text-xs font-bold mono truncate max-w-[140px]" title="${label}">${label}</span>
+            <span class="text-slate-200 text-xs font-bold mono truncate max-w-[150px]" title="${label}">${label}</span>
             <span class="bg-slate-700 text-slate-400 text-[9px] px-1.5 py-0.5 rounded uppercase shrink-0">${type}</span>`;
         return el;
     },
@@ -708,10 +779,11 @@ window.ContextMenu = {
 
     _item(icon, label, tooltip, color, onClick) {
         const colors = {
-            blue:   "text-blue-400 hover:bg-blue-500/10",
-            amber:  "text-amber-400 hover:bg-amber-500/10",
+            blue:   "text-blue-400   hover:bg-blue-500/10",
+            amber:  "text-amber-400  hover:bg-amber-500/10",
             violet: "text-violet-400 hover:bg-violet-500/10",
-            red:    "text-red-400 hover:bg-red-500/10",
+            cyan:   "text-cyan-400   hover:bg-cyan-500/10",
+            red:    "text-red-400    hover:bg-red-500/10",
         };
         const el = document.createElement("button");
         el.className = `w-full flex items-center gap-3 px-3 py-1.5 transition text-left
