@@ -79,9 +79,16 @@ window.CaseModule = {
         this._clearError(form);
 
         const corrConfig = Modules?.collectCorrelationConfig?.() || {};
+        const apiKeys = sourceMode === "internal_source"
+            ? SecretStore.keys()
+                .filter(k => !k.startsWith("extra_") && !k.startsWith("misp_instances"))
+                .reduce((acc, k) => { acc[k] = SecretStore.get(k); return acc; }, {})
+            : App._collectApiKeys(true);
+
         const result = await App.runAction({
             ...payload,
-            api_keys:           App._collectApiKeys(true),   // true = inclure les clés correlate
+            api_keys:           App._collectAllApiKeys(),
+            extra_config:       App._collectExtraConfig(),
             correlation_config: corrConfig,
         });
         if (btn) {
@@ -126,22 +133,55 @@ window.CaseModule = {
             const reader = new FileReader();
             reader.onload = (e) => {
                 try {
-                    const raw    = JSON.parse(e.target.result);
-                    // Accepte bundle {type:"bundle", objects:[]} ou tableau direct
-                    const objects = raw.objects ?? (Array.isArray(raw) ? raw : [raw]);
-                    const iocs   = [];
-                    for (const obj of objects) {
-                        if (!obj || obj.type !== "indicator") continue;
-                        const pattern = obj.pattern || "";
-                        // Extrait toutes les valeurs = '...' dans le pattern
-                        const matches = [...pattern.matchAll(/=\s*['"]([^'"]+)['"]/g)];
-                        for (const m of matches) {
-                            const val = m[1].trim();
-                            if (val) iocs.push(val);
-                        }
+                    const raw = JSON.parse(e.target.result);
+
+                    // Accepte : bundle { objects: [] }, tableau direct, ou objet seul
+                    let objects = [];
+                    if (Array.isArray(raw)) {
+                        objects = raw;
+                    } else if (raw.objects && Array.isArray(raw.objects)) {
+                        objects = raw.objects;
+                    } else if (raw.type) {
+                        objects = [raw];
                     }
+
+                    console.log(`[STIX2] ${objects.length} objects found, types:`,
+                        [...new Set(objects.map(o => o?.type).filter(Boolean))]);
+
+                    const iocs = [];
+                    const seen = new Set();
+                    const add = (val) => {
+                        val = val?.trim();
+                        if (val && !seen.has(val)) { seen.add(val); iocs.push(val); }
+                    };
+
+                    for (const obj of objects) {
+                        if (!obj?.type) continue;
+
+                        if (obj.type === "indicator") {
+                            const pattern = obj.pattern || "";
+                            // Guillemets simples ET doubles
+                            for (const m of pattern.matchAll(/=\s*['"]([^'"]+)['"]/g)) {
+                                add(m[1]);
+                            }
+                            continue;
+                        }
+
+                        if (obj.type === "ipv4-addr" || obj.type === "ipv6-addr")   { add(obj.value); continue; }
+                        if (obj.type === "domain-name")                              { add(obj.value); continue; }
+                        if (obj.type === "url")                                      { add(obj.value); continue; }
+                        if (obj.type === "file") {
+                            const h = obj.hashes || {};
+                            add(h["SHA-256"] || h["SHA256"] || h["MD5"] || h["SHA-1"]);
+                            continue;
+                        }
+                        if (obj.type === "x-opencti-simple-observable")              { add(obj.value); continue; }
+                    }
+
+                    console.log(`[STIX2] ${iocs.length} IOCs extracted:`, iocs.slice(0, 10));
                     resolve(iocs.join("\n"));
                 } catch (err) {
+                    console.error("[STIX2] parse error", err);
                     reject(err);
                 }
             };
