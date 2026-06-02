@@ -166,7 +166,7 @@ class CensysModule(Module):
 
             if svc_list:
                 results.append(
-                    self._f(indicator, "Services", "censys_services", svc_list)
+                    self._f(indicator, "Censys Services", "censys_services", svc_list)
                 )
 
             # Ports ouverts résumé
@@ -355,11 +355,28 @@ class CensysModule(Module):
                 entry["http_status"] = str(http["status_code"])
             if http.get("status_reason"):
                 entry["http_reason"] = http["status_reason"]
-            # Headers intéressants
+            # Headers
             headers_raw = http.get("headers") or {}
             server = (headers_raw.get("Server") or {}).get("headers", [])
             if server:
                 entry["http_server"] = server[0]
+            # Extraire headers HTTP utiles supplémentaires
+            interesting_headers = {
+                "Content-Type":              "http_content_type",
+                "X-Powered-By":              "http_powered_by",
+                "Location":                  "http_location",
+                "WWW-Authenticate":          "http_auth",
+                "X-Frame-Options":           "http_x_frame",
+                "Strict-Transport-Security": "http_hsts",
+            }
+            for hname, hkey in interesting_headers.items():
+                hvals = (headers_raw.get(hname) or {}).get("headers", [])
+                if hvals:
+                    entry[hkey] = hvals[0]
+            # Body hash (sha256)
+            body_hash = http.get("body_hash") or http.get("body_sha256") or ""
+            if body_hash:
+                entry["http_body_hash"] = body_hash
             # Body snippet
             body = http.get("body") or ""
             if body and len(body) > 10:
@@ -666,17 +683,3 @@ class CensysModule(Module):
             "link": None,
             "max": max_,
         }
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# PATCH qualif.js — _THEME_MAP
-# Ajouter ces entrées (les nouvelles par rapport à l'ancienne version) :
-#
-#     "Location":       "host",
-#     "Reverse DNS":    "dns",
-#     "Hosted Domains": "dns",
-#     "Domain Count":   "dns",
-#     "DNS Names":      "dns",
-#     "Organization":   "host",   ← déjà présent normalement
-#     "Censys Search":  "intel",
-# ─────────────────────────────────────────────────────────────────────────────
