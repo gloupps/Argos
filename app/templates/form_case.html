@@ -11,8 +11,7 @@
             <label class="text-xs text-slate-400">Case Name</label>
             <input name="case_name" type="text" required
                    placeholder="Ex: Phishing infra — May 2026"
-                   class="w-full mt-1 p-2 rounded bg-slate-900 border border-slate-700 text-sm
-                          focus:outline-none focus:ring-1 focus:ring-blue-500">
+                   class="argos-input mt-1">
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
@@ -84,8 +83,7 @@
                     </label>
                     <input name="internal_source_url" type="text"
                            placeholder="https://opencti.local/reports/… or https://misp.local/events/view/42"
-                           class="w-full p-2 rounded bg-slate-900 border border-slate-700 text-sm
-                                  focus:outline-none focus:ring-1 focus:ring-green-500">
+                           class="argos-input mt-1">
                 </div>
                 <p class="text-[10px] text-slate-600 italic">
                     Uses the API key configured in Settings for the selected source.
@@ -98,15 +96,14 @@
                 </label>
                 <textarea name="ioc_list" rows="7"
                           placeholder="1.1.1.1&#10;evil.example.com&#10;d41d8cd98f00b204e9800998ecf8427e"
-                          class="w-full p-2 rounded bg-slate-900 border border-slate-700 text-sm mono
-                                 focus:outline-none focus:ring-1 focus:ring-green-500 resize-none"></textarea>
+                          class="argos-input mt-1"></textarea>
             </div>
             <div id="form-file" class="form-section hidden space-y-2">
                 <label class="text-[10px] text-slate-500 uppercase tracking-wider mb-1 block">
                     STIX2 Bundle (.json) — indicators only
                 </label>
                 <input name="stix_file" id="stix-file-input" type="file" accept=".json"
-                       class="w-full p-2 rounded bg-slate-900 border border-slate-700 text-sm">
+                       class="argos-input mt-1">
                 <div id="stix-preview" class="hidden text-[10px] text-slate-400 bg-slate-900/50 
                                                rounded p-2 border border-slate-800">
                     <!-- rempli par JS -->
@@ -117,7 +114,7 @@
                     Select an existing case to reopen
                 </label>
                 <select name="existing_case"
-                        class="w-full p-2 rounded bg-slate-900 border border-slate-700 text-sm">
+                        class="argos-input mt-1">
                     <option value="">— Select a case —</option>
                     {% for case in existing_cases %}
                         <option value="{{ case.id }}">{{ case.name }}</option>
@@ -129,8 +126,7 @@
 
     <div class="flex justify-end">
         <button type="submit" data-action="new-case"
-                class="bg-blue-600 hover:bg-blue-500 disabled:opacity-40 px-5 py-2 rounded
-                       text-sm font-semibold flex items-center gap-2 transition">
+                class="argos-btn argos-btn-primary disabled:opacity-40">
             <i data-lucide="play" class="w-4 h-4"></i> Create Case
         </button>
     </div>

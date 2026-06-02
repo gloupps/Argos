@@ -1,0 +1,557 @@
+/* ═══════════════════════════════════════════════════════
+   ARGOS — Design System
+   Palette from logo: deep purple-navy + gold + teal
+   ═══════════════════════════════════════════════════════ */
+
+/* ── Fonts ── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono&family=Cinzel:wght@400;700&display=swap');
+
+/* ══════════════════════════════════════════════════════
+   DARK THEME (default)
+   ══════════════════════════════════════════════════════ */
+:root,
+[data-theme="dark"] {
+  /* Backgrounds */
+  --bg-base:        #07050f;
+  --bg-surface:     #0f0d1a;
+  --bg-elevated:    #16132a;
+  --bg-overlay:     #1e1a32;
+  --bg-hover:       #252040;
+
+  /* Borders */
+  --border-subtle:  rgba(212, 175, 55, 0.08);
+  --border-default: rgba(212, 175, 55, 0.15);
+  --border-accent:  rgba(212, 175, 55, 0.35);
+
+  /* Gold — primary accent */
+  --gold-bright:    #f5e080;
+  --gold-main:      #d4af37;
+  --gold-muted:     #a08040;
+  --gold-dim:       #6b5c3e;
+  --gold-glow:      rgba(212, 175, 55, 0.15);
+
+  /* Teal — secondary accent */
+  --teal-bright:    #4a9090;
+  --teal-main:      #2a7070;
+  --teal-muted:     #1e5858;
+  --teal-dim:       #0a2828;
+
+  /* Text */
+  --text-primary:   #f0e8d0;
+  --text-secondary: #9d8e6e;
+  --text-muted:     #5a5040;
+  --text-inverse:   #0f0d1a;
+
+  /* Status colors */
+  --status-red:     #ef4444;
+  --status-amber:   #f59e0b;
+  --status-green:   #22c55e;
+
+  /* Glass */
+  --glass-bg:       rgba(15, 13, 26, 0.85);
+  --glass-border:   rgba(212, 175, 55, 0.12);
+
+  /* Sidebar */
+  --sidebar-width:  260px;
+
+  /* Scrollbar */
+  --scrollbar-track:  #0f0d1a;
+  --scrollbar-thumb:  #2a2040;
+  --scrollbar-hover:  #d4af37;
+}
+
+/* ══════════════════════════════════════════════════════
+   LIGHT THEME
+   ══════════════════════════════════════════════════════ */
+[data-theme="light"] {
+  --bg-base:        #f5f0e8;
+  --bg-surface:     #ede8dc;
+  --bg-elevated:    #e4ddd0;
+  --bg-overlay:     #d8d0c0;
+  --bg-hover:       #ccc4b0;
+
+  --border-subtle:  rgba(107, 92, 62, 0.12);
+  --border-default: rgba(107, 92, 62, 0.22);
+  --border-accent:  rgba(139, 96, 16, 0.45);
+
+  --gold-bright:    #8a6010;
+  --gold-main:      #a07820;
+  --gold-muted:     #c89a30;
+  --gold-dim:       #d4af60;
+  --gold-glow:      rgba(160, 120, 32, 0.12);
+
+  --teal-bright:    #1e5858;
+  --teal-main:      #2a7070;
+  --teal-muted:     #4a9090;
+  --teal-dim:       #a0c8c8;
+
+  --text-primary:   #1a1208;
+  --text-secondary: #5a4820;
+  --text-muted:     #9a8860;
+  --text-inverse:   #f0e8d0;
+
+  --glass-bg:       rgba(240, 232, 216, 0.88);
+  --glass-border:   rgba(107, 92, 62, 0.18);
+
+  --scrollbar-track:  #ede8dc;
+  --scrollbar-thumb:  #c8b880;
+  --scrollbar-hover:  #a07820;
+}
+
+/* ══════════════════════════════════════════════════════
+   BASE RESET
+   ══════════════════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; }
+
+html { height: 100%; }
+
+body.argos-body {
+  font-family: 'Inter', sans-serif;
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  height: 100vh;
+  overflow: hidden;
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+/* ── Scrollbars ── */
+::-webkit-scrollbar              { width: 5px; height: 5px; }
+::-webkit-scrollbar-track        { background: var(--scrollbar-track); }
+::-webkit-scrollbar-thumb        { background: var(--scrollbar-thumb); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover  { background: var(--scrollbar-hover); }
+
+/* ── Mono font ── */
+.mono, .argos-mono { font-family: 'JetBrains Mono', monospace; }
+
+/* ══════════════════════════════════════════════════════
+   GLASS PANELS
+   ══════════════════════════════════════════════════════ */
+.glass,
+.argos-glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+}
+
+/* ══════════════════════════════════════════════════════
+   LAYOUT — SIDEBARS
+   ══════════════════════════════════════════════════════ */
+
+/* Left navbar */
+aside.argos-left {
+  width: var(--sidebar-width);
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border-default);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  transition: background 0.25s;
+}
+
+/* Right navbar */
+aside.argos-right {
+  width: 320px;
+  background: var(--bg-surface);
+  border-left: 1px solid var(--border-default);
+  padding: 1rem;
+  overflow-y: auto;
+  transition: background 0.25s;
+}
+
+/* Main */
+.argos-main {
+  background: var(--bg-base);
+  transition: background 0.25s;
+}
+
+/* ══════════════════════════════════════════════════════
+   LOGO ZONE
+   ══════════════════════════════════════════════════════ */
+.argos-logo-zone {
+  display: flex;
+  align-items: center;
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--border-default);
+  background: linear-gradient(135deg, var(--bg-elevated) 0%, var(--bg-surface) 100%);
+  position: relative;
+}
+
+.argos-logo-zone::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--gold-dim), transparent);
+}
+
+/* In light mode, hide the dark-background SVG and show only the eye/text parts */
+[data-theme="light"] .argos-logo-img {
+  filter: invert(1) hue-rotate(180deg) saturate(0.6) brightness(0.5);
+}
+
+/* ══════════════════════════════════════════════════════
+   TABS BAR
+   ══════════════════════════════════════════════════════ */
+.argos-tabs-bar {
+  height: 40px;
+  display: flex;
+  align-items: center;
+  padding: 0 1rem;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--border-default);
+  background: var(--bg-surface);
+  transition: background 0.25s;
+}
+
+.argos-tab {
+  height: 28px;
+  padding: 0 0.75rem;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.argos-tab:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-subtle);
+}
+
+.argos-tab.active {
+  background: var(--bg-elevated);
+  color: var(--gold-main);
+  border-color: var(--border-accent);
+}
+
+/* ══════════════════════════════════════════════════════
+   SIDEBAR SECTION HEADERS
+   ══════════════════════════════════════════════════════ */
+.argos-section-header {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 0.6rem 1rem 0.3rem;
+}
+
+/* ══════════════════════════════════════════════════════
+   MODULE ITEMS (sidebar)
+   ══════════════════════════════════════════════════════ */
+.argos-module-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+  border: 1px solid transparent;
+}
+
+.argos-module-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-subtle);
+}
+
+.argos-module-item.active {
+  background: var(--gold-glow);
+  color: var(--gold-main);
+  border-color: var(--border-accent);
+}
+
+/* ══════════════════════════════════════════════════════
+   BUTTONS
+   ══════════════════════════════════════════════════════ */
+.argos-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.9rem;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  border: 1px solid;
+}
+
+.argos-btn-primary {
+  background: linear-gradient(135deg, var(--gold-main), var(--gold-muted));
+  color: #0f0d1a;
+  border-color: var(--gold-dim);
+}
+.argos-btn-primary:hover {
+  background: linear-gradient(135deg, var(--gold-bright), var(--gold-main));
+  box-shadow: 0 0 16px var(--gold-glow);
+}
+
+.argos-btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border-color: var(--border-default);
+}
+.argos-btn-ghost:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-accent);
+}
+
+.argos-btn-danger {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.25);
+}
+.argos-btn-danger:hover {
+  background: rgba(239, 68, 68, 0.2);
+}
+
+/* Icon-only button */
+.argos-btn-icon {
+  padding: 0.35rem;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.argos-btn-icon:hover {
+  background: var(--bg-hover);
+  color: var(--gold-main);
+  border-color: var(--border-subtle);
+}
+
+/* ══════════════════════════════════════════════════════
+   DARK / LIGHT TOGGLE
+   ══════════════════════════════════════════════════════ */
+.argos-theme-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 20px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  user-select: none;
+}
+
+.argos-theme-toggle:hover {
+  border-color: var(--border-accent);
+  color: var(--gold-main);
+}
+
+.argos-theme-toggle .toggle-track {
+  width: 32px;
+  height: 16px;
+  border-radius: 8px;
+  background: var(--bg-overlay);
+  border: 1px solid var(--border-default);
+  position: relative;
+  transition: background 0.2s;
+}
+
+.argos-theme-toggle .toggle-thumb {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--gold-main);
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  transition: transform 0.2s, background 0.2s;
+  box-shadow: 0 0 4px var(--gold-glow);
+}
+
+[data-theme="light"] .argos-theme-toggle .toggle-thumb {
+  transform: translateX(16px);
+  background: var(--gold-bright);
+}
+
+[data-theme="light"] .argos-theme-toggle .toggle-track {
+  background: var(--bg-hover);
+}
+
+/* ══════════════════════════════════════════════════════
+   CARDS / GLASS PANELS
+   ══════════════════════════════════════════════════════ */
+.argos-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  padding: 1.25rem;
+  transition: background 0.25s, border-color 0.25s;
+}
+
+.argos-card:hover {
+  border-color: var(--border-accent);
+}
+
+.argos-card-accent {
+  border-left: 3px solid var(--gold-main);
+}
+
+/* ══════════════════════════════════════════════════════
+   FORM INPUTS
+   ══════════════════════════════════════════════════════ */
+.argos-input {
+  width: 100%;
+  padding: 0.45rem 0.75rem;
+  border-radius: 7px;
+  font-size: 13px;
+  background: var(--bg-overlay);
+  border: 1px solid var(--border-default);
+  color: var(--text-primary);
+  transition: border-color 0.15s, box-shadow 0.15s;
+  outline: none;
+}
+
+.argos-input:focus {
+  border-color: var(--gold-muted);
+  box-shadow: 0 0 0 2px var(--gold-glow);
+}
+
+.argos-input::placeholder {
+  color: var(--text-muted);
+}
+
+textarea.argos-input { resize: vertical; }
+
+input[type="datetime-local"]::-webkit-calendar-picker-indicator { filter: invert(1); }
+
+/* ══════════════════════════════════════════════════════
+   CYTOSCAPE GRAPH
+   ══════════════════════════════════════════════════════ */
+#cy {
+  width: 100%;
+  height: 500px;
+  background: var(--bg-elevated);
+  border-radius: 10px;
+  border: 1px solid var(--border-default);
+}
+
+/* ══════════════════════════════════════════════════════
+   SECTION HEADERS (right panel)
+   ══════════════════════════════════════════════════════ */
+.argos-panel-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.argos-panel-title.gold  { color: var(--gold-main); }
+.argos-panel-title.teal  { color: var(--teal-bright); }
+.argos-panel-title.amber { color: #f59e0b; }
+.argos-panel-title.violet { color: #a78bfa; }
+
+/* ══════════════════════════════════════════════════════
+   DIVIDERS
+   ══════════════════════════════════════════════════════ */
+.argos-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border-default), transparent);
+  margin: 0.75rem 0;
+}
+
+/* ══════════════════════════════════════════════════════
+   SETTINGS MODAL
+   ══════════════════════════════════════════════════════ */
+.argos-modal-overlay {
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(6px);
+}
+
+.argos-modal {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-accent);
+  border-radius: 14px;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.5), 0 0 0 1px var(--border-subtle);
+}
+
+/* ══════════════════════════════════════════════════════
+   ENRICH BOXES
+   ══════════════════════════════════════════════════════ */
+.argos-enrich-box {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  overflow: hidden;
+  transition: border-color 0.15s;
+}
+
+.argos-enrich-box:hover {
+  border-color: var(--border-accent);
+}
+
+/* ══════════════════════════════════════════════════════
+   MISC UTILITIES
+   ══════════════════════════════════════════════════════ */
+
+/* Gold text */
+.text-gold        { color: var(--gold-main); }
+.text-gold-bright { color: var(--gold-bright); }
+.text-gold-muted  { color: var(--gold-muted); }
+.text-teal        { color: var(--teal-bright); }
+
+/* Animated gold shimmer on borders */
+@keyframes gold-pulse {
+  0%, 100% { opacity: 0.4; }
+  50%       { opacity: 1; }
+}
+.argos-pulse { animation: gold-pulse 2.5s ease-in-out infinite; }
+
+/* Job log */
+#job-log {
+  background: var(--bg-elevated) !important;
+  border-color: var(--border-accent) !important;
+}
+
+/* Enrich panel background */
+#enrich-grid {
+  color: var(--text-primary);
+}
+
+/* Tailwind overrides for theme vars */
+[data-theme="light"] .bg-slate-950,
+[data-theme="light"] .bg-slate-900\/50,
+[data-theme="light"] .bg-slate-900 {
+  background-color: var(--bg-elevated) !important;
+}
+[data-theme="light"] .border-slate-800,
+[data-theme="light"] .border-slate-700 {
+  border-color: var(--border-default) !important;
+}
+[data-theme="light"] .text-slate-400,
+[data-theme="light"] .text-slate-500 {
+  color: var(--text-secondary) !important;
+}
+[data-theme="light"] .text-slate-200,
+[data-theme="light"] .text-white {
+  color: var(--text-primary) !important;
+}
+[data-theme="light"] .bg-slate-800 {
+  background-color: var(--bg-overlay) !important;
+}
+[data-theme="light"] body {
+  background-color: var(--bg-base) !important;
+}

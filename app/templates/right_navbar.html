@@ -1,31 +1,31 @@
 <!-- app/templates/right_navbar.html -->
-<aside class="w-80 border-l border-slate-800 glass p-4 overflow-y-auto space-y-6">
+<aside class="argos-right w-80 flex flex-col gap-5 overflow-y-auto">
 
-    <section class="space-y-4">
-        <h3 class="text-sm font-bold text-blue-400 uppercase tracking-widest flex items-center gap-2">
+    <section>
+        <div class="argos-panel-title teal">
             <i data-lucide="database" class="w-4 h-4"></i> SIEM Investigation
-        </h3>
+        </div>
         <div id="siem-container" class="space-y-3"></div>
     </section>
 
-    <hr class="border-slate-800">
+    <div class="argos-divider"></div>
 
     <section>
-        <h3 class="text-sm font-bold text-amber-500 uppercase tracking-widest flex items-center gap-2">
+        <div class="argos-panel-title gold">
             <i data-lucide="radar" class="w-4 h-4"></i> Pivot Modules
-        </h3>
-        <p class="text-[12px] text-slate-600 mt-1 mb-2 italic">Surface exposure & DNS recon</p>
-        <div id="pivot-container" class="space-y-3 mt-2"></div>
+        </div>
+        <p class="text-[11px] mb-2 italic" style="color:var(--text-muted)">Surface exposure & DNS recon</p>
+        <div id="pivot-container" class="space-y-3 mt-1"></div>
     </section>
 
-    <hr class="border-slate-800">
+    <div class="argos-divider"></div>
 
     <section>
-        <h3 class="text-sm font-bold text-violet-400 uppercase tracking-widest flex items-center gap-2">
+        <div class="argos-panel-title violet">
             <i data-lucide="git-merge" class="w-4 h-4"></i> Correlation Modules
-        </h3>
-        <p class="text-[12px] text-slate-600 mt-1 mb-2 italic">Threat intel & cross-IOC links</p>
-        <div id="correlation-container" class="space-y-3 mt-2"></div>
+        </div>
+        <p class="text-[11px] mb-2 italic" style="color:var(--text-muted)">Threat intel & cross-IOC links</p>
+        <div id="correlation-container" class="space-y-3 mt-1"></div>
     </section>
 
 </aside>
