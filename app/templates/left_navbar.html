@@ -46,6 +46,7 @@ window.ArgosTheme = {
         const next = current === 'dark' ? 'light' : 'dark';
         html.setAttribute('data-theme', next);
         localStorage.setItem('argos-theme', next);
+        document.dispatchEvent(new CustomEvent('argos:theme-changed', { detail: { theme: next } }));
     }
 };
 // Init on load

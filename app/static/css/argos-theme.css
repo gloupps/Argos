@@ -61,41 +61,321 @@
 }
 
 /* ══════════════════════════════════════════════════════
-   LIGHT THEME
+   LIGHT THEME — revised for legibility
    ══════════════════════════════════════════════════════ */
 [data-theme="light"] {
-  --bg-base:        #f5f0e8;
-  --bg-surface:     #ede8dc;
-  --bg-elevated:    #e4ddd0;
-  --bg-overlay:     #d8d0c0;
-  --bg-hover:       #ccc4b0;
+  /* Backgrounds — beige chaud tiré de la palette logo */
+  --bg-base:        #f2ece0;
+  --bg-surface:     #ece4d4;
+  --bg-elevated:    #e4dac8;
+  --bg-overlay:     #d8ccb8;
+  --bg-hover:       #c8bea4;
 
-  --border-subtle:  rgba(107, 92, 62, 0.12);
-  --border-default: rgba(107, 92, 62, 0.22);
-  --border-accent:  rgba(139, 96, 16, 0.45);
+  /* Borders — bien visibles */
+  --border-subtle:  rgba(90, 72, 30, 0.14);
+  --border-default: rgba(90, 72, 30, 0.28);
+  --border-accent:  rgba(139, 96, 16, 0.55);
 
-  --gold-bright:    #8a6010;
-  --gold-main:      #a07820;
-  --gold-muted:     #c89a30;
-  --gold-dim:       #d4af60;
-  --gold-glow:      rgba(160, 120, 32, 0.12);
+  /* Gold — assombri pour contraste sur fond clair */
+  --gold-bright:    #5c3d08;
+  --gold-main:      #7a5210;
+  --gold-muted:     #9a6e20;
+  --gold-dim:       #b89040;
+  --gold-glow:      rgba(122, 82, 16, 0.14);
 
-  --teal-bright:    #1e5858;
-  --teal-main:      #2a7070;
-  --teal-muted:     #4a9090;
-  --teal-dim:       #a0c8c8;
+  /* Teal — assombri pour lisibilité */
+  --teal-bright:    #0e3c3c;
+  --teal-main:      #1a5252;
+  --teal-muted:     #2a7070;
+  --teal-dim:       #3a8888;
 
+  /* Text — fort contraste */
   --text-primary:   #1a1208;
-  --text-secondary: #5a4820;
-  --text-muted:     #9a8860;
+  --text-secondary: #3d2e0e;
+  --text-muted:     #7a6640;
   --text-inverse:   #f0e8d0;
 
-  --glass-bg:       rgba(240, 232, 216, 0.88);
-  --glass-border:   rgba(107, 92, 62, 0.18);
+  /* Glass */
+  --glass-bg:       rgba(236, 228, 212, 0.92);
+  --glass-border:   rgba(90, 72, 30, 0.22);
 
-  --scrollbar-track:  #ede8dc;
-  --scrollbar-thumb:  #c8b880;
-  --scrollbar-hover:  #a07820;
+  /* Scrollbar */
+  --scrollbar-track: #ece4d4;
+  --scrollbar-thumb: #b89040;
+  --scrollbar-hover: #7a5210;
+}
+
+/* ── Light mode : logo SVG — on remplace le fond sombre par transparent/adapté ── */
+[data-theme="light"] .argos-logo-img {
+  /* On masque le SVG original et on affiche une version CSS-filtrée lisible */
+  filter: brightness(0) saturate(100%)
+          invert(22%) sepia(60%) saturate(800%) hue-rotate(25deg) brightness(60%);
+  /* Résultat : teinte or sombre sur fond clair, lisible */
+}
+
+/* ── Light mode : override global Tailwind colors ── */
+[data-theme="light"] body,
+[data-theme="light"] .argos-body {
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+}
+
+/* Surfaces sombres → surfaces claires */
+[data-theme="light"] .bg-slate-950,
+[data-theme="light"] .bg-slate-900\/50 {
+  background-color: var(--bg-base) !important;
+}
+[data-theme="light"] .bg-slate-900 {
+  background-color: var(--bg-elevated) !important;
+}
+[data-theme="light"] .bg-slate-800 {
+  background-color: var(--bg-overlay) !important;
+}
+[data-theme="light"] .bg-slate-700 {
+  background-color: var(--bg-hover) !important;
+}
+
+/* Borders */
+[data-theme="light"] .border-slate-800,
+[data-theme="light"] .border-slate-700 {
+  border-color: var(--border-default) !important;
+}
+
+/* Textes clairs → textes sombres */
+[data-theme="light"] .text-white,
+[data-theme="light"] .text-slate-200,
+[data-theme="light"] .text-slate-100 {
+  color: var(--text-primary) !important;
+}
+[data-theme="light"] .text-slate-300 {
+  color: var(--text-secondary) !important;
+}
+[data-theme="light"] .text-slate-400,
+[data-theme="light"] .text-slate-500 {
+  color: var(--text-muted) !important;
+}
+[data-theme="light"] .text-slate-600 {
+  color: #9a8060 !important;
+}
+
+/* Hover states sur les items sidebar/menus */
+[data-theme="light"] .hover\:bg-slate-800:hover,
+[data-theme="light"] .hover\:bg-slate-700:hover {
+  background-color: var(--bg-hover) !important;
+}
+
+/* Glass panels */
+[data-theme="light"] .glass,
+[data-theme="light"] .argos-glass {
+  background: var(--glass-bg) !important;
+  border-color: var(--glass-border) !important;
+}
+
+/* ── Light mode : sidebar items — texte et icônes lisibles ── */
+[data-theme="light"] #modules-internal .flex,
+[data-theme="light"] #modules-external .flex {
+  color: var(--text-secondary);
+}
+
+[data-theme="light"] #modules-internal i[data-lucide],
+[data-theme="light"] #modules-external i[data-lucide] {
+  color: var(--gold-main) !important;
+  opacity: 1 !important;
+}
+
+/* Items de la sidebar : texte du nom du module */
+[data-theme="light"] #modules-internal span.text-sm,
+[data-theme="light"] #modules-external span.text-sm {
+  color: var(--text-secondary) !important;
+}
+
+/* Icônes globales Lucide en light mode */
+[data-theme="light"] [data-lucide] {
+  color: var(--text-secondary);
+}
+
+/* Icônes de couleur spécifique : on les laisse avec leur couleur */
+[data-theme="light"] .text-blue-400   { color: #1d6fa8 !important; }
+[data-theme="light"] .text-cyan-400   { color: #0e7490 !important; }
+[data-theme="light"] .text-green-400  { color: #166534 !important; }
+[data-theme="light"] .text-red-400    { color: #9b1c1c !important; }
+[data-theme="light"] .text-amber-400,
+[data-theme="light"] .text-amber-500  { color: #92400e !important; }
+[data-theme="light"] .text-violet-400 { color: #5b21b6 !important; }
+[data-theme="light"] .text-sky-400    { color: #0369a1 !important; }
+[data-theme="light"] .text-orange-400 { color: #9a3412 !important; }
+
+/* ── Light mode : enrich boxes ── */
+[data-theme="light"] .rounded-lg.border {
+  background-color: var(--bg-elevated) !important;
+  border-color: var(--border-default) !important;
+}
+
+[data-theme="light"] .rounded-lg.border button:hover,
+[data-theme="light"] .rounded-lg.border button:focus {
+  background-color: var(--bg-hover) !important;
+}
+
+/* Texte dans les enrich boxes */
+[data-theme="light"] #enrich-grid {
+  color: var(--text-primary);
+}
+
+[data-theme="light"] #enrich-grid .text-slate-400,
+[data-theme="light"] #enrich-grid .text-slate-500,
+[data-theme="light"] #enrich-grid .text-slate-600 {
+  color: var(--text-muted) !important;
+}
+
+/* KV rows */
+[data-theme="light"] .bg-slate-800\/50,
+[data-theme="light"] .bg-slate-900\/60,
+[data-theme="light"] .bg-slate-900\/30 {
+  background-color: rgba(200, 190, 164, 0.4) !important;
+}
+
+/* Tags */
+[data-theme="light"] .bg-slate-800.border-slate-700\/50 {
+  background-color: var(--bg-overlay) !important;
+  border-color: var(--border-default) !important;
+  color: var(--text-secondary) !important;
+}
+
+/* Mono pre blocks */
+[data-theme="light"] pre.text-slate-400 {
+  background-color: var(--bg-overlay) !important;
+  color: var(--text-secondary) !important;
+}
+
+/* ── Light mode : tabs ── */
+[data-theme="light"] .argos-tabs-bar,
+[data-theme="light"] #tabs {
+  background-color: var(--bg-surface) !important;
+  border-color: var(--border-default) !important;
+}
+
+[data-theme="light"] #tabs button,
+[data-theme="light"] .argos-tab {
+  color: var(--text-secondary) !important;
+}
+[data-theme="light"] #tabs button:hover {
+  background-color: var(--bg-hover) !important;
+  color: var(--text-primary) !important;
+}
+[data-theme="light"] #tabs button.bg-slate-700 {
+  background-color: var(--bg-hover) !important;
+  color: var(--gold-main) !important;
+  border-color: var(--border-accent) !important;
+}
+
+/* ── Light mode : settings modal ── */
+[data-theme="light"] #settings-modal > div {
+  background-color: var(--bg-elevated) !important;
+  border-color: var(--border-accent) !important;
+}
+
+[data-theme="light"] #settings-keys input,
+[data-theme="light"] .argos-input,
+[data-theme="light"] input.w-full,
+[data-theme="light"] textarea,
+[data-theme="light"] select {
+  background-color: var(--bg-overlay) !important;
+  border-color: var(--border-default) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="light"] input::placeholder,
+[data-theme="light"] textarea::placeholder {
+  color: var(--text-muted) !important;
+}
+
+/* ── Light mode : form case ── */
+[data-theme="light"] [data-case-form] .glass {
+  background: var(--glass-bg) !important;
+  border-color: var(--border-default) !important;
+}
+
+/* ── Light mode : buttons ── */
+[data-theme="light"] .hover\:bg-slate-700:hover {
+  background-color: var(--bg-hover) !important;
+}
+[data-theme="light"] .bg-blue-600 {
+  background-color: #1d6fa8 !important;
+  color: #ffffff !important;
+}
+[data-theme="light"] .bg-blue-600:hover,
+[data-theme="light"] .hover\:bg-blue-500:hover {
+  background-color: #1558a0 !important;
+}
+[data-theme="light"] .argos-btn-primary {
+  color: #ffffff !important;
+  background: linear-gradient(135deg, #7a5210, #9a6e20) !important;
+}
+
+/* ── Light mode : case cards ── */
+[data-theme="light"] .border-l-4.border-blue-500 {
+  border-left-color: var(--gold-main) !important;
+}
+
+/* ── Light mode : right navbar section titles ── */
+[data-theme="light"] .argos-panel-title.teal  { color: var(--teal-main) !important; }
+[data-theme="light"] .argos-panel-title.gold  { color: var(--gold-main) !important; }
+[data-theme="light"] .argos-panel-title.violet { color: #5b21b6 !important; }
+[data-theme="light"] .argos-panel-title.amber  { color: #92400e !important; }
+
+/* ── Light mode : job log ── */
+[data-theme="light"] #job-log {
+  background-color: var(--bg-elevated) !important;
+  border-color: var(--border-accent) !important;
+  color: var(--text-primary) !important;
+}
+
+/* ── Light mode : cytoscape graph background ── */
+[data-theme="light"] #cy {
+  background: var(--bg-elevated) !important;
+  border-color: var(--border-default) !important;
+}
+
+/* ── Light mode : context menu / popover ── */
+[data-theme="light"] [id^="ctx-menu"],
+[data-theme="light"] .fixed.bg-slate-900 {
+  background-color: var(--bg-elevated) !important;
+  border-color: var(--border-default) !important;
+  color: var(--text-primary) !important;
+}
+
+/* ── Light mode : service detail modal ── */
+[data-theme="light"] #service-detail-modal > div {
+  background-color: var(--bg-elevated) !important;
+  border-color: var(--border-default) !important;
+}
+
+/* ── Light mode : correlation/pivot blocks ── */
+[data-theme="light"] .bg-slate-900\/30 {
+  background-color: rgba(200, 190, 164, 0.25) !important;
+}
+
+/* input range accent */
+[data-theme="light"] input[type="range"] {
+  accent-color: var(--gold-main);
+}
+[data-theme="light"] input[type="checkbox"] {
+  accent-color: var(--gold-main);
+}
+
+/* ── Light mode : scrollbar ── */
+[data-theme="light"] ::-webkit-scrollbar-track { background: var(--scrollbar-track); }
+[data-theme="light"] ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); }
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-hover); }
+
+/* ── Light mode : toggle pill ── */
+[data-theme="light"] .argos-theme-toggle {
+  background: var(--bg-elevated);
+  border-color: var(--border-default);
+  color: var(--text-secondary);
+}
+[data-theme="light"] .argos-theme-toggle .toggle-track {
+  background: var(--bg-hover);
 }
 
 /* ══════════════════════════════════════════════════════
@@ -183,11 +463,6 @@ aside.argos-right {
   bottom: 0; left: 0; right: 0;
   height: 1px;
   background: linear-gradient(90deg, transparent, var(--gold-dim), transparent);
-}
-
-/* In light mode, hide the dark-background SVG and show only the eye/text parts */
-[data-theme="light"] .argos-logo-img {
-  filter: invert(1) hue-rotate(180deg) saturate(0.6) brightness(0.5);
 }
 
 /* ══════════════════════════════════════════════════════
@@ -378,15 +653,6 @@ aside.argos-right {
   box-shadow: 0 0 4px var(--gold-glow);
 }
 
-[data-theme="light"] .argos-theme-toggle .toggle-thumb {
-  transform: translateX(16px);
-  background: var(--gold-bright);
-}
-
-[data-theme="light"] .argos-theme-toggle .toggle-track {
-  background: var(--bg-hover);
-}
-
 /* ══════════════════════════════════════════════════════
    CARDS / GLASS PANELS
    ══════════════════════════════════════════════════════ */
@@ -529,29 +795,4 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { filter: invert
 /* Enrich panel background */
 #enrich-grid {
   color: var(--text-primary);
-}
-
-/* Tailwind overrides for theme vars */
-[data-theme="light"] .bg-slate-950,
-[data-theme="light"] .bg-slate-900\/50,
-[data-theme="light"] .bg-slate-900 {
-  background-color: var(--bg-elevated) !important;
-}
-[data-theme="light"] .border-slate-800,
-[data-theme="light"] .border-slate-700 {
-  border-color: var(--border-default) !important;
-}
-[data-theme="light"] .text-slate-400,
-[data-theme="light"] .text-slate-500 {
-  color: var(--text-secondary) !important;
-}
-[data-theme="light"] .text-slate-200,
-[data-theme="light"] .text-white {
-  color: var(--text-primary) !important;
-}
-[data-theme="light"] .bg-slate-800 {
-  background-color: var(--bg-overlay) !important;
-}
-[data-theme="light"] body {
-  background-color: var(--bg-base) !important;
 }

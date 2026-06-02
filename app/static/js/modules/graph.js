@@ -468,13 +468,17 @@ window.GraphModule = {
     _styles() {
         return [
             { selector: "node", style: {
-                "label":        "data(label)",
-                "font-size":    9,
-                "color":        "#e2e8f0",
-                "text-valign":  "bottom",
-                "text-halign":  "center",
-                "text-margin-y": 4,
-                "background-color": "#3b82f6",
+                "label":             "data(label)",
+                "font-size":         9,
+                "color":             () => document.documentElement.getAttribute("data-theme") === "light" ? "#1a1208" : "#e2e8f0",
+                "text-valign":       "bottom",
+                "text-halign":       "center",
+                "text-margin-y":     4,
+                "text-background-color": () => document.documentElement.getAttribute("data-theme") === "light" ? "#f2ece0" : "#0f172a",
+                "text-background-opacity": 0.75,
+                "text-background-padding": "2px",
+                "text-background-shape":   "roundrectangle",
+                "background-color":  "#3b82f6",
                 "width":  36, "height": 36,
                 "border-width": 2, "border-color": "#1e40af",
                 "transition-property": "background-color, border-color, width, height",
@@ -543,6 +547,14 @@ window.GraphModule = {
         ];
     },
 };
+
+// ── Re-apply node label colors on theme switch ──
+document.addEventListener("argos:theme-changed", () => {
+    Object.values(GraphModule.instances).forEach(({ cy }) => {
+        if (!cy) return;
+        cy.style().update();
+    });
+});
 
 // ══════════════════════════════════════════════════════════
 // LINK DRAG
