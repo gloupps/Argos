@@ -49,7 +49,7 @@
         <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
             <button type="button" class="mode-btn bg-slate-800 hover:bg-slate-700 p-3 rounded-lg
                                          border border-slate-700 transition font-semibold"
-                    data-mode="url">🔗 URL</button>
+                    data-mode="internal_source">🌐 Internal Source</button>
             <button type="button" class="mode-btn bg-slate-800 hover:bg-slate-700 p-3 rounded-lg
                                          border border-slate-700 transition font-semibold"
                     data-mode="ioc">🎯 IOC</button>
@@ -62,11 +62,35 @@
         </div>
 
         <div>
-            <div id="form-url" class="form-section hidden">
-                <input name="source_url" type="text"
-                       placeholder="https://opencti.local/reports/…"
-                       class="w-full p-2 rounded bg-slate-900 border border-slate-700 text-sm
-                              focus:outline-none focus:ring-1 focus:ring-green-500">
+            <div id="form-internal_source" class="form-section hidden space-y-3">
+                <div>
+                    <label class="text-[10px] text-slate-500 uppercase tracking-wider mb-1 block">
+                        Source Type
+                    </label>
+                    <div class="flex gap-2">
+                        <label class="flex items-center gap-2 text-xs cursor-pointer">
+                            <input type="radio" name="internal_source_type" value="opencti" checked
+                                   class="accent-blue-500"> OpenCTI
+                        </label>
+                        <label class="flex items-center gap-2 text-xs cursor-pointer">
+                            <input type="radio" name="internal_source_type" value="misp"
+                                   class="accent-blue-500"> MISP
+                        </label>
+                    </div>
+                </div>
+                <div>
+                    <label class="text-[10px] text-slate-500 uppercase tracking-wider mb-1 block">
+                        Instance URL (report/event/list)
+                    </label>
+                    <input name="internal_source_url" type="text"
+                           placeholder="https://opencti.local/reports/… or https://misp.local/events/view/42"
+                           class="w-full p-2 rounded bg-slate-900 border border-slate-700 text-sm
+                                  focus:outline-none focus:ring-1 focus:ring-green-500">
+                </div>
+                <p class="text-[10px] text-slate-600 italic">
+                    Uses the API key configured in Settings for the selected source.
+                    Indicators will be extracted and added as root IOCs.
+                </p>
             </div>
             <div id="form-ioc" class="form-section hidden">
                 <label class="text-[10px] text-slate-500 uppercase tracking-wider mb-1 block">
@@ -77,9 +101,16 @@
                           class="w-full p-2 rounded bg-slate-900 border border-slate-700 text-sm mono
                                  focus:outline-none focus:ring-1 focus:ring-green-500 resize-none"></textarea>
             </div>
-            <div id="form-file" class="form-section hidden">
-                <input name="stix_file" type="file" accept=".json"
+            <div id="form-file" class="form-section hidden space-y-2">
+                <label class="text-[10px] text-slate-500 uppercase tracking-wider mb-1 block">
+                    STIX2 Bundle (.json) — indicators only
+                </label>
+                <input name="stix_file" id="stix-file-input" type="file" accept=".json"
                        class="w-full p-2 rounded bg-slate-900 border border-slate-700 text-sm">
+                <div id="stix-preview" class="hidden text-[10px] text-slate-400 bg-slate-900/50 
+                                               rounded p-2 border border-slate-800">
+                    <!-- rempli par JS -->
+                </div>
             </div>
             <div id="form-db" class="form-section hidden">
                 <label class="text-[10px] text-slate-500 uppercase tracking-wider mb-1 block">
