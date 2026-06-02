@@ -76,6 +76,8 @@ class Services:
                 await self._run_correlation(job_id, data)
             elif action == "check_quotas":
                 await self._check_quotas(job_id, data)
+            elif action == "fetch_internal_source":
+                await self._handle_fetch_internal_source(job)
             else:
                 self.job_manager.add_log(job_id, f"❌ Unknown action: {action}")
         except Exception as e:
@@ -541,3 +543,232 @@ class Services:
                 modules[key] = ExternalMISPModule(self.requester, iid, label)
 
         return modules
+
+    async def _handle_fetch_internal_source(self, job_id, data):
+        case_id      = data.get("case_id")
+        source_url   = (data.get("internal_source_url") or "").strip()
+        source_type  = data.get("internal_source_type", "opencti")
+        api_keys     = data.get("api_keys", {})
+        extra_config = data.get("extra_config", {})
+
+        self.job_manager.add_log(job_id, f"🌐 Fetching from {source_type}: {source_url}")
+
+        if not source_url:
+            self.job_manager.add_log(job_id, "❌ No source URL provided")
+            return
+
+        iocs = []
+        try:
+            if source_type == "opencti":
+                iocs = await self._fetch_iocs_from_opencti(job_id, source_url, api_keys)
+            elif source_type == "misp":
+                iocs = await self._fetch_iocs_from_misp(job_id, source_url, api_keys, extra_config)
+        except Exception as e:
+            self.job_manager.add_log(job_id, f"❌ Fetch error: {e}")
+            import traceback; traceback.print_exc()
+
+        self.job_manager.add_log(job_id, f"✓ {len(iocs)} IOC(s) extracted")
+
+        if not iocs:
+            return
+
+        async with aiosqlite.connect(self.database.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            for value, ioc_type in iocs:
+                await db.execute(
+                    "INSERT OR IGNORE INTO indicators (value, type, node_type, case_id) VALUES (?,?,?,?)",
+                    (value, ioc_type, "root", case_id),
+                )
+            await db.commit()
+
+        # Émettre le graph mis à jour
+        await self.database.connect()
+        graph = await self.database.get_graph(case_id)
+        self.socketio.emit("graph_update", {"case_id": case_id, "graph": graph})
+
+        # Chaîner enrich / correlate si demandé
+        if data.get("chain_enrich"):
+            self.start_job({
+                "action":      "enrich",
+                "case_id":     case_id,
+                "api_keys":    api_keys,
+                "extra_config": extra_config,
+            })
+        if data.get("chain_correlate"):
+            self.start_job({
+                "action":             "correlate",
+                "case_id":            case_id,
+                "api_keys":           api_keys,
+                "correlation_config": data.get("correlation_config", {}),
+                "extra_config":       extra_config,
+            })
+
+    async def _fetch_iocs_from_opencti(self, job_id, source_url: str, api_keys: dict):
+        import re as _re
+        api_key  = api_keys.get("opencti", "")
+        if not api_key:
+            self.job_manager.add_log(job_id, "❌ No OpenCTI API key in settings")
+            return []
+
+        # Extraire l'URL de base (avant /dashboard ou /graphql)
+        base_url = source_url.rstrip("/")
+        for marker in ["/dashboard", "/graphql"]:
+            idx = base_url.find(marker)
+            if idx > 0:
+                base_url = base_url[:idx]
+
+        gql_url = f"{base_url}/graphql"
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+
+        self.job_manager.add_log(job_id, f"  → GraphQL endpoint: {gql_url}")
+
+        # Détecter si c'est un report (UUID dans l'URL)
+        report_id = None
+        m = _re.search(r'([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})', source_url)
+        if m:
+            report_id = m.group(1)
+            self.job_manager.add_log(job_id, f"  → Report ID detected: {report_id}")
+
+        iocs = []
+        seen = set()
+
+        _ENTITY_TO_TYPE = {
+            "IPv4-Addr": "ip", "IPv6-Addr": "ip",
+            "Domain-Name": "domain", "Hostname": "domain",
+            "Url": "url", "StixFile": "hash", "File": "hash",
+        }
+
+        async def _gql(query, variables):
+            data = await self.requester.post(
+                gql_url,
+                json={"query": query, "variables": variables},
+                headers=headers,
+            )
+            return data or {}
+
+        if report_id:
+            _Q = """
+                query getReportObjects($id: String!) {
+                  report(id: $id) {
+                    id name
+                    objects(first: 200) {
+                      edges { node {
+                        ... on StixCyberObservable { id entity_type observable_value }
+                        ... on Indicator { id name indicator_types pattern }
+                      }}
+                    }
+                  }
+                }"""
+            resp = await _gql(_Q, {"id": report_id})
+            edges = (resp.get("data") or resp).get("report", {}).get("objects", {}).get("edges", [])
+            self.job_manager.add_log(job_id, f"  → {len(edges)} objects in report")
+            for edge in edges:
+                node = edge.get("node") or {}
+                # Observable
+                val = node.get("observable_value")
+                if val and val not in seen:
+                    etype = node.get("entity_type", "")
+                    ioc_type = _ENTITY_TO_TYPE.get(etype) or _guess_type(val)
+                    seen.add(val); iocs.append((val, ioc_type))
+                # Indicator (pattern)
+                name = node.get("name")
+                if name and name not in seen:
+                    pat = node.get("pattern", "")
+                    m2 = _re.search(r"=\s*['\"]([^'\"]+)['\"]", pat)
+                    val2 = m2.group(1) if m2 else name
+                    if val2 not in seen:
+                        seen.add(val2); iocs.append((val2, _guess_type(val2)))
+        else:
+            # Liste globale des indicateurs
+            _Q = """
+                query listIndicators($first: Int) {
+                  indicators(first: $first) {
+                    edges { node { id name pattern indicator_types } }
+                  }
+                }"""
+            resp = await _gql(_Q, {"first": 200})
+            edges = (resp.get("data") or resp).get("indicators", {}).get("edges", [])
+            self.job_manager.add_log(job_id, f"  → {len(edges)} indicators from instance")
+            for edge in edges:
+                node = edge.get("node") or {}
+                pat  = node.get("pattern", "")
+                m2   = _re.search(r"=\s*['\"]([^'\"]+)['\"]", pat)
+                val  = m2.group(1) if m2 else (node.get("name") or "")
+                if val and val not in seen:
+                    seen.add(val); iocs.append((val, _guess_type(val)))
+
+        return iocs
+
+    async def _fetch_iocs_from_misp(self, job_id, source_url: str, api_keys: dict, extra_config: dict):
+        import re as _re
+        api_key = api_keys.get("misp", "")
+        if not api_key:
+            self.job_manager.add_log(job_id, "❌ No MISP API key in settings")
+            return []
+
+        base_url  = source_url.rstrip("/")
+        event_id  = None
+        m = _re.search(r'/events/(?:view/)?(\d+)', source_url)
+        if m:
+            event_id = m.group(1)
+            base_url = source_url[:m.start()]
+        else:
+            # Retirer tout path après le domaine
+            from urllib.parse import urlparse
+            p = urlparse(source_url)
+            base_url = f"{p.scheme}://{p.netloc}"
+
+        self.job_manager.add_log(job_id, f"  → MISP base: {base_url}, event: {event_id}")
+
+        headers = {
+            "Authorization": api_key,
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        }
+
+        _MISP_IOC_TYPES = {
+            "ip-src": "ip", "ip-dst": "ip", "ip-src|port": "ip", "ip-dst|port": "ip",
+            "domain": "domain", "hostname": "domain", "domain|ip": "domain",
+            "url": "url", "uri": "url",
+            "md5": "hash", "sha1": "hash", "sha256": "hash",
+            "filename|md5": "hash", "filename|sha1": "hash", "filename|sha256": "hash",
+        }
+
+        iocs = []
+        seen = set()
+
+        if event_id:
+            url  = f"{base_url}/events/{event_id}.json"
+            data = await self.requester.get(url, headers=headers)
+            if not data:
+                self.job_manager.add_log(job_id, f"❌ MISP event {event_id} not found or empty")
+                return []
+            attributes = (data.get("Event") or data).get("Attribute", [])
+            self.job_manager.add_log(job_id, f"  → {len(attributes)} attributes in event")
+        else:
+            # Recherche des attributs récents
+            url  = f"{base_url}/attributes/restSearch"
+            data = await self.requester.post(
+                url,
+                json={"limit": 200, "to_ids": True},
+                headers=headers,
+            )
+            if not data:
+                self.job_manager.add_log(job_id, "❌ MISP restSearch returned nothing")
+                return []
+            attributes = (data.get("response") or {}).get("Attribute", [])
+            self.job_manager.add_log(job_id, f"  → {len(attributes)} attributes from search")
+
+        for attr in attributes:
+            atype = attr.get("type", "")
+            val   = (attr.get("value") or "").strip()
+            if not val or atype not in _MISP_IOC_TYPES:
+                continue
+            # Types composites : prendre la 2e partie (ex: filename|sha256 → sha256 value)
+            if "|" in val:
+                val = val.split("|")[-1].strip()
+            if val not in seen:
+                seen.add(val)
+                iocs.append((val, _MISP_IOC_TYPES[atype]))
+
+        return iocs
