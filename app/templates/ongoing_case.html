@@ -82,25 +82,37 @@
     </div>
 
     <!-- ══════════════════════════════════════════════════ -->
-    <!-- ROW 3 : Enrichment (ex Qualification)             -->
+    <!-- ROW 3 : Enrichment                                -->
     <!-- ══════════════════════════════════════════════════ -->
     <div class="glass rounded-xl p-4">
-        <h3 class="text-sm font-bold flex items-center gap-2 mb-3">
-            <i data-lucide="zap" class="w-4 h-4 text-green-400"></i> Enrichment
-        </h3>
+        <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-bold flex items-center gap-2">
+                <i data-lucide="zap" class="w-4 h-4 text-green-400"></i> Enrichment
+            </h3>
+            <!-- Grid column selector -->
+            <div class="flex items-center gap-0.5 bg-slate-900 border border-slate-700/60 rounded-lg p-0.5">
+                <button id="enrich-col-1" onclick="EnrichPanel._setGridCols(1)"
+                        class="enrich-col-btn px-2 py-1 rounded transition" title="1 column">
+                    <i data-lucide="square" class="w-3 h-3"></i>
+                </button>
+                <button id="enrich-col-2" onclick="EnrichPanel._setGridCols(2)"
+                        class="enrich-col-btn px-2 py-1 rounded transition" title="2 columns">
+                    <i data-lucide="columns-2" class="w-3 h-3"></i>
+                </button>
+                <button id="enrich-col-3" onclick="EnrichPanel._setGridCols(3)"
+                        class="enrich-col-btn px-2 py-1 rounded transition" title="3 columns">
+                    <i data-lucide="columns-3" class="w-3 h-3"></i>
+                </button>
+            </div>
+        </div>
 
         <div id="qualif-header" class="mb-2">
             <p class="text-slate-600 text-xs italic">Right-click a node to enrich it.</p>
         </div>
 
-        <div id="qualif-panel" class="space-y-1 text-sm"></div>
-
-        <!-- Internal Intelligence (OpenCTI etc.) -->
-        <div id="internal-intel-section" class="hidden mt-4 pt-4 border-t border-violet-900/30">
-            <h4 class="text-xs font-bold text-violet-400 flex items-center gap-2 mb-3 uppercase tracking-widest">
-                <i data-lucide="database" class="w-3.5 h-3.5"></i> Internal Intelligence
-            </h4>
-            <div id="internal-intel-panel" class="space-y-3"></div>
+        <!-- Grille : chaque box thème est un enfant direct -->
+        <div id="enrich-grid" class="grid gap-2 grid-cols-1">
+            <!-- boxes injectées par JS -->
         </div>
     </div>
 
