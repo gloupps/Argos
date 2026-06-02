@@ -1,32 +1,54 @@
-<div id="settings-modal"
-     class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
-    <div class="w-[760px] max-h-[85vh] overflow-y-auto glass rounded-xl border border-slate-700 p-6 space-y-6">
+window.Settings = {
 
-        <!-- Header -->
-        <div class="flex items-center justify-between">
-            <h2 class="text-lg font-bold flex items-center gap-2">
-                <i data-lucide="settings" class="w-5 h-5"></i> Settings
-            </h2>
-            <button data-action="close-settings" class="text-slate-400 hover:text-white">
-                <i data-lucide="x" class="w-5 h-5"></i>
-            </button>
-        </div>
+    init() {
+        console.log("[Settings] init");
+        this._bind();
+    },
 
-        <!-- API Keys + Quotas -->
-        <section>
-            <h3 class="text-xs uppercase text-slate-500 tracking-wider mb-4">API Keys</h3>
-            <!-- Populated dynamically by Modules.renderSettingsKeys() -->
-            <div id="settings-keys" class="space-y-3"></div>
-        </section>
+    open() {
+        Modules?.renderSettingsKeys?.();
 
-        <!-- Save -->
-        <div class="flex justify-end border-t border-slate-800 pt-4">
-            <button data-action="save-settings"
-                    class="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded text-sm
-                           font-semibold flex items-center gap-2">
-                <i data-lucide="save" class="w-4 h-4"></i> Save
-            </button>
-        </div>
+        // Injecter le bloc "External MISP Instances" dans le modal
+        const modalBody = document.querySelector("#settings-modal > div");
+        document.getElementById("misp-instances-section")?.remove();
+        if (modalBody) {
+            const saveBar = modalBody.lastElementChild;
+            const wrapper = document.createElement("div");
+            modalBody.insertBefore(wrapper, saveBar);
+            MISPInstances?.render?.(wrapper);
+        }
 
-    </div>
-</div>
+        document.getElementById("settings-modal")?.classList.remove("hidden");
+    },
+
+    close() {
+        document.getElementById("settings-modal")?.classList.add("hidden");
+    },
+
+    save() {
+        // API keys
+        document.querySelectorAll("#settings-keys input[data-key]").forEach(input => {
+            const val = input.value.trim();
+            if (val) SecretStore.set(input.dataset.key, val);
+        });
+        // Champs extra (opencti_url, misp_url…)
+        document.querySelectorAll("#settings-keys input[data-extra-key]").forEach(input => {
+            const val = input.value.trim();
+            SecretStore.set(`extra_${input.dataset.extraKey}`, val);
+        });
+        // Instances MISP externes — tout dans SecretStore
+        MISPInstances?.collect?.();
+
+        this.close();
+        document.dispatchEvent(new Event("settings:updated"));
+    },
+
+    _bind() {
+        document.addEventListener("click", e => {
+            const action = e.target.closest("[data-action]")?.dataset.action;
+            if (action === "open-settings")  this.open();
+            if (action === "close-settings") this.close();
+            if (action === "save-settings")  this.save();
+        });
+    },
+};
