@@ -77,7 +77,7 @@ class Services:
             elif action == "check_quotas":
                 await self._check_quotas(job_id, data)
             elif action == "fetch_internal_source":
-                await self._handle_fetch_internal_source(job)
+                await self._handle_fetch_internal_source(job_id, data)
             else:
                 self.job_manager.add_log(job_id, f"❌ Unknown action: {action}")
         except Exception as e:
