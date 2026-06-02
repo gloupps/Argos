@@ -449,6 +449,28 @@ class OpenCTIModule(Module):
         except Exception:
             return None
 
+        
+    # ──────────────────────────────────────────────────────
+    # _f  — helper construction d'un champ UI
+    # ──────────────────────────────────────────────────────
+    @staticmethod
+    def _f(
+        indicator: str,
+        name: str,
+        field_type: str,
+        value: Any,
+        max_: int | None = None,
+    ) -> Dict[str, Any]:
+        return {
+            "indicator": indicator,
+            "indicator_type": "ioc",
+            "field_name": name,
+            "field_type": field_type,
+            "value": value,
+            "icon": None,
+            "link": None,
+            "max": None if max_ is None else max_,
+        }
 
 # ──────────────────────────────────────────────────────────────
 # Helpers — mapping types OpenCTI → types IOC internes
