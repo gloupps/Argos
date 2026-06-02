@@ -444,83 +444,89 @@ window.Modules = {
             title.textContent = group;
             container.appendChild(title);
 
+            const grid = document.createElement("div");
+            grid.className = "grid grid-cols-2 gap-2 mb-2";
             modules.forEach(mod => {
-                const current = SecretStore?.get(mod.key) || "";
-                const isSet   = !!current;
-
-                // Extra fields (URL, etc.)
-                const extraHtml = (mod.settings_fields || []).map(sf => {
-                    const stored = SecretStore?.get(`extra_${sf.key}`) || "";
-                    return `
-                        <div class="mt-2">
-                            <label class="text-[10px] text-slate-500 block mb-1">${sf.label}</label>
-                            <input type="${sf.type === 'url' ? 'url' : 'text'}"
-                                   id="extra-input-${sf.key}"
-                                   data-extra-key="${sf.key}"
-                                   value="${stored}"
-                                   placeholder="${sf.placeholder || ''}"
-                                   class="w-full bg-slate-950 border border-slate-700/60 rounded-md
-                                          px-3 py-1.5 text-xs font-mono text-slate-200
-                                          focus:outline-none focus:ring-1 focus:ring-blue-500/70 placeholder-slate-600">
-                        </div>`;
-                }).join("");
-
-                const card = document.createElement("div");
-                card.className = "rounded-lg border " +
-                    (isSet ? "border-slate-700/60 bg-slate-900/50" : "border-slate-800/60 bg-slate-900/30 opacity-60") +
-                    " p-3 mb-3 space-y-2";
-
-                card.innerHTML = `
-                    <!-- Card header: icon + name + status badge + refresh -->
-                    <div class="flex items-center gap-2">
-                        <div class="w-7 h-7 rounded-md bg-slate-800 flex items-center justify-center shrink-0">
-                            <i data-lucide="${mod.icon}" class="w-3.5 h-3.5 text-slate-400"></i>
-                        </div>
-                        <span class="flex-1 text-sm font-semibold text-slate-200">${mod.name}</span>
-                        <span id="status-badge-${mod.key}" class="text-[9px] px-2 py-0.5 rounded-full font-semibold shrink-0 ${
-                            isSet ? 'bg-green-500/15 text-green-400 border border-green-500/20'
-                                  : 'bg-red-500/15 text-red-400 border border-red-500/20'}">
-                            ${isSet ? "SET" : "MISSING"}
-                        </span>
-                        ${isSet ? `<button type="button"
-                                onclick="Modules._fetchQuota('${mod.key}')"
-                                class="text-slate-600 hover:text-blue-400 transition ml-1" title="Refresh quota">
-                            <i data-lucide="refresh-cw" class="w-3.5 h-3.5" id="quota-spin-${mod.key}"></i>
-                        </button>` : ""}
-                    </div>
-
-                    <!-- API key input row -->
-                    <div class="flex items-center gap-2">
-                        <div class="relative flex-1">
-                            <input type="password"
-                                   id="key-input-${mod.key}"
-                                   data-key="${mod.key}"
-                                   value="${current}"
-                                   placeholder="API key…"
-                                   class="w-full bg-slate-950 border border-slate-700/60 rounded-md
-                                          px-3 py-1.5 pr-8 text-xs font-mono text-slate-200
-                                          focus:outline-none focus:ring-1 focus:ring-blue-500/70
-                                          placeholder-slate-600">
-                            <button type="button"
-                                    onclick="Modules._toggleKeyVisibility('${mod.key}')"
-                                    class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-300 transition"
-                                    title="Show / hide">
-                                <i data-lucide="eye" class="w-3.5 h-3.5" id="eye-icon-${mod.key}"></i>
-                            </button>
-                        </div>
-                    </div>
-
-                    ${extraHtml}
-
-                    <!-- Quota zone -->
-                    <div id="quota-row-${mod.key}" class="hidden"></div>
-                `;
-                container.appendChild(card);
-                if (isSet) this._fetchQuota(mod.key);
+                grid.appendChild(this._buildSettingsCard(mod, false));
             });
+            container.appendChild(grid);
         });
 
         lucide.createIcons();
+    },
+
+    _buildSettingsCard(mod, fullWidth) {
+        const current = SecretStore?.get(mod.key) || "";
+        const isSet   = !!current;
+
+        const extraHtml = (mod.settings_fields || []).map(sf => {
+            const stored = SecretStore?.get(`extra_${sf.key}`) || "";
+            return `
+                <div class="mt-2">
+                    <label class="text-[10px] text-slate-500 block mb-1">${sf.label}</label>
+                    <input type="${sf.type === 'url' ? 'url' : 'text'}"
+                           id="extra-input-${sf.key}"
+                           data-extra-key="${sf.key}"
+                           value="${stored}"
+                           placeholder="${sf.placeholder || ''}"
+                           class="w-full bg-slate-950 border border-slate-700/60 rounded-md
+                                  px-3 py-1.5 text-xs font-mono text-slate-200
+                                  focus:outline-none focus:ring-1 focus:ring-blue-500/70 placeholder-slate-600">
+                </div>`;
+        }).join("");
+
+        const card = document.createElement("div");
+        card.className = "rounded-lg border " +
+            (isSet ? "border-slate-700/60 bg-slate-900/50" : "border-slate-800/60 bg-slate-900/30 opacity-60") +
+            " p-3 space-y-2";
+
+        card.innerHTML = `
+            <!-- Card header -->
+            <div class="flex items-center gap-2">
+                <div class="w-7 h-7 rounded-md bg-slate-800 flex items-center justify-center shrink-0">
+                    <i data-lucide="${mod.icon}" class="w-3.5 h-3.5 text-slate-400"></i>
+                </div>
+                <span class="flex-1 text-sm font-semibold text-slate-200 truncate">${mod.name}</span>
+                <span id="status-badge-${mod.key}"
+                      class="text-[9px] px-2 py-0.5 rounded-full font-semibold shrink-0 ${
+                          isSet ? 'bg-green-500/15 text-green-400 border border-green-500/20'
+                                : 'bg-red-500/15 text-red-400 border border-red-500/20'}">
+                    ${isSet ? "SET" : "MISSING"}
+                </span>
+                ${isSet ? `
+                <button type="button"
+                        onclick="Modules._fetchQuota('${mod.key}')"
+                        class="text-slate-600 hover:text-blue-400 transition ml-1" title="Refresh quota">
+                    <i data-lucide="refresh-cw" class="w-3.5 h-3.5" id="quota-spin-${mod.key}"></i>
+                </button>` : ""}
+            </div>
+
+            <!-- API key input -->
+            <div class="relative">
+                <input type="password"
+                       id="key-input-${mod.key}"
+                       data-key="${mod.key}"
+                       value="${current}"
+                       placeholder="API key…"
+                       class="w-full bg-slate-950 border border-slate-700/60 rounded-md
+                              px-3 py-1.5 pr-8 text-xs font-mono text-slate-200
+                              focus:outline-none focus:ring-1 focus:ring-blue-500/70 placeholder-slate-600">
+                <button type="button"
+                        onclick="Modules._toggleKeyVisibility('${mod.key}')"
+                        class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-300 transition"
+                        title="Show / hide">
+                    <i data-lucide="eye" class="w-3.5 h-3.5" id="eye-icon-${mod.key}"></i>
+                </button>
+            </div>
+
+            ${extraHtml}
+
+            <!-- Quota zone -->
+            <div id="quota-row-${mod.key}" class="hidden"></div>
+        `;
+
+        if (isSet) this._fetchQuota(mod.key);
+        return card;
     },
 
     // ── Quota fetch ───────────────────────────────────────
