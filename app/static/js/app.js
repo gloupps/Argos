@@ -186,6 +186,19 @@ const App = {
         });
         return keys;
     },
+    
+    _collectAllApiKeys() {
+        // Toutes les clés définies dans SecretStore, sans filtrer par enabled/disabled
+        // Utilisé pour les actions qui ont besoin de toutes les clés (fetch_internal_source, etc.)
+        const keys = {};
+        SecretStore.keys()
+            .filter(k => !k.startsWith("extra_") && k !== "misp_instances")
+            .forEach(k => {
+                const v = SecretStore.get(k);
+                if (v) keys[k] = v;
+            });
+        return keys;
+    },
 
     _collectExtraConfig() {
         return Modules?.collectExtraConfig?.() || {};
