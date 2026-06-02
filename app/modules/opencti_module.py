@@ -5,7 +5,30 @@ from typing import List, Dict, Any
 from .module import Module
 
 # ── GraphQL queries ────────────────────────────────────────────
+_GQL_REPORT_OBSERVABLES = """
+query getReportObjects($id: String!) {
+  report(id: $id) {
+    id name
+    objects(first: 200) {
+      edges { node {
+        ... on StixCyberObservable { id entity_type observable_value }
+        ... on Indicator { id name indicator_types pattern }
+      }}
+    }
+  }
+}
+"""
 
+_GQL_LIST_INDICATORS = """
+query listIndicators($first: Int) {
+  indicators(first: $first) {
+    edges { node {
+      id name indicator_types
+      objectLabel { value }
+    }}
+  }
+}
+"""
 _GET_INDICATOR = """
 query getIndicator($value: Any!) {
   indicators(
@@ -471,6 +494,7 @@ class OpenCTIModule(Module):
             "link": None,
             "max": None if max_ is None else max_,
         }
+    
 
 # ──────────────────────────────────────────────────────────────
 # Helpers — mapping types OpenCTI → types IOC internes
@@ -524,3 +548,11 @@ def _opencti_indicator_type_to_ioc(indicator_types: List[str], name: str) -> str
         return "domain"
 
     return None
+
+def _opencti_entity_to_ioc_type(entity_type: str, value: str) -> str:
+    mapping = {
+        "IPv4-Addr": "ip", "IPv6-Addr": "ip",
+        "Domain-Name": "domain", "Hostname": "domain",
+        "Url": "url", "StixFile": "hash",
+    }
+    return mapping.get(entity_type) or _guess_type(value)
