@@ -7,6 +7,11 @@ window.Tabs = {
         this.newBtn    = document.getElementById("new-tab-btn");
         if (!this.container || !this.newBtn) { console.error("[Tabs] DOM missing"); return; }
         this.newBtn.addEventListener("click", () => this.create());
+        this.container.addEventListener("dragstart", e => {
+            const t = e.target.closest("[data-id]");
+            if (t) this._draggingId = t.dataset.id;
+        });
+        this.container.addEventListener("dragend", () => { this._draggingId = null; });
         this.ensureTab();
     },
 
@@ -36,12 +41,36 @@ window.Tabs = {
         const tab = document.createElement("div");
         tab.className = "px-4 py-1 bg-slate-800 text-xs rounded-t flex items-center gap-2 cursor-pointer hover:bg-slate-700 transition select-none";
         tab.dataset.id = tabId;
+        tab.draggable = true;
         tab.innerHTML = `
             <span class="tab-label truncate max-w-[140px]">${tabData.name}</span>
             <span class="ml-1 text-slate-400 hover:text-red-400 cursor-pointer leading-none" data-close="true">×</span>
         `;
         tab.addEventListener("click", e => { if (!e.target.dataset.close) this.activate(tabId); });
         tab.querySelector("[data-close]").addEventListener("click", e => { e.stopPropagation(); this.close(tabId); });
+
+        // ── Drag & drop ──
+        tab.addEventListener("dragstart", e => {
+            e.dataTransfer.effectAllowed = "move";
+            e.dataTransfer.setData("text/plain", tabId);
+            tab.classList.add("opacity-40");
+        });
+        tab.addEventListener("dragend", () => tab.classList.remove("opacity-40"));
+        tab.addEventListener("dragover", e => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "move";
+            const draggingId = this._draggingId;
+            if (!draggingId || draggingId === tabId) return;
+            const allTabs = [...this.container.querySelectorAll("[data-id]")];
+            const fromIdx = allTabs.findIndex(t => t.dataset.id === draggingId);
+            const toIdx   = allTabs.findIndex(t => t.dataset.id === tabId);
+            if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return;
+            const fromEl = allTabs[fromIdx];
+            if (fromIdx < toIdx) this.container.insertBefore(fromEl, tab.nextSibling);
+            else                  this.container.insertBefore(fromEl, tab);
+        });
+        tab.addEventListener("dragenter", e => { e.preventDefault(); });
+
         this.container.insertBefore(tab, this.newBtn);
         this.tabs[tabId] = tab;
     },
