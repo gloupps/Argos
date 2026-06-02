@@ -339,20 +339,21 @@ def register_routes(app, services, job_manager):
         if action == "add_ioc":
             case_id = data.get("case_id")
             value = (data.get("value") or "").strip()
-            
+
             # ── snapshot undo ──
             import asyncio as _aio
+
             _loop = _aio.new_event_loop()
             try:
                 _loop.run_until_complete(services.database.connect())
                 _loop.run_until_complete(services.database.save_graph_snapshot(case_id))
             finally:
                 _loop.close()
-                
+
             if not case_id or not value:
                 return jsonify({"error": "missing case_id or value"}), 400
             node_type = data.get("node_type", "root")
-            if node_type not in ("root", "correlated", "pivot"):
+            if node_type not in ("root", "correlated", "pivoted", "pivot"):
                 node_type = "root"
             try:
                 conn = _get_conn(db_path)
@@ -381,16 +382,17 @@ def register_routes(app, services, job_manager):
         if action == "delete_indicator":
             case_id = data.get("case_id")
             value = (data.get("value") or "").strip()
-            
+
             # ── snapshot undo ──
             import asyncio as _aio
+
             _loop = _aio.new_event_loop()
             try:
                 _loop.run_until_complete(services.database.connect())
                 _loop.run_until_complete(services.database.save_graph_snapshot(case_id))
             finally:
                 _loop.close()
-                
+
             if not case_id or not value:
                 return jsonify({"error": "missing case_id or value"}), 400
             try:
@@ -433,13 +435,14 @@ def register_routes(app, services, job_manager):
         # add_manual_edge
         # ══════════════════════════════════════════════════
         if action == "add_manual_edge":
-            case_id     = data.get("case_id")
-            src         = (data.get("src") or "").strip()
-            tgt         = (data.get("tgt") or "").strip()
+            case_id = data.get("case_id")
+            src = (data.get("src") or "").strip()
+            tgt = (data.get("tgt") or "").strip()
             pivot_label = (data.get("pivot_label") or "").strip()
-            
+
             # ── snapshot undo ──
             import asyncio as _aio
+
             _loop = _aio.new_event_loop()
             try:
                 _loop.run_until_complete(services.database.connect())
@@ -499,7 +502,9 @@ def register_routes(app, services, job_manager):
 
                 # Récupérer l'éventuel id de pivot transmis par le frontend
                 pivot_db_id_raw = data.get("pivot_db_id")
-                pivot_db_id = int(pivot_db_id_raw) if pivot_db_id_raw is not None else None
+                pivot_db_id = (
+                    int(pivot_db_id_raw) if pivot_db_id_raw is not None else None
+                )
 
                 # ── Upsert le pivot ──
                 pivot_id = _get_or_create_pivot(pivot_label, pivot_db_id=pivot_db_id)
@@ -510,9 +515,26 @@ def register_routes(app, services, job_manager):
                 # direction transmise par le frontend
                 # src_dir : sens du drag depuis src vers le pivot
                 # tgt_dir : sens opposé
-                link_type = data.get("link_type", "correlation")  # "correlation" ou "manual_directed"
-
-                if link_type == "manual_directed":
+                link_type = data.get(
+                    "link_type", "correlation"
+                )  # "correlation" ou "manual_directed"
+                if link_type == "correlation":
+                    # Bloquer si un pivot avec ce nom existe déjà
+                    dup_pivot = conn.execute(
+                        "SELECT id FROM pivots WHERE case_id=? AND label=?",
+                        (case_id, pivot_label),
+                    ).fetchone()
+                    if dup_pivot:
+                        conn.close()
+                        return (
+                            jsonify(
+                                {
+                                    "error": f'A pivot named "{pivot_label}" already exists'
+                                }
+                            ),
+                            409,
+                        )
+                elif link_type == "manual_directed":
                     # Lien manuel avec direction explicite (drag IOC→pivot ou pivot→IOC)
                     src_direction = data.get("src_direction", "out")
                     tgt_direction = "in" if src_direction == "out" else "out"
@@ -535,37 +557,56 @@ def register_routes(app, services, job_manager):
                 conn.close()
 
                 import asyncio
+
                 loop = asyncio.new_event_loop()
                 try:
                     loop.run_until_complete(services.database.connect())
-                    graph = loop.run_until_complete(services.database.get_graph(case_id))
+                    graph = loop.run_until_complete(
+                        services.database.get_graph(case_id)
+                    )
                 finally:
                     loop.close()
                 socketio.emit("graph_update", {"case_id": case_id, "graph": graph})
                 return jsonify({"ok": True})
             except Exception as e:
                 return jsonify({"error": str(e)}), 500
-            
+
         # ══════════════════════════════════════════════════════════
         # add_pivot  — crée un pivot standalone dans la table pivots
         # ══════════════════════════════════════════════════════════
         if action == "add_pivot":
-            case_id     = data.get("case_id")
-            label       = (data.get("label") or "").strip()
-            
+            case_id = data.get("case_id")
+            label = (data.get("label") or "").strip()
+
             # ── snapshot undo ──
             import asyncio as _aio
+
             _loop = _aio.new_event_loop()
             try:
                 _loop.run_until_complete(services.database.connect())
                 _loop.run_until_complete(services.database.save_graph_snapshot(case_id))
             finally:
                 _loop.close()
-                
+
             if not case_id or not label:
                 return jsonify({"error": "missing case_id or label"}), 400
             try:
                 conn = _get_conn(db_path)
+                # ── Bloquer doublon pivot ──
+                existing = conn.execute(
+                    "SELECT id FROM pivots WHERE case_id=? AND label=?",
+                    (case_id, label),
+                ).fetchone()
+                if existing:
+                    conn.close()
+                    return (
+                        jsonify(
+                            {
+                                "error": f'A pivot named "{label}" already exists in this case'
+                            }
+                        ),
+                        409,
+                    )
                 conn.execute(
                     "INSERT OR IGNORE INTO pivots (case_id, label, module) VALUES (?,?,?)",
                     (case_id, label, "manual"),
@@ -574,10 +615,13 @@ def register_routes(app, services, job_manager):
                 conn.close()
 
                 import asyncio
+
                 loop = asyncio.new_event_loop()
                 try:
                     loop.run_until_complete(services.database.connect())
-                    graph = loop.run_until_complete(services.database.get_graph(case_id))
+                    graph = loop.run_until_complete(
+                        services.database.get_graph(case_id)
+                    )
                 finally:
                     loop.close()
                 socketio.emit("graph_update", {"case_id": case_id, "graph": graph})
@@ -589,18 +633,19 @@ def register_routes(app, services, job_manager):
         # delete_pivot
         # ══════════════════════════════════════════════════
         if action == "delete_pivot":
-            case_id     = data.get("case_id")
+            case_id = data.get("case_id")
             pivot_label = (data.get("pivot_label") or "").strip()
-            
+
             # ── snapshot undo ──
             import asyncio as _aio
+
             _loop = _aio.new_event_loop()
             try:
                 _loop.run_until_complete(services.database.connect())
                 _loop.run_until_complete(services.database.save_graph_snapshot(case_id))
             finally:
                 _loop.close()
-                
+
             if not case_id or not pivot_label:
                 return jsonify({"error": "missing case_id or pivot_label"}), 400
             try:
@@ -619,10 +664,13 @@ def register_routes(app, services, job_manager):
                 conn.close()
 
                 import asyncio
+
                 loop = asyncio.new_event_loop()
                 try:
                     loop.run_until_complete(services.database.connect())
-                    graph = loop.run_until_complete(services.database.get_graph(case_id))
+                    graph = loop.run_until_complete(
+                        services.database.get_graph(case_id)
+                    )
                 finally:
                     loop.close()
                 socketio.emit("graph_update", {"case_id": case_id, "graph": graph})
@@ -634,11 +682,14 @@ def register_routes(app, services, job_manager):
         # rename_pivot
         # ══════════════════════════════════════════════════
         if action == "rename_pivot":
-            case_id   = data.get("case_id")
+            case_id = data.get("case_id")
             old_label = (data.get("old_label") or "").strip()
             new_label = (data.get("new_label") or "").strip()
             if not case_id or not old_label or not new_label:
-                return jsonify({"error": "missing case_id, old_label or new_label"}), 400
+                return (
+                    jsonify({"error": "missing case_id, old_label or new_label"}),
+                    400,
+                )
             try:
                 conn = _get_conn(db_path)
                 conn.execute(
@@ -654,10 +705,61 @@ def register_routes(app, services, job_manager):
                 conn.close()
 
                 import asyncio
+
                 loop = asyncio.new_event_loop()
                 try:
                     loop.run_until_complete(services.database.connect())
-                    graph = loop.run_until_complete(services.database.get_graph(case_id))
+                    graph = loop.run_until_complete(
+                        services.database.get_graph(case_id)
+                    )
+                finally:
+                    loop.close()
+                socketio.emit("graph_update", {"case_id": case_id, "graph": graph})
+                return jsonify({"ok": True})
+            except Exception as e:
+                return jsonify({"error": str(e)}), 500
+
+        # ══════════════════════════════════════════════════════════
+        # Après l'action rename_pivot, ajouter rename_ioc
+        # ══════════════════════════════════════════════════════════
+        if action == "rename_ioc":
+            case_id = data.get("case_id")
+            old_value = (data.get("old_value") or "").strip()
+            new_value = (data.get("new_value") or "").strip()
+            if not case_id or not old_value or not new_value:
+                return (
+                    jsonify({"error": "missing case_id, old_value or new_value"}),
+                    400,
+                )
+            try:
+                conn = _get_conn(db_path)
+                # Vérifier que l'IOC cible n'existe pas déjà
+                dup = conn.execute(
+                    "SELECT id FROM indicators WHERE value=? AND case_id=?",
+                    (new_value, case_id),
+                ).fetchone()
+                if dup:
+                    conn.close()
+                    return (
+                        jsonify(
+                            {"error": f'IOC "{new_value}" already exists in this case'}
+                        ),
+                        409,
+                    )
+                conn.execute(
+                    "UPDATE indicators SET value=?, type=? WHERE value=? AND case_id=?",
+                    (new_value, _guess_type(new_value), old_value, case_id),
+                )
+                conn.commit()
+                conn.close()
+                import asyncio
+
+                loop = asyncio.new_event_loop()
+                try:
+                    loop.run_until_complete(services.database.connect())
+                    graph = loop.run_until_complete(
+                        services.database.get_graph(case_id)
+                    )
                 finally:
                     loop.close()
                 socketio.emit("graph_update", {"case_id": case_id, "graph": graph})
@@ -683,37 +785,45 @@ def register_routes(app, services, job_manager):
                 merged_keys = dict(api_keys)
                 # Fallback : si la clé n'est pas dans api_keys, essayer extra_config
                 if source_type not in merged_keys:
-                    fallback = extra_config.get(source_type) or extra_config.get(f"{source_type}_api_key", "")
+                    fallback = extra_config.get(source_type) or extra_config.get(
+                        f"{source_type}_api_key", ""
+                    )
                     if fallback:
                         merged_keys[source_type] = fallback
 
-                job_ids["fetch_internal"] = services.start_job({
-                    "action":               "fetch_internal_source",
-                    "case_id":              case_id,
-                    "internal_source_url":  data.get("internal_source_url", ""),
-                    "internal_source_type": source_type,
-                    "api_keys":             merged_keys,
-                    "extra_config":         extra_config,
-                    "chain_enrich":         data.get("auto_enrich", False),
-                    "chain_correlate":      data.get("correlation", False),
-                    "correlation_config":   cfg,
-                })
+                job_ids["fetch_internal"] = services.start_job(
+                    {
+                        "action": "fetch_internal_source",
+                        "case_id": case_id,
+                        "internal_source_url": data.get("internal_source_url", ""),
+                        "internal_source_type": source_type,
+                        "api_keys": merged_keys,
+                        "extra_config": extra_config,
+                        "chain_enrich": data.get("auto_enrich", False),
+                        "chain_correlate": data.get("correlation", False),
+                        "correlation_config": cfg,
+                    }
+                )
             elif source_mode != "db":
                 if data.get("auto_enrich") and api_keys:
-                    job_ids["enrich"] = services.start_job({
-                        "action": "enrich",
-                        "case_id": case_id,
-                        "api_keys": api_keys,
-                        "extra_config": extra_config,
-                    })
+                    job_ids["enrich"] = services.start_job(
+                        {
+                            "action": "enrich",
+                            "case_id": case_id,
+                            "api_keys": api_keys,
+                            "extra_config": extra_config,
+                        }
+                    )
                 if data.get("correlation") and api_keys:
-                    job_ids["correlate"] = services.start_job({
-                        "action": "correlate",
-                        "case_id": case_id,
-                        "api_keys": api_keys,
-                        "correlation_config": cfg,
-                        "extra_config": extra_config,
-                    })
+                    job_ids["correlate"] = services.start_job(
+                        {
+                            "action": "correlate",
+                            "case_id": case_id,
+                            "api_keys": api_keys,
+                            "correlation_config": cfg,
+                            "extra_config": extra_config,
+                        }
+                    )
             # FIX : retourner case_name pour que le JS nomme correctement l'onglet
             return jsonify(
                 {"case_id": case_id, "case_name": resolved_name, "job_ids": job_ids}

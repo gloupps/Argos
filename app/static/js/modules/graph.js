@@ -7,6 +7,24 @@ window.GraphModule = {
 
     init() { console.log("[Graph] init"); },
 
+    toggleFullscreen(tabId) {
+        const cyEl = document.getElementById("cy");
+        const wrapper = cyEl?.closest(".glass");
+        if (!wrapper) return;
+        const isExpanded = wrapper.classList.contains("graph-fullscreen");
+        wrapper.classList.toggle("graph-fullscreen", !isExpanded);
+        cyEl.style.height = isExpanded ? "" : "calc(100vh - 120px)";
+        const btn = document.getElementById("graph-expand-btn");
+        if (btn) {
+            btn.innerHTML = isExpanded
+                ? `<i data-lucide="maximize-2" class="w-3.5 h-3.5"></i>`
+                : `<i data-lucide="minimize-2" class="w-3.5 h-3.5"></i>`;
+            lucide.createIcons({ nodes: [btn] });
+        }
+        const inst = this.instances[tabId];
+        if (inst?.cy) setTimeout(() => inst.cy.fit(undefined, 60), 50);
+    },
+
     create(tabId, caseId) {
         const container = document.getElementById("cy");
         if (!container) { console.warn("[Graph] #cy not found"); return; }
@@ -582,16 +600,28 @@ window.LinkDrag = {
         if (!srcIsPivot && !tgtIsPivot) {
             const pivotName = prompt(`Create a pivot between "${srcLabel}" and "${tgtLabel}":\nPivot name:`, "manual");
             if (pivotName === null) return;
+            const trimmedName = pivotName.trim() || "manual";
+
+            // ── Vérification doublon côté client ──
+            const inst = GraphModule?.instances?.[tabId];
+            if (inst?.cy) {
+                const exists = inst.cy.nodes().some(n =>
+                    n.data("nodeType") === "pivot" &&
+                    (n.data("fullLabel") || n.data("label")) === trimmedName
+                );
+                if (exists) {
+                    JobLog?.push?.({ message: `Pivot "${trimmedName}" already exists`, status: "failed" });
+                    return;
+                }
+            }
+
             const result = await App.runAction({
-                action:      "add_manual_edge",
-                case_id:     caseId,
-                src:         srcLabel,
-                tgt:         tgtLabel,
-                pivot_label: pivotName.trim() || "manual",
-                link_type:   "correlation",
+                action: "add_manual_edge", case_id: caseId,
+                src: srcLabel, tgt: tgtLabel,
+                pivot_label: trimmedName, link_type: "correlation",
             });
             if (result?.ok) {
-                JobLog?.push?.({ message: `✓ pivot "${pivotName.trim() || "manual"}" created`, status: "done" });
+                JobLog?.push?.({ message: `✓ pivot "${trimmedName}" created`, status: "done" });
             } else {
                 JobLog?.push?.({ message: result?.error || "Failed", status: "failed" });
             }
@@ -714,6 +744,8 @@ window.ContextMenu = {
         items.push(this._header(label, iocType));
 
         if (nodeType === "pivot") {
+            items.push(this._separator());
+            items.push(this._sectionLabel("Manage"));
             items.push(this._item("pencil",  "Rename pivot", "Rename this pivot label",       "blue",
                 () => this._runRenamePivot(nodeData, caseId)));
             items.push(this._item("radar",   "Re-pivot",     "Re-run pivot/surface recon",     "amber",
@@ -727,7 +759,7 @@ window.ContextMenu = {
             items.push(this._sectionLabel("Enrichment"));
             items.push(this._item("zap",       "Enrich",            "Enrich via enrichment modules (VT, Shodan…)", "blue",
                 () => this._runEnrich(label, iocType, caseId, nodeData)));
-
+            items.push(this._separator());
             // ── Section : Recon / Pivot ───────────────────
             items.push(this._sectionLabel("Recon & Correlation"));
             items.push(this._item("radar",     "Pivot",             "Surface recon — Shodan, Censys, URLScan…",   "amber",
@@ -738,16 +770,21 @@ window.ContextMenu = {
                 () => this._runPivotAndCorrelate(label, iocType, caseId, nodeData)));
 
             items.push(this._separator());
+            items.push(this._sectionLabel("Manage"));
+            items.push(this._item("pencil", "Rename IOC", "Rename this indicator value", "blue",
+                () => this._runRenameIOC(nodeData, caseId)));
             items.push(this._item("trash-2",   "Delete node",       "Remove this indicator",                      "red",
                 () => this._runDeleteNode(nodeData, caseId)));
 
         } else {
             items.push(this._sectionLabel("Add indicator"));
-            items.push(this._item("circle-dot", "Root",       "Add as root indicator",       "red",
+            items.push(this._item("circle-dot", "Root",       "Add as root indicator",        "red",
                 () => this._runAddIndicator(caseId, "root")));
-            items.push(this._item("diamond",    "Pivot",      "Add as pivot indicator",      "amber",
+            items.push(this._item("diamond",    "Pivot",      "Add as pivot node",            "cyan",
                 () => this._runAddIndicator(caseId, "pivot")));
-            items.push(this._item("circle",     "Correlated", "Add as correlated indicator", "violet",
+            items.push(this._item("triangle",   "Pivoted IOC",    "Add as pivoted indicator",     "amber",
+                () => this._runAddIndicator(caseId, "pivoted")));
+            items.push(this._item("circle",     "Correlated IOC", "Add as correlated indicator",  "violet",
                 () => this._runAddIndicator(caseId, "correlated")));
         }
         return items;
@@ -757,12 +794,14 @@ window.ContextMenu = {
         const items = [];
         items.push(this._canvasHeader());
         items.push(this._sectionLabel("Add indicator"));
-        items.push(this._item("circle-dot", "Root",       "Add as root indicator",       "red",
-            () => this._runAddIndicator(caseId, "root")));
-        items.push(this._item("diamond",    "Pivot",      "Add as pivot indicator",      "amber",
-            () => this._runAddIndicator(caseId, "pivot")));
-        items.push(this._item("circle",     "Correlated", "Add as correlated indicator", "violet",
-            () => this._runAddIndicator(caseId, "correlated")));
+        items.push(this._item("circle-dot", "Root",       "Add as root indicator",        "red",
+                () => this._runAddIndicator(caseId, "root")));
+            items.push(this._item("diamond",    "Pivot",      "Add as pivot node",            "cyan",
+                () => this._runAddIndicator(caseId, "pivot")));
+            items.push(this._item("triangle",   "Pivoted IOC",    "Add as pivoted indicator",     "amber",
+                () => this._runAddIndicator(caseId, "pivoted")));
+            items.push(this._item("circle",     "Correlated IOC", "Add as correlated indicator",  "violet",
+                () => this._runAddIndicator(caseId, "correlated")));
         return items;
     },
 
@@ -830,6 +869,27 @@ window.ContextMenu = {
         }
     },
 
+    async _runRenameIOC(nodeData, caseId) {
+        this.hide();
+        const currentValue = nodeData.fullLabel || nodeData.label;
+        const newValue = prompt("Rename IOC:", currentValue);
+        if (!newValue?.trim() || newValue.trim() === currentValue) return;
+        const tabId = App?.state?.activeTab;
+        const result = await App.runAction({
+            action:    "rename_ioc",
+            case_id:   caseId,
+            old_value: currentValue,
+            new_value: newValue.trim(),
+        });
+        if (result?.ok) {
+            JobLog?.push?.({ message: `✓ IOC renamed to "${newValue.trim()}"`, status: "done" });
+            GraphModule?.refreshGraph?.(tabId, caseId);
+            EnrichPanel?.clear?.();
+        } else {
+            JobLog?.push?.({ message: result?.error || "Failed to rename IOC", status: "failed" });
+        }
+    },
+
     async _runDeleteNode(nodeData, caseId) {
         this.hide();
         const label       = nodeData.fullLabel || nodeData.label;
@@ -850,7 +910,7 @@ window.ContextMenu = {
 
     async _runAddIndicator(caseId, nodeType) {
         this.hide();
-        const value = prompt(`Add a new ${nodeType}:`);
+        const value = prompt(`Add a new ${nodeType} indicator:`);
         if (!value?.trim()) return;
         const tabId = App?.state?.activeTab;
 
@@ -862,11 +922,9 @@ window.ContextMenu = {
         const result = await App.runAction(payload);
         if (result?.ok) {
             JobLog?.push?.({ message: `✓ ${value.trim()} added as ${nodeType}`, status: "done" });
-            if (nodeType !== "pivot") {
-                GraphModule?.refreshGraph?.(tabId, caseId);
-            }
+            if (nodeType !== "pivot") GraphModule?.refreshGraph?.(tabId, caseId);
         } else {
-            JobLog?.push?.({ message: result?.error || "Failed to add indicator", status: "failed" });
+            JobLog?.push?.({ message: result?.error || "Failed to add", status: "failed" });
         }
     },
 

@@ -221,7 +221,14 @@ window.EnrichPanel = {
             </div>
             <div class="flex gap-1 mt-1 flex-wrap" id="header-badges">
                 <span class="bg-slate-800 text-slate-500 text-[15px] px-1.5 py-0.5 rounded uppercase">${nodeData.type}</span>
-                <span class="bg-slate-800 text-slate-500 text-[15px] px-1.5 py-0.5 rounded uppercase">${nodeData.nodeType}</span>
+                ${(() => {
+                    const nt = nodeData.nodeType || "correlated";
+                    const cls = nt === "root"       ? "bg-red-500/20 text-red-400 border border-red-500/30"
+                              : nt === "pivoted"    ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                              : nt === "pivot"      ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30"
+                              :                      "bg-violet-500/20 text-violet-400 border border-violet-500/30";
+                    return `<span class="text-[11px] px-1.5 py-0.5 rounded uppercase font-semibold border ${cls}">${nt}</span>`;
+                })()}
             </div>`;
         lucide.createIcons({ nodes: [el] });
     },

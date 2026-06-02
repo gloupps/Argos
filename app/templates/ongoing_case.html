@@ -78,7 +78,16 @@
                 </span>
             </div>
         </div>
-        <div id="cy"></div>
+        <div class="relative">
+            <div id="cy"></div>
+            <button id="graph-expand-btn"
+                    onclick="GraphModule.toggleFullscreen(App?.state?.activeTab)"
+                    title="Toggle fullscreen graph"
+                    class="absolute bottom-2 right-2 z-10 text-slate-500 hover:text-blue-400 transition
+                        bg-slate-900/80 backdrop-blur-sm border border-slate-700 rounded p-1">
+                <i data-lucide="maximize-2" class="w-3.5 h-3.5"></i>
+            </button>
+        </div>
     </div>
 
     <!-- ══════════════════════════════════════════════════ -->
