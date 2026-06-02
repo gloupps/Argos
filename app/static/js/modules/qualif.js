@@ -7,10 +7,14 @@ window.EnrichPanel = {
 
     _internalKeys() {
         const reg = Modules?.registry || {};
-        const keys = Object.entries(reg).filter(([,m]) => m.type === "internal").map(([k]) => k);
-        return keys.length ? keys : ["opencti"];
+        const keys = Object.entries(reg)
+            .filter(([k, m]) => m.type === "internal" || k === "misp" || k.startsWith("misp_ext_"))
+            .map(([k]) => k);
+        return keys.length ? keys : ["opencti", "misp"];
     },
+
     _modLabel(k) { return Modules?.registry?.[k]?.name || k; },
+
     _modIcon(k) {
         const i = Modules?.registry?.[k]?.icon;
         if (i) return i;
@@ -18,11 +22,42 @@ window.EnrichPanel = {
             urlscan:"scan-eye", viewdns:"globe", opencti:"database", misp:"share-2",
             threatfox:"bug", elasticsearch:"database", censys:"scan-line" }[k] || "box";
     },
+
     _isEmpty(v) {
         if (v === null || v === undefined || v === "") return true;
         if (typeof v === "number" && v === 0) return true;
         if (Array.isArray(v) && v.filter(x => x !== "" && x !== null && typeof x !== "object").length === 0 && !v.some(x => x && typeof x === "object")) return true;
         return false;
+    },
+
+    // Échappe les caractères spéciaux HTML pour les attributs
+    _esc(v) {
+        return String(v)
+            .replace(/&/g, "&amp;")
+            .replace(/"/g, "&quot;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;");
+    },
+
+    // Bouton copie inline — utilise data-attribute pour éviter tout problème d'échappement
+    _copyBtn(v) {
+        const id = "cb-" + Math.random().toString(36).slice(2, 8);
+        setTimeout(() => {
+            const btn = document.getElementById(id);
+            if (btn) btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                navigator.clipboard.writeText(btn.dataset.val).then(() => {
+                    btn.classList.add("text-green-400");
+                    setTimeout(() => btn.classList.remove("text-green-400"), 1200);
+                });
+            });
+        }, 0);
+        const safeAttr = this._esc(v);
+        return `<button id="${id}" data-val="${safeAttr}"
+                        class="ml-1 shrink-0 text-slate-600 hover:text-slate-300 transition align-middle"
+                        title="Copy full value">
+                    <i data-lucide="copy" class="w-2.5 h-2.5 inline"></i>
+                </button>`;
     },
 
     // ── Modal service unifié (Shodan + Censys) ────────────
@@ -92,42 +127,29 @@ window.EnrichPanel = {
         // ── HTTP ──
         const httpRows = [];
         if (svc.http_status)       httpRows.push(["Status",       svc.http_status]);
-        if (svc.http_reason)       httpRows.push(["Reason",       svc.http_reason]);
+        if (svc.http_redirects)    httpRows.push(["Redirects",    svc.http_redirects]);
         if (svc.http_title)        httpRows.push(["Title",        svc.http_title]);
         if (svc.http_server)       httpRows.push(["Server",       svc.http_server]);
-        if (svc.http?.title)       httpRows.push(["Title",        svc.http.title]);
-        if (svc.http?.status_code) httpRows.push(["Status",       svc.http.status_code]);
         if (svc.http_content_type) httpRows.push(["Content-Type", svc.http_content_type]);
-        if (svc.http_powered_by)   httpRows.push(["X-Powered-By", svc.http_powered_by]);
-        if (svc.http_location)     httpRows.push(["Location",     svc.http_location]);
-        if (svc.http_auth)         httpRows.push(["Auth",         svc.http_auth]);
-        if (svc.http_x_frame)      httpRows.push(["X-Frame",      svc.http_x_frame]);
-        if (svc.http_hsts)         httpRows.push(["HSTS",         svc.http_hsts]);
-        if (svc.http_body_hash)    httpRows.push(["Body SHA256",  svc.http_body_hash]);
         if (httpRows.length) sections.push(section("globe", "HTTP", kv(httpRows)));
 
-        // ── DNS (Censys) ──
-        const dnsRows = [];
-        if (svc.dns?.reverse_dns) dnsRows.push(["Reverse DNS", Array.isArray(svc.dns.reverse_dns) ? svc.dns.reverse_dns[0] : svc.dns.reverse_dns]);
-        if (dnsRows.length) sections.push(section("globe-2", "DNS", kv(dnsRows)));
-
-        // ── CVEs ──
+        // ── Vulns ──
         if (svc.vulns?.length) {
-            const badges = svc.vulns.map(v =>
-                `<a href="https://nvd.nist.gov/vuln/detail/${v}" target="_blank" rel="noopener noreferrer"
+            const badges = svc.vulns.slice(0, 15).map(cv =>
+                `<a href="https://nvd.nist.gov/vuln/detail/${cv}" target="_blank" rel="noopener noreferrer"
                     class="text-[15px] px-1.5 py-0.5 rounded border bg-red-500/10 border-red-500/30
-                           text-red-400 hover:text-red-300 font-mono transition">${v}</a>`
+                           text-red-400 hover:text-red-300 font-mono transition">${cv}</a>`
             ).join("");
-            sections.push(section("bug", "Vulnerabilities",
-                `<div class="flex flex-wrap gap-1">${badges}</div>`));
+            const overflow = svc.vulns.length > 15 ? `<span class="text-[12px] text-slate-600">+${svc.vulns.length - 15}</span>` : "";
+            sections.push(section("bug", `Vulnerabilities (${svc.vulns.length})`,
+                `<div class="flex flex-wrap gap-1">${badges}${overflow}</div>`));
         }
 
-        // ── Banner ──
-        if (svc.banner) {
-            const esc = svc.banner.replace(/</g,"&lt;").replace(/>/g,"&gt;");
+        // ── Raw banner ──
+        if (svc.data) {
+            const raw = String(svc.data).slice(0, 400).replace(/</g, "&lt;").replace(/>/g, "&gt;");
             sections.push(section("terminal", "Banner",
-                `<pre class="text-[12px]  font-mono text-slate-400 whitespace-pre-wrap break-all
-                             max-h-28 overflow-y-auto bg-slate-900/60 rounded p-2">${esc}</pre>`));
+                `<pre class="text-[11px] font-mono text-slate-400 bg-slate-900/60 rounded p-2 overflow-auto max-h-28 whitespace-pre-wrap break-all">${raw}</pre>`));
         }
 
         let modal = document.getElementById("service-detail-modal");
@@ -138,7 +160,8 @@ window.EnrichPanel = {
         modal.innerHTML = `
             <div class="relative w-full max-w-lg max-h-[85vh] flex flex-col
                         bg-slate-950 border border-slate-700 rounded-xl shadow-2xl overflow-hidden">
-                <div class="flex items-center justify-between px-4 py-3 border-b border-slate-800 shrink-0">
+                <div class="flex items-center justify-between px-4 py-3 border-b
+                            border-slate-800 shrink-0">
                     <span class="text-[15px] font-bold text-slate-200 flex items-center gap-2">
                         <i data-lucide="plug" class="w-3.5 h-3.5 ${srcColor}"></i>
                         ${title}
@@ -190,7 +213,7 @@ window.EnrichPanel = {
         if (!el) return;
         el.innerHTML = `
             <div class="flex items-center justify-between gap-2 min-w-0">
-                <p class="text-[15px] font-bold font-mono truncate text-white" title="${nodeData.label}">${nodeData.label}</p>
+                <p class="text-[15px] font-bold font-mono truncate text-white" title="${this._esc(nodeData.label)}">${nodeData.label}</p>
                 <button onclick="EnrichPanel._triggerEnrich()" title="Re-enrich"
                         class="text-slate-600 hover:text-blue-400 transition shrink-0">
                     <i data-lucide="refresh-cw" class="w-3 h-3"></i>
@@ -254,26 +277,11 @@ window.EnrichPanel = {
         "Country":              "host",
         "City":                 "host",
         "ISP":                  "host",
-        "Network":              "host",
-        "Whois Org":            "host",
-        "IP Address":           "host",
-        "Reverse DNS":          "host",
-        "Certificates Found":   "host",
-        "Certificate Issuers":  "host",
-        "Censys Results":       "host",
-        "Censys Host":          "host",
-        "Censys Certs":         "host",
-        "Censys Certificate":   "host",
-        "Censys Search":        "host",
-        "Latest Expiry":        "host",
-        "Subject DN":           "host",
-        "Issuer DN":            "host",
-        "Valid From":           "host",
-        "Valid Until":          "host",
-        "Sig Algorithm":        "host",
-        "Key Type":             "host",
         "Last Seen":            "host",
         "First Seen":           "host",
+        "Hostnames":            "host",
+        "Domains":              "host",
+        "Tags":                 "tags",
 
         // ── SERVICES ──
         "Services":             "shodan_services",
@@ -281,25 +289,26 @@ window.EnrichPanel = {
 
         // ── VULNS ──
         "Vulnerabilities":      "vulns",
-        "Open Ports":           "ports",
+        "CVEs":                 "vulns",
 
         // ── DNS ──
+        "A":                    "dns",
+        "AAAA":                 "dns",
+        "MX":                   "dns",
+        "NS":                   "dns",
+        "TXT":                  "dns",
+        "PTR":                  "dns",
+        "CNAME":                "dns",
+        "SOA":                  "dns",
+        "Subdomains":           "dns",
+        "Reverse DNS":          "dns",
         "Passive DNS":          "dns",
-        "Hostnames":            "dns",
-        "Domains":              "dns",
-        "DNS Names":            "dns",
-        "Related Names (SAN)":  "dns",
-        "SANs / Names":         "dns",
-        "Hosts Using Cert":     "dns",
-        "Cert SHA-256":         "dns",
-        "IP Addresses":         "dns",
-
-        // ── TAGS ──
-        "Tags":                 "tags",
-        "Certificate Issuers":  "tags",
 
         // ── WEB ──
-        "URLScan":              "urlscan_meta",
+        "URLScan Result":       "urlscan_meta",
+        "URLScan Search":       "urlscan_meta",
+        "Page Title":           "urlscan_web",
+        "HTTP Status":          "urlscan_web",
         "HTTP Transactions":    "urlscan_web",
         "Redirects":            "urlscan_web",
         "Links":                "urlscan_web",
@@ -319,7 +328,6 @@ window.EnrichPanel = {
         "Referrer URLs":             "vt_refs",
         "Redirecting URLs":          "vt_refs",
         "Redirects To":              "vt_refs",
-        "Subdomains":                "vt_refs",
         "CNAME Records":             "vt_refs",
         "MX Records":                "vt_refs",
         "NS Records":                "vt_refs",
@@ -338,7 +346,6 @@ window.EnrichPanel = {
         const grid = document.getElementById("enrich-grid");
         if (grid) {
             grid.className = `grid gap-2 grid-cols-${n}`;
-            // Adapter l'alignement vertical des boxes
             grid.style.alignItems = "start";
         }
         [1, 2, 3].forEach(i => {
@@ -363,7 +370,6 @@ window.EnrichPanel = {
         const grid = document.getElementById("enrich-grid");
         if (!grid) return;
 
-        // Initialiser la grille au bon nombre de colonnes
         this._initGrid();
 
         if (!info || !Object.keys(info.modules || {}).length) {
@@ -508,13 +514,13 @@ window.EnrichPanel = {
 
             if (scoreItems.length) {
                 const bars = scoreItems.map(({ mod, field }) => {
-                    const pct   = Math.min(100, Math.max(0, Number(field.value)));
-                    const color = pct > 70 ? "#ef4444" : pct > 40 ? "#f59e0b" : "#22c55e";
+                    const pct    = Math.min(100, Math.max(0, Number(field.value)));
+                    const color  = pct > 70 ? "#ef4444" : pct > 40 ? "#f59e0b" : "#22c55e";
                     const txtcls = pct > 70 ? "text-red-400" : pct > 40 ? "text-amber-400" : "text-green-400";
                     return `
                         <div class="flex items-center gap-2">
                             <span class="flex items-center gap-1 text-[15px] text-slate-500 w-20 shrink-0 truncate"
-                                  title="${this._modLabel(mod)}">
+                                  title="${this._esc(this._modLabel(mod))}">
                                 <i data-lucide="${this._modIcon(mod)}" class="w-2.5 h-2.5 shrink-0"></i>
                                 ${this._modLabel(mod)}
                             </span>
@@ -541,9 +547,6 @@ window.EnrichPanel = {
                     const cls = isThreatCount && !isNaN(num) && num > 0
                         ? "text-red-400 font-bold"
                         : Array.isArray(field.value) ? "text-amber-400" : "text-slate-300";
-                    const display = Array.isArray(field.value)
-                        ? field.value.slice(0, 3).join(", ") + (field.value.length > 3 ? "…" : "")
-                        : v.length > 26 ? v.slice(0, 24) + "…" : v;
 
                     // Champ texte long (ex: Malware Description)
                     if (field.type === "text") {
@@ -556,10 +559,15 @@ window.EnrichPanel = {
                             </tr>`;
                     }
 
+                    const isTrunc = !Array.isArray(field.value) && v.length > 26;
+                    const display = Array.isArray(field.value)
+                        ? field.value.slice(0, 3).join(", ") + (field.value.length > 3 ? "…" : "")
+                        : isTrunc ? v.slice(0, 24) + "…" : v;
+
                     return `
                         <tr>
                             <td class="text-[15px] text-slate-500 pr-3 py-0.5 whitespace-nowrap align-top">${field.name}</td>
-                            <td class="text-[15px] ${cls} font-mono py-0.5 truncate" title="${v}">${display}</td>
+                            <td class="text-[15px] ${cls} font-mono py-0.5" title="${this._esc(v)}">${display}${isTrunc ? this._copyBtn(v) : ""}</td>
                         </tr>`;
                 }).filter(Boolean).join("");
                 if (rows) html += `<table class="w-full">${rows}</table>`;
@@ -575,13 +583,14 @@ window.EnrichPanel = {
                 if (!seen[field.name]) seen[field.name] = { mod, field };
             });
             const rows = Object.values(seen).map(({ mod, field }) => {
-                const v    = Array.isArray(field.value) ? field.value.join(", ") : String(field.value);
-                const disp = v.length > 28 ? v.slice(0, 26) + "…" : v;
+                const v      = Array.isArray(field.value) ? field.value.join(", ") : String(field.value);
+                const isTrunc = v.length > 28;
+                const disp   = isTrunc ? v.slice(0, 26) + "…" : v;
                 if (field.link) return `
                     <tr>
                         <td class="text-[15px] text-slate-500 pr-3 py-0.5 whitespace-nowrap">${field.name}</td>
                         <td class="py-0.5">
-                            <a href="${field.link}" target="_blank" rel="noopener noreferrer" title="${v}"
+                            <a href="${field.link}" target="_blank" rel="noopener noreferrer" title="${this._esc(v)}"
                                class="text-[15px] text-blue-400 hover:text-blue-300 font-mono flex items-center gap-0.5 transition">
                                 ${disp}<i data-lucide="external-link" class="w-2 h-2 shrink-0"></i>
                             </a>
@@ -590,7 +599,7 @@ window.EnrichPanel = {
                 return `
                     <tr>
                         <td class="text-[15px] text-slate-500 pr-3 py-0.5 whitespace-nowrap">${field.name}</td>
-                        <td class="text-[15px] text-slate-300 font-mono py-0.5 truncate" title="${v}">${disp}</td>
+                        <td class="text-[15px] text-slate-300 font-mono py-0.5" title="${this._esc(v)}">${disp}${isTrunc ? this._copyBtn(v) : ""}</td>
                     </tr>`;
             }).join("");
             return rows ? `<table class="w-full">${rows}</table>` : null;
@@ -610,10 +619,10 @@ window.EnrichPanel = {
                 let encoded = "";
                 try { encoded = btoa(unescape(encodeURIComponent(JSON.stringify({ svc, source })))); } catch(e) { encoded = ""; }
 
-                const s       = typeof svc === "object" ? svc : {};
-                const port    = s.port || "?";
-                const proto   = s.transport || "tcp";
-                const product = s.product || s.module || s.service || "";
+                const s        = typeof svc === "object" ? svc : {};
+                const port     = s.port || "?";
+                const proto    = s.transport || "tcp";
+                const product  = s.product || s.module || s.service || "";
                 const hasVulns = s.vulns?.length > 0;
                 const hasTLS   = !!s.tls_cn;
 
@@ -621,7 +630,7 @@ window.EnrichPanel = {
                     ? `<span class="text-[11px] text-amber-500/70 font-semibold ml-auto shrink-0">SHD</span>`
                     : `<span class="text-[11px] text-cyan-500/70 font-semibold ml-auto shrink-0">CSY</span>`;
                 const vulnBadge = hasVulns
-                    ? `<span class="text-[12px]  text-red-400 font-bold shrink-0">${s.vulns.length} CVE</span>` : "";
+                    ? `<span class="text-[12px] text-red-400 font-bold shrink-0">${s.vulns.length} CVE</span>` : "";
                 const tlsBadge = hasTLS && !hasVulns
                     ? `<span class="text-[11px] text-cyan-600 shrink-0">TLS</span>` : "";
 
@@ -635,7 +644,7 @@ window.EnrichPanel = {
                     </button>`;
             }).join("");
             const overflow = allServices.length > 30
-                ? `<div class="text-[12px]  text-slate-600 pt-1">+${allServices.length - 30} more</div>` : "";
+                ? `<div class="text-[12px] text-slate-600 pt-1">+${allServices.length - 30} more</div>` : "";
             return `<div class="space-y-0.5">${btns}${overflow}</div>`;
         }
 
@@ -652,7 +661,7 @@ window.EnrichPanel = {
                     class="text-[15px] px-1.5 py-0.5 rounded border bg-red-500/10 border-red-500/30
                            text-red-400 hover:text-red-300 font-mono transition">${v}</a>`
             ).join("");
-            const overflow = arr.length > 20 ? `<span class="text-[12px]  text-slate-600">+${arr.length - 20}</span>` : "";
+            const overflow = arr.length > 20 ? `<span class="text-[12px] text-slate-600">+${arr.length - 20}</span>` : "";
             return `<div class="flex flex-wrap gap-1">${badges}${overflow}</div>`;
         }
 
@@ -667,15 +676,17 @@ window.EnrichPanel = {
             const sections = [];
             Object.entries(byName).forEach(([name, valSet]) => {
                 const arr = [...valSet];
-                const tags = arr.slice(0, 12).map(v =>
-                    `<span class="text-[15px] px-1.5 py-0.5 rounded border bg-slate-800/60
-                                  border-slate-700/50 text-slate-300 font-mono truncate max-w-full"
-                           title="${v}">${v.length > 30 ? v.slice(0,28)+"…" : v}</span>`
-                ).join("");
-                const overflow = arr.length > 12 ? `<span class="text-[12px]  text-slate-600">+${arr.length-12}</span>` : "";
+                const tags = arr.slice(0, 12).map(v => {
+                    const isTrunc = v.length > 30;
+                    const disp = isTrunc ? v.slice(0, 28) + "…" : v;
+                    return `<span class="text-[15px] px-1.5 py-0.5 rounded border bg-slate-800/60
+                                          border-slate-700/50 text-slate-300 font-mono truncate max-w-full"
+                                   title="${this._esc(v)}">${disp}</span>`;
+                }).join("");
+                const overflow = arr.length > 12 ? `<span class="text-[12px] text-slate-600">+${arr.length-12}</span>` : "";
                 sections.push(`
                     <div class="mb-2">
-                        <div class="text-[12px]  text-slate-500 uppercase tracking-wider mb-1">${name}</div>
+                        <div class="text-[12px] text-slate-500 uppercase tracking-wider mb-1">${name}</div>
                         <div class="flex flex-wrap gap-1">${tags}${overflow}</div>
                     </div>`);
             });
@@ -753,16 +764,16 @@ window.EnrichPanel = {
                             rest = v.slice(4);
                         }
                         const disp = rest.length > 90 ? rest.slice(0, 88) + "…" : rest;
-                        return `<div class="text-[8.5px] font-mono text-slate-400 truncate py-px" title="${v}">${statusBadge}${disp}</div>`;
+                        return `<div class="text-[8.5px] font-mono text-slate-400 truncate py-px" title="${this._esc(v)}">${statusBadge}${disp}</div>`;
                     }).join("");
-                    const overflow = allVals.length > max ? `<div class="text-[12px]  text-slate-600 mt-0.5">+${allVals.length - max} more</div>` : "";
+                    const overflow = allVals.length > max ? `<div class="text-[12px] text-slate-600 mt-0.5">+${allVals.length - max} more</div>` : "";
                     const icon = iconMap[name] || "activity";
                     subsections.push(`
                         <div class="mb-2">
                             <div class="flex items-center gap-1 mb-1">
                                 <i data-lucide="${icon}" class="w-2.5 h-2.5 text-slate-500 shrink-0"></i>
-                                <span class="text-[12px]  text-slate-500 uppercase tracking-wider">${name}</span>
-                                <span class="text-[12px]  text-slate-700 ml-auto">${allVals.length}</span>
+                                <span class="text-[12px] text-slate-500 uppercase tracking-wider">${name}</span>
+                                <span class="text-[12px] text-slate-700 ml-auto">${allVals.length}</span>
                             </div>
                             <div class="space-y-px">${rows}${overflow}</div>
                         </div>`);
@@ -788,7 +799,7 @@ window.EnrichPanel = {
                             <i data-lucide="${icon}" class="w-3 h-3 text-slate-500 shrink-0"></i>
                             <div class="flex-1 min-w-0">
                                 <div class="text-[15px] font-semibold text-slate-300">${label}</div>
-                                <div class="text-[12px]  text-slate-600 font-mono truncate">${preview}…</div>
+                                <div class="text-[12px] text-slate-600 font-mono truncate">${preview}…</div>
                             </div>
                             <i data-lucide="maximize-2" class="w-2.5 h-2.5 text-slate-600 shrink-0"></i>
                         </button>`;
@@ -829,17 +840,17 @@ window.EnrichPanel = {
                     const sDisp = secondary.length > 28 ? secondary.slice(0, 26) + "…" : secondary;
                     return `
                         <div class="flex flex-col py-0.5">
-                            <span class="text-[15px] text-slate-300 font-mono truncate" title="${primary}">${pDisp}</span>
-                            ${sDisp ? `<span class="text-[12px]  text-slate-500 truncate">${sDisp}</span>` : ""}
+                            <span class="text-[15px] text-slate-300 font-mono truncate" title="${this._esc(primary)}">${pDisp}</span>
+                            ${sDisp ? `<span class="text-[12px] text-slate-500 truncate">${sDisp}</span>` : ""}
                         </div>`;
                 }).join("");
-                const overflow = vals.length > 10 ? `<div class="text-[12px]  text-slate-600 pt-0.5">+${vals.length - 10} more</div>` : "";
+                const overflow = vals.length > 10 ? `<div class="text-[12px] text-slate-600 pt-0.5">+${vals.length - 10} more</div>` : "";
                 blocks.push(`
                     <div class="mb-2">
                         <div class="flex items-center gap-1 mb-1">
                             <i data-lucide="${icon}" class="w-2.5 h-2.5 text-slate-500"></i>
-                            <span class="text-[12px]  text-slate-500 uppercase tracking-wider font-semibold">${name}</span>
-                            <span class="text-[12px]  text-slate-600 ml-1">${vals.length}</span>
+                            <span class="text-[12px] text-slate-500 uppercase tracking-wider font-semibold">${name}</span>
+                            <span class="text-[12px] text-slate-600 ml-1">${vals.length}</span>
                         </div>
                         ${rows}${overflow}
                     </div>`);
@@ -853,11 +864,12 @@ window.EnrichPanel = {
         const rows = Object.values(seen).map(field => {
             const v = Array.isArray(field.value) ? field.value.join(", ") : String(field.value ?? "");
             if (!v || v === "0") return "";
-            const disp = v.length > 26 ? v.slice(0, 24) + "…" : v;
+            const isTrunc = v.length > 26;
+            const disp = isTrunc ? v.slice(0, 24) + "…" : v;
             return `
                 <tr>
                     <td class="text-[15px] text-slate-500 pr-3 py-0.5 whitespace-nowrap">${field.name}</td>
-                    <td class="text-[15px] text-slate-300 font-mono py-0.5 truncate" title="${v}">${disp}</td>
+                    <td class="text-[15px] text-slate-300 font-mono py-0.5" title="${this._esc(v)}">${disp}${isTrunc ? this._copyBtn(v) : ""}</td>
                 </tr>`;
         }).filter(Boolean).join("");
         return rows ? `<table class="w-full">${rows}</table>` : null;
@@ -886,13 +898,14 @@ window.EnrichPanel = {
             const seen = {};
             visible.forEach(f => { if (!seen[f.name]) seen[f.name] = f; });
             const rows = Object.values(seen).map(f => {
-                const v    = Array.isArray(f.value) ? f.value.join(", ") : String(f.value);
-                const disp = v.length > 32 ? v.slice(0, 30) + "…" : v;
+                const v      = Array.isArray(f.value) ? f.value.join(", ") : String(f.value);
+                const isTrunc = v.length > 32;
+                const disp   = isTrunc ? v.slice(0, 30) + "…" : v;
                 if (f.link) return `
                     <tr>
                         <td class="text-[15px] text-slate-500 pr-3 py-0.5 whitespace-nowrap">${f.name}</td>
                         <td class="py-0.5">
-                            <a href="${f.link}" target="_blank" rel="noopener noreferrer" title="${v}"
+                            <a href="${f.link}" target="_blank" rel="noopener noreferrer" title="${this._esc(v)}"
                                class="text-[15px] text-violet-400 hover:text-violet-300 font-mono flex items-center gap-0.5 transition">
                                 ${disp}<i data-lucide="external-link" class="w-2.5 h-2.5 shrink-0"></i>
                             </a>
@@ -901,7 +914,7 @@ window.EnrichPanel = {
                 return `
                     <tr>
                         <td class="text-[15px] text-slate-500 pr-3 py-0.5 whitespace-nowrap">${f.name}</td>
-                        <td class="text-[15px] text-slate-300 font-mono py-0.5 truncate" title="${v}">${disp}</td>
+                        <td class="text-[15px] text-slate-300 font-mono py-0.5" title="${this._esc(v)}">${disp}${isTrunc ? this._copyBtn(v) : ""}</td>
                     </tr>`;
             }).join("");
             if (rows) cardsHtml += `
@@ -978,12 +991,12 @@ window.EnrichPanel = {
             html += `<div class="flex gap-2 mb-2">`;
             if (firstSeen) html += `
                 <div class="flex-1 bg-slate-900/60 border border-slate-800 rounded px-2 py-1">
-                    <div class="text-[12px]  text-slate-600 uppercase tracking-wider mb-0.5">First seen</div>
+                    <div class="text-[12px] text-slate-600 uppercase tracking-wider mb-0.5">First seen</div>
                     <div class="text-[15px] text-slate-300 font-mono">${firstSeen}</div>
                 </div>`;
             if (lastSeen) html += `
                 <div class="flex-1 bg-slate-900/60 border border-slate-800 rounded px-2 py-1">
-                    <div class="text-[12px]  text-slate-600 uppercase tracking-wider mb-0.5">Last seen</div>
+                    <div class="text-[12px] text-slate-600 uppercase tracking-wider mb-0.5">Last seen</div>
                     <div class="text-[15px] text-slate-300 font-mono">${lastSeen}</div>
                 </div>`;
             html += `</div>`;
@@ -992,14 +1005,14 @@ window.EnrichPanel = {
         // Indices
         if (indices.length) {
             const tags = indices.slice(0, 8).map(idx => {
-                const short = idx.length > 28 ? idx.slice(0, 26) + "…" : idx;
-                return `<span class="text-[12px]  px-1.5 py-px rounded border bg-slate-900 border-amber-900/40
-                                     text-amber-500/80 font-mono" title="${idx}">${short}</span>`;
+                const short = idx.length > 26 ? idx.slice(0, 24) + "…" : idx;
+                return `<span class="text-[12px] px-1.5 py-px rounded border bg-slate-900 border-amber-900/40
+                                     text-amber-500/80 font-mono" title="${this._esc(idx)}">${short}</span>`;
             }).join("");
-            const overflow = indices.length > 8 ? `<span class="text-[12px]  text-slate-600">+${indices.length - 8}</span>` : "";
+            const overflow = indices.length > 8 ? `<span class="text-[12px] text-slate-600">+${indices.length - 8}</span>` : "";
             html += `
                 <div class="mb-2">
-                    <div class="text-[12px]  text-slate-600 uppercase tracking-wider mb-1">Indices</div>
+                    <div class="text-[12px] text-slate-600 uppercase tracking-wider mb-1">Indices</div>
                     <div class="flex flex-wrap gap-1">${tags}${overflow}</div>
                 </div>`;
         }
@@ -1033,7 +1046,7 @@ window.EnrichPanel = {
         // Événements récents
         if (events.length) {
             html += `
-                <div class="text-[12px]  text-slate-600 uppercase tracking-wider mb-1">Recent events</div>
+                <div class="text-[12px] text-slate-600 uppercase tracking-wider mb-1">Recent events</div>
                 <div class="space-y-1">`;
             events.slice(0, 5).forEach(ev => {
                 const parts = String(ev).split(" | ");
@@ -1044,46 +1057,40 @@ window.EnrichPanel = {
                     if (eq === -1) {
                         const short = p.length > 60 ? p.slice(0, 58) + "…" : p;
                         const esc   = short.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-                        return `<span class="text-[12px]  text-slate-400 italic">${esc}</span>`;
+                        return `<span class="text-[12px] text-slate-400 italic">${esc}</span>`;
                     }
                     const k      = p.slice(0, eq);
                     const v      = p.slice(eq + 1).replace(/</g, "&lt;").replace(/>/g, "&gt;");
                     const vShort = v.length > 32 ? v.slice(0, 30) + "…" : v;
-                    return `<span class="inline-flex items-baseline gap-0.5">
-                        <span class="text-[7.5px] text-slate-600">${k}</span>
-                        <span class="text-[12px]  text-slate-200 font-mono">${vShort}</span>
-                    </span>`;
-                }).join(`<span class="text-slate-700 mx-0.5 select-none">·</span>`);
+                    return `<span class="text-[12px] text-slate-500">${k}=</span><span class="text-[12px] text-slate-300 font-mono">${vShort}</span>`;
+                }).join(" ");
                 html += `
-                    <div class="bg-slate-900/50 border border-slate-800/60 rounded px-2 py-1.5">
-                        <div class="text-[12px]  text-slate-600 font-mono mb-1">${ts}</div>
-                        <div class="flex flex-wrap items-baseline gap-x-1 gap-y-0.5 leading-snug">
-                            ${badges || '<span class="text-[12px]  text-slate-600 italic">no context fields</span>'}
-                        </div>
+                    <div class="bg-slate-900/60 rounded px-2 py-1 border border-slate-800/60">
+                        <div class="text-[11px] text-slate-600 font-mono mb-0.5">${ts}</div>
+                        <div class="flex flex-wrap gap-x-2 gap-y-0.5">${badges}</div>
                     </div>`;
             });
-            html += `</div>`;
-            if (events.length > 5)
-                html += `<div class="text-[12px]  text-slate-600 mt-1 text-right">+${events.length - 5} more events</div>`;
+            const moreEv = events.length > 5 ? `<div class="text-[12px] text-slate-600 mt-0.5">+${events.length - 5} more events</div>` : "";
+            html += `${moreEv}</div>`;
         }
 
         return html;
     },
 
-    // ── Modals ────────────────────────────────────────────
+    // ── Screenshot modal ──────────────────────────────────
 
-    _openScreenshotModal(src, reportHref) {
+    _openScreenshotModal(src, href) {
         let modal = document.getElementById("screenshot-modal");
         if (modal) modal.remove();
         modal = document.createElement("div");
         modal.id = "screenshot-modal";
-        modal.className = "fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm";
+        modal.className = "fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4";
         modal.innerHTML = `
-            <div class="relative max-w-4xl w-full mx-4">
-                <div class="flex items-center justify-between mb-2 px-1">
-                    <a id="screenshot-modal-link" href="${reportHref}" target="_blank" rel="noopener noreferrer"
-                       class="flex items-center gap-1 text-[14px] text-blue-400 hover:text-blue-300 transition">
-                        <i data-lucide="external-link" class="w-3 h-3"></i> Open report
+            <div class="relative w-full max-w-4xl">
+                <div class="flex items-center justify-between mb-2">
+                    <a href="${href}" target="_blank" rel="noopener noreferrer"
+                       class="flex items-center gap-1 text-[15px] text-blue-400 hover:text-blue-300 transition">
+                        <i data-lucide="external-link" class="w-3 h-3"></i> Open in URLScan
                     </a>
                     <button onclick="document.getElementById('screenshot-modal').remove()"
                             class="text-slate-400 hover:text-white transition">
