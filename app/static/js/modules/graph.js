@@ -132,15 +132,50 @@ window.GraphModule = {
         const elements  = [];
         const nodeIndex = new Set();
 
-        // ── IOC nodes ─────────────────────────────────────
+        // Modules de recon/pivot (surface attack) — mirror de PIVOT_KEYS dans modules.js
+        const PIVOT_MODULES = new Set(["shodan", "censys", "viewdns", "urlscan"]);
+
+        // IOC liés à un pivot via un module de recon → orange
+        const pivotLinkedIds = new Set(
+            (data.edges || [])
+                .filter(e => PIVOT_MODULES.has(e.pivot_module))
+                .map(e => String(e.indicator_id))
+        );
+
+        // IOC liés à un pivot via un module de corrélation → violet
+        // (on prend tous les IOC de pivot_links NON couverts par pivotLinkedIds,
+        //  plus les IOC des legacy_edges)
+        const correlatedIds = new Set([
+            ...(data.edges || [])
+                .filter(e => !PIVOT_MODULES.has(e.pivot_module))
+                .map(e => String(e.indicator_id)),
+            ...(data.legacy_edges || []).flatMap(e => [
+                String(e.src_indicator_id), String(e.tgt_indicator_id)
+            ]),
+        ]);
+
         (data.nodes || []).forEach(n => {
-            const id = String(n.id);
+            const id      = String(n.id);
+            const isRoot  = (n.node_type || "correlated") === "root";
             nodeIndex.add(id);
+
+            // Classe de couleur selon origine (root reste root)
+            let originClass;
+            if (isRoot) {
+                originClass = "root";
+            } else if (pivotLinkedIds.has(id)) {
+                originClass = "pivot-ioc";      // orange
+            } else if (correlatedIds.has(id)) {
+                originClass = "correlated-ioc"; // violet
+            } else {
+                originClass = "correlated-ioc"; // fallback
+            }
+
             const el = {
                 group:   "nodes",
                 data:    { id, label: n.value || id, type: n.type || "ioc",
                            nodeType: n.node_type || "correlated", synthetic: false },
-                classes: n.node_type || "correlated",
+                classes: originClass,
             };
             if (savedPos && savedPos[id]) el.position = savedPos[id];
             elements.push(el);
@@ -308,6 +343,81 @@ window.GraphModule = {
 
     _runLayout(cy, count) {
         if (!cy || !cy.container() || count === 0) return;
+
+        const pivotNodes = cy.nodes(".pivot");
+
+        // ── Disposition circulaire autour de chaque pivot ──────
+        if (pivotNodes.length > 0) {
+            // 1. Positionner les pivots en cercle (ou ligne si un seul)
+            const W = cy.container().clientWidth  || 800;
+            const H = cy.container().clientHeight || 500;
+            const cx = W / 2, cy_ = H / 2;
+
+            if (pivotNodes.length === 1) {
+                pivotNodes[0].position({ x: cx, y: cy_ });
+            } else {
+                const pivotR = Math.min(W, H) * 0.28;
+                pivotNodes.forEach((pn, i) => {
+                    const angle = (2 * Math.PI * i) / pivotNodes.length - Math.PI / 2;
+                    pn.position({ x: cx + pivotR * Math.cos(angle), y: cy_ + pivotR * Math.sin(angle) });
+                });
+            }
+
+            // 2. Placer les IOCs attachés en cercle autour de leur pivot
+            pivotNodes.forEach(pn => {
+                const pp       = pn.position();
+                const children = pn.neighborhood("node").filter(n => !n.hasClass("pivot"));
+                if (children.length === 0) return;
+
+                // Rayon proportionnel au nombre d'IOCs
+                const radius  = 90 + children.length * 12;
+                const spread  = Math.min(2 * Math.PI, (2 * Math.PI) / pivotNodes.length * 0.9);
+                const baseAngle = pivotNodes.length > 1
+                    ? Math.atan2(pp.y - cy_, pp.x - cx)  // orienté vers l'extérieur
+                    : -Math.PI / 2;
+
+                children.forEach((child, i) => {
+                    const step  = children.length > 1
+                        ? spread / (children.length - 1)
+                        : 0;
+                    const angle = baseAngle - spread / 2 + step * i;
+                    const jitter = (Math.random() - 0.5) * 8; // léger jitter
+                    child.position({
+                        x: pp.x + (radius + jitter) * Math.cos(angle),
+                        y: pp.y + (radius + jitter) * Math.sin(angle),
+                    });
+                });
+            });
+
+            // 3. IOCs sans pivot (corrélation pure) → disposition cose autour des roots
+            const lonelyNodes = cy.nodes().filter(n =>
+                !n.hasClass("pivot") &&
+                !n.hasClass("root") &&
+                n.neighborhood("node").filter(nb => nb.hasClass("pivot")).length === 0
+            );
+            if (lonelyNodes.length > 0) {
+                try {
+                    lonelyNodes.union(lonelyNodes.neighborhood()).layout({
+                        name: "cose",
+                        animate: true,
+                        animationDuration: 500,
+                        fit: false,
+                        padding: 30,
+                        nodeRepulsion: () => 8000,
+                        idealEdgeLength: () => 120,
+                        gravity: 0.25,
+                        numIter: 400,
+                        randomize: false,
+                    }).run();
+                } catch (_) {}
+            }
+
+            // 4. Animation d'apparition douce pour les pivots
+            cy.animate({ fit: { eles: cy.elements(), padding: 60 } }, { duration: 500, easing: "ease-out-cubic" });
+            return;
+        }
+
+        // ── Fallback : cose classique (pas de pivot) ───────────
         let layout;
         if (count === 1) {
             layout = cy.layout({ name: "grid", fit: true, padding: 60 });
@@ -359,12 +469,20 @@ window.GraphModule = {
                 "font-size": 10, "font-weight": "bold",
             }},
             { selector: "node.pivot", style: {
-                "background-color": "#f59e0b",
-                "border-color":     "#78350f",
-                "width": 32, "height": 32,
+                "background-color": "#06b6d4",   // cyan-500 — distinct des IOCs
+                "border-color":     "#164e63",
+                "shape":            "diamond",
+                "width": 34, "height": 34,
                 "font-size": 8,
                 "color":  "#fef3c7",
-                "shape":  "diamond",
+            }},
+            { selector: "node.pivot-ioc", style: {
+                "background-color": "#f59e0b",   // Ambre
+                "border-color":     "#7c2d12",
+            }},
+            { selector: "node.correlated-ioc", style: {
+                "background-color": "#8b5cf6",   // violet-500
+                "border-color":     "#4c1d95",
             }},
             { selector: "node.correlated", style: {
                 "background-color": "#8b5cf6",
