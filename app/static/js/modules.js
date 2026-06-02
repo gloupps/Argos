@@ -14,6 +14,9 @@ window.Modules = {
 
     // ── config corrélation par module (valeurs des sliders)
     _correlationState: {},
+    
+    // ── cache quota { modKey → {remaining, limit, exhausted, low} }
+    _quotaCache: {},
 
     // ══════════════════════════════════════════
     // INIT
@@ -190,10 +193,19 @@ window.Modules = {
         const labelSpan = document.createElement("span");
         labelSpan.className = "flex items-center gap-2 flex-1 min-w-0 " +
                               (hasKey && on ? "cursor-pointer" : "cursor-default");
+        // Badge quota (EXHAUSTED / LOW) — alimenté par _quotaCache via _updateSidebarQuotaBadge()
+        const qc = this._quotaCache[mod.key];
+        const quotaBadgeClass = qc?.exhausted
+            ? "text-[9px] px-1.5 py-0.5 rounded-full font-semibold shrink-0 bg-red-500/20 text-red-400 border border-red-500/30"
+            : qc?.low
+            ? "text-[9px] px-1.5 py-0.5 rounded-full font-semibold shrink-0 bg-amber-500/20 text-amber-400 border border-amber-500/30"
+            : "text-[9px] px-1.5 py-0.5 rounded-full font-semibold shrink-0 hidden";
+        const quotaBadgeText = qc?.exhausted ? "EXHAUSTED" : qc?.low ? "LOW" : "";
+
         labelSpan.innerHTML = `
             <i data-lucide="${mod.icon}" class="w-4 h-4 text-slate-300 shrink-0"></i>
             <span class="text-sm truncate ${on ? "" : "text-slate-500"}">${mod.name}</span>
-
+            <span id="sidebar-quota-badge-${mod.key}" class="${quotaBadgeClass}">${quotaBadgeText}</span>
         `;
         if (hasKey && on) {
             labelSpan.addEventListener("click", () => {
@@ -424,7 +436,6 @@ window.Modules = {
         const container = document.getElementById("settings-keys");
         if (!container) return;
         container.innerHTML = "";
-
         if (!this._grouped) return;
 
         Object.entries(this._grouped).forEach(([group, modules]) => {
@@ -436,67 +447,75 @@ window.Modules = {
             modules.forEach(mod => {
                 const current = SecretStore?.get(mod.key) || "";
                 const isSet   = !!current;
-                const row     = document.createElement("div");
-                row.className = "space-y-2 mb-3";
 
-                // Extra fields (e.g. OpenCTI URL)
+                // Extra fields (URL, etc.)
                 const extraHtml = (mod.settings_fields || []).map(sf => {
                     const stored = SecretStore?.get(`extra_${sf.key}`) || "";
                     return `
-                        <div class="ml-36 mt-1">
+                        <div class="mt-2">
                             <label class="text-[10px] text-slate-500 block mb-1">${sf.label}</label>
                             <input type="${sf.type === 'url' ? 'url' : 'text'}"
                                    id="extra-input-${sf.key}"
                                    data-extra-key="${sf.key}"
                                    value="${stored}"
                                    placeholder="${sf.placeholder || ''}"
-                                   class="w-full bg-slate-900 border border-slate-700 rounded
-                                          p-2 text-sm font-mono
-                                          focus:outline-none focus:ring-1 focus:ring-blue-500">
+                                   class="w-full bg-slate-950 border border-slate-700/60 rounded-md
+                                          px-3 py-1.5 text-xs font-mono text-slate-200
+                                          focus:outline-none focus:ring-1 focus:ring-blue-500/70 placeholder-slate-600">
                         </div>`;
                 }).join("");
 
-                row.innerHTML = `
-                    <div class="flex items-center gap-3">
-                        <div class="w-32 text-sm flex items-center gap-2 shrink-0">
-                            <i data-lucide="${mod.icon}" class="w-4 h-4 text-slate-400"></i>
-                            <span class="font-medium">${mod.name}</span>
+                const card = document.createElement("div");
+                card.className = "rounded-lg border " +
+                    (isSet ? "border-slate-700/60 bg-slate-900/50" : "border-slate-800/60 bg-slate-900/30 opacity-60") +
+                    " p-3 mb-3 space-y-2";
+
+                card.innerHTML = `
+                    <!-- Card header: icon + name + status badge + refresh -->
+                    <div class="flex items-center gap-2">
+                        <div class="w-7 h-7 rounded-md bg-slate-800 flex items-center justify-center shrink-0">
+                            <i data-lucide="${mod.icon}" class="w-3.5 h-3.5 text-slate-400"></i>
                         </div>
+                        <span class="flex-1 text-sm font-semibold text-slate-200">${mod.name}</span>
+                        <span id="status-badge-${mod.key}" class="text-[9px] px-2 py-0.5 rounded-full font-semibold shrink-0 ${
+                            isSet ? 'bg-green-500/15 text-green-400 border border-green-500/20'
+                                  : 'bg-red-500/15 text-red-400 border border-red-500/20'}">
+                            ${isSet ? "SET" : "MISSING"}
+                        </span>
+                        ${isSet ? `<button type="button"
+                                onclick="Modules._fetchQuota('${mod.key}')"
+                                class="text-slate-600 hover:text-blue-400 transition ml-1" title="Refresh quota">
+                            <i data-lucide="refresh-cw" class="w-3.5 h-3.5" id="quota-spin-${mod.key}"></i>
+                        </button>` : ""}
+                    </div>
+
+                    <!-- API key input row -->
+                    <div class="flex items-center gap-2">
                         <div class="relative flex-1">
                             <input type="password"
                                    id="key-input-${mod.key}"
                                    data-key="${mod.key}"
                                    value="${current}"
                                    placeholder="API key…"
-                                   class="w-full bg-slate-900 border border-slate-700 rounded
-                                          p-2 pr-8 text-sm font-mono
-                                          focus:outline-none focus:ring-1 focus:ring-blue-500">
+                                   class="w-full bg-slate-950 border border-slate-700/60 rounded-md
+                                          px-3 py-1.5 pr-8 text-xs font-mono text-slate-200
+                                          focus:outline-none focus:ring-1 focus:ring-blue-500/70
+                                          placeholder-slate-600">
                             <button type="button"
                                     onclick="Modules._toggleKeyVisibility('${mod.key}')"
-                                    class="absolute right-2 top-1/2 -translate-y-1/2
-                                           text-slate-500 hover:text-slate-300 transition"
+                                    class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-300 transition"
                                     title="Show / hide">
                                 <i data-lucide="eye" class="w-3.5 h-3.5" id="eye-icon-${mod.key}"></i>
                             </button>
                         </div>
-                        <span class="text-[10px] px-2 py-1 rounded shrink-0
-                                     ${isSet ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}">
-                            ${isSet ? "SET" : "MISSING"}
-                        </span>
-                        ${isSet ? `
-                        <button type="button"
-                                onclick="Modules._fetchQuota('${mod.key}')"
-                                class="shrink-0 text-slate-500 hover:text-blue-400 transition"
-                                title="Check quota">
-                            <i data-lucide="refresh-cw" class="w-3.5 h-3.5" id="quota-spin-${mod.key}"></i>
-                        </button>` : ""}
                     </div>
+
                     ${extraHtml}
-                    <div id="quota-row-${mod.key}"
-                         class="hidden ml-36 px-3 py-2 bg-slate-900/60 border border-slate-800
-                                rounded text-xs space-y-1"></div>
+
+                    <!-- Quota zone -->
+                    <div id="quota-row-${mod.key}" class="hidden"></div>
                 `;
-                container.appendChild(row);
+                container.appendChild(card);
                 if (isSet) this._fetchQuota(mod.key);
             });
         });
@@ -518,51 +537,133 @@ window.Modules = {
         spinEl?.classList.remove("animate-spin");
         const row = document.getElementById(`quota-row-${modKey}`);
         if (!row) return;
-        if (result?.[modKey]) {
-            this._renderQuota(row, result[modKey]);
+
+        const quota = result?.[modKey];
+        if (quota) {
+            // Mettre à jour le cache + rafraîchir le badge sidebar
+            const exhausted = quota.remaining === 0 && quota.limit != null && quota.limit > 0;
+            const pct = (quota.limit > 0 && quota.remaining != null)
+                ? Math.round((quota.remaining / quota.limit) * 100) : null;
+            const low = pct !== null && pct <= 15 && !exhausted;
+            this._quotaCache[modKey] = { ...quota, exhausted, low };
+            this._updateSidebarQuotaBadge(modKey);
+            this._renderQuota(row, quota);
         } else {
-            row.innerHTML = `<span class="text-slate-500 italic">No quota data.</span>`;
+            row.innerHTML = `<p class="text-[10px] text-slate-600 italic">No quota data available.</p>`;
             row.classList.remove("hidden");
         }
     },
 
+    // Rafraîchit uniquement le badge capsule quota sur l'item sidebar (sans reconstruire tout le sidebar)
+    _updateSidebarQuotaBadge(modKey) {
+        const badgeId = `sidebar-quota-badge-${modKey}`;
+        const existing = document.getElementById(badgeId);
+        if (!existing) return; // sidebar item peut ne pas exister
+        const q = this._quotaCache[modKey];
+        if (!q) { existing.classList.add("hidden"); return; }
+        if (q.exhausted) {
+            existing.className = "text-[9px] px-1.5 py-0.5 rounded-full font-semibold shrink-0 " +
+                "bg-red-500/20 text-red-400 border border-red-500/30";
+            existing.textContent = "EXHAUSTED";
+            existing.classList.remove("hidden");
+        } else if (q.low) {
+            existing.className = "text-[9px] px-1.5 py-0.5 rounded-full font-semibold shrink-0 " +
+                "bg-amber-500/20 text-amber-400 border border-amber-500/30";
+            existing.textContent = "LOW";
+            existing.classList.remove("hidden");
+        } else {
+            existing.classList.add("hidden");
+        }
+    },
+
     _renderQuota(row, quota) {
+        row.classList.remove("hidden");
+
         if (quota.error) {
-            row.innerHTML = `<span class="text-red-400">Error: ${quota.error}</span>`;
-            row.classList.remove("hidden");
+            row.innerHTML = `
+                <div class="flex items-center gap-1.5 text-[10px] text-red-400 bg-red-500/10
+                            border border-red-500/20 rounded-md px-2.5 py-1.5">
+                    <i data-lucide="alert-circle" class="w-3 h-3 shrink-0"></i>
+                    <span>${quota.error}</span>
+                </div>`;
+            lucide.createIcons({ nodes: [row] });
             return;
         }
+
         if (quota.plan_type === "internal") {
             row.innerHTML = `
-                <div class="flex items-center justify-between">
-                    <span class="text-slate-400">Type</span>
-                    <span class="text-violet-400 font-semibold">Internal</span>
-                </div>
-                ${quota.version ? `<div class="flex items-center justify-between">
-                    <span class="text-slate-400">Version</span>
-                    <span class="text-white font-mono">${quota.version}</span>
-                </div>` : ""}`;
-            row.classList.remove("hidden");
+                <div class="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-violet-500/10
+                            border border-violet-500/20 text-[10px]">
+                    <i data-lucide="server" class="w-3 h-3 text-violet-400 shrink-0"></i>
+                    <span class="text-violet-400 font-semibold">Internal instance</span>
+                    ${quota.version ? `<span class="ml-auto text-slate-500 font-mono">${quota.version}</span>` : ""}
+                </div>`;
+            lucide.createIcons({ nodes: [row] });
             return;
         }
-        const planColor = quota.plan_type === "pro+" ? "text-green-400"
-                        : quota.plan_type === "pro"  ? "text-blue-400"
-                        : "text-slate-400";
+
+        if (quota.plan_type === "public" || (quota.remaining == null && quota.limit == null)) {
+            row.innerHTML = `
+                <div class="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-slate-800/60
+                            border border-slate-700/40 text-[10px] text-slate-400">
+                    <i data-lucide="globe" class="w-3 h-3 shrink-0"></i>
+                    Public / no quota tracking
+                </div>`;
+            lucide.createIcons({ nodes: [row] });
+            return;
+        }
+
+        const pct = (quota.limit > 0 && quota.remaining != null)
+            ? Math.round((quota.remaining / quota.limit) * 100) : null;
+        const exhausted = quota.remaining === 0 && quota.limit > 0;
+        const low       = pct !== null && pct <= 15 && !exhausted;
+
+        const barColor  = exhausted ? "bg-red-500"
+                        : low       ? "bg-amber-500"
+                        : pct !== null && pct <= 40 ? "bg-yellow-500"
+                        : "bg-emerald-500";
+
+        const planColor = quota.plan_type === "pro+" ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
+                        : quota.plan_type === "pro"  ? "text-blue-400 bg-blue-500/10 border-blue-500/20"
+                        : quota.plan_type === "free" ? "text-slate-400 bg-slate-700/40 border-slate-600/30"
+                        : "text-slate-400 bg-slate-700/40 border-slate-600/30";
+
         row.innerHTML = `
-            <div class="flex items-center justify-between">
-                <span class="text-slate-400">Plan</span>
-                <span class="${planColor} font-semibold uppercase">${quota.plan_type || "–"}</span>
-            </div>
-            ${quota.limit != null ? `
-            <div class="flex items-center justify-between">
-                <span class="text-slate-400">Remaining</span>
-                <span class="text-white font-mono">${quota.remaining ?? "–"} / ${quota.limit}</span>
-            </div>
-            <div class="w-full bg-slate-800 rounded-full h-1 mt-1">
-                <div class="h-1 rounded-full bg-blue-500"
-                     style="width:${quota.limit > 0 ? Math.round((quota.remaining/quota.limit)*100) : 0}%"></div>
-            </div>` : ""}`;
-        row.classList.remove("hidden");
+            <div class="rounded-md border border-slate-700/40 bg-slate-950/60 px-3 py-2.5 space-y-2">
+                <!-- Plan + counters -->
+                <div class="flex items-center justify-between gap-3">
+                    <span class="text-[9px] px-1.5 py-0.5 rounded-full border font-semibold uppercase ${planColor}">
+                        ${quota.plan_type || "unknown"}
+                    </span>
+                    ${quota.limit != null ? `
+                    <span class="text-[10px] font-mono text-slate-300 ml-auto">
+                        ${exhausted
+                            ? `<span class="text-red-400 font-bold">0</span> / ${quota.limit}`
+                            : `<span class="${low ? 'text-amber-400 font-semibold' : 'text-slate-200'}">${quota.remaining ?? "–"}</span>
+                               <span class="text-slate-600"> / ${quota.limit}</span>`
+                        }
+                    </span>
+                    <span class="text-[10px] text-slate-500">${pct !== null ? pct + "%" : ""}</span>
+                    ` : ""}
+                </div>
+                <!-- Progress bar -->
+                ${quota.limit != null && quota.limit > 0 ? `
+                <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                    <div class="${barColor} h-1.5 rounded-full transition-all duration-500"
+                         style="width: ${pct ?? 0}%"></div>
+                </div>` : ""}
+                <!-- Alert banner si exhausted ou low -->
+                ${exhausted ? `
+                <div class="flex items-center gap-1.5 text-[10px] text-red-400">
+                    <i data-lucide="ban" class="w-3 h-3 shrink-0"></i>
+                    <span>Credits exhausted — enrichment will fail for this module</span>
+                </div>` : low ? `
+                <div class="flex items-center gap-1.5 text-[10px] text-amber-400">
+                    <i data-lucide="triangle-alert" class="w-3 h-3 shrink-0"></i>
+                    <span>Low credits — consider renewing soon</span>
+                </div>` : ""}
+            </div>`;
+        lucide.createIcons({ nodes: [row] });
     },
 
     _toggleKeyVisibility(modKey) {
