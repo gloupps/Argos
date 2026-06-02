@@ -1,3 +1,4 @@
+<!-- app/templates/right_navbar.html -->
 <aside class="w-80 border-l border-slate-800 glass p-4 overflow-y-auto space-y-6">
 
     <section class="space-y-4">
@@ -11,9 +12,20 @@
 
     <section>
         <h3 class="text-xs font-bold text-amber-500 uppercase tracking-widest flex items-center gap-2">
-            <i data-lucide="share-2" class="w-4 h-4"></i> Correlation & Pivot
+            <i data-lucide="radar" class="w-4 h-4"></i> Pivot Modules
         </h3>
-        <div id="correlation-container" class="space-y-3 mt-3"></div>
+        <p class="text-[10px] text-slate-600 mt-1 mb-2 italic">Surface exposure & DNS recon</p>
+        <div id="pivot-container" class="space-y-3 mt-2"></div>
+    </section>
+
+    <hr class="border-slate-800">
+
+    <section>
+        <h3 class="text-xs font-bold text-violet-400 uppercase tracking-widest flex items-center gap-2">
+            <i data-lucide="git-merge" class="w-4 h-4"></i> Correlation Modules
+        </h3>
+        <p class="text-[10px] text-slate-600 mt-1 mb-2 italic">Threat intel & cross-IOC links</p>
+        <div id="correlation-container" class="space-y-3 mt-2"></div>
     </section>
 
 </aside>
