@@ -1,51 +1,293 @@
+// app/static/js/modules/siem.js
 window.SIEMModule = {
-    modules: {}, state: {},
+
+    state: {},
 
     init() {
-        console.log("[SIEM] init");
         this._loadState();
-        this._fetchModules();
+        this._render();
+        App?.socket?.on("siem_result", d => this._onResult(d));
     },
 
-    async _fetchModules() {
+    _loadState() {
         try {
-            // Le schéma SIEM vient maintenant du registry global si disponible
-            // sinon fallback sur l'endpoint legacy
-            const res = await fetch("/api/run", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: "get_modules" }),
-            });
-            const all = await res.json();
-            // Filtre les modules de type "siem"
-            this.modules = Object.fromEntries(
-                Object.entries(all).filter(([, m]) => m.type === "siem")
-            );
-            this._render();
-        } catch (e) { console.error("[SIEM] fetch error", e); }
+            const r = localStorage.getItem("pivotlens_siem");
+            this.state = r ? JSON.parse(r) : {
+                include_correlated:     false,
+                "ipv4-addr_checkbox":   true,
+                "domain-name_checkbox": true,
+                "url_checkbox":         true,
+                "stixfile_checkbox":    true,
+                date_start: "",
+                date_end:   "",
+            };
+        } catch (_) { this.state = {}; }
     },
 
-    _loadState() { const r = localStorage.getItem("cti_siem"); this.state = r ? JSON.parse(r) : {}; },
-    _saveState()  { localStorage.setItem("cti_siem", JSON.stringify(this.state)); },
+    _saveState() {
+        localStorage.setItem("pivotlens_siem", JSON.stringify(this.state));
+    },
 
+    update(key, value) {
+        this.state[key] = value;
+        this._saveState();
+    },
+
+    // ─────────────────────────────────────────────────────
+    // Render right-navbar panel into #siem-container
+    // ─────────────────────────────────────────────────────
     _render() {
         const container = document.getElementById("siem-container");
         if (!container) return;
-        if (!Object.keys(this.modules).length) {
-            container.innerHTML = `<p class="text-slate-600 text-xs italic">No SIEM modules configured.</p>`;
-            return;
-        }
-        container.innerHTML = "";
-        // render logic here when SIEM modules are added
+
+        const isConfigured = !!SecretStore?.has?.("qradar");
+
+        // Default dates: today - 7d → today
+        const now  = new Date();
+        const week = new Date(now - 7 * 86400000);
+        const fmt  = d => d.toISOString().slice(0, 16);
+
+        const ds = this.state.date_start || fmt(week);
+        const de = this.state.date_end   || fmt(now);
+
+        const chk = (key, label) => {
+            const on = this.state[key] !== false;
+            return `
+            <label class="flex items-center justify-between px-2 py-1.5
+                          rounded hover:bg-slate-800/50 cursor-pointer text-[11px] transition">
+                <span class="text-slate-300">${label}</span>
+                <input type="checkbox" ${on ? "checked" : ""}
+                       onchange="SIEMModule.update('${key}', this.checked)"
+                       class="accent-teal-500 w-3 h-3">
+            </label>`;
+        };
+
+        container.innerHTML = `
+
+            ${!isConfigured ? `
+            <div class="flex items-center gap-2 text-[10px] text-amber-400/80
+                        bg-amber-500/10 border border-amber-500/20 rounded px-2 py-1.5 mb-2">
+                <i data-lucide="alert-triangle" class="w-3 h-3 shrink-0"></i>
+                QRadar token missing — check Settings
+            </div>` : ""}
+
+            <!-- IOC scope -->
+            <div class="space-y-0.5">
+                <p class="text-[9px] font-bold uppercase tracking-widest text-slate-600 px-1 mb-1">Scope</p>
+                <label class="flex items-center justify-between px-2 py-1.5
+                              rounded hover:bg-slate-800/50 cursor-pointer text-[11px] transition">
+                    <span class="flex items-center gap-1.5 text-slate-300">
+                        <span class="w-1.5 h-1.5 rounded-full bg-red-500 inline-block"></span>
+                        Root IOCs only
+                    </span>
+                    <input type="radio" name="siem_scope" value="root"
+                           ${!this.state.include_correlated ? "checked" : ""}
+                           onchange="SIEMModule.update('include_correlated', false)"
+                           class="accent-teal-500 w-3 h-3">
+                </label>
+                <label class="flex items-center justify-between px-2 py-1.5
+                              rounded hover:bg-slate-800/50 cursor-pointer text-[11px] transition">
+                    <span class="flex items-center gap-1.5 text-slate-300">
+                        <span class="w-1.5 h-1.5 rounded-full bg-cyan-500 inline-block"></span>
+                        Root + Correlated / Pivoted
+                    </span>
+                    <input type="radio" name="siem_scope" value="all"
+                           ${this.state.include_correlated ? "checked" : ""}
+                           onchange="SIEMModule.update('include_correlated', true)"
+                           class="accent-teal-500 w-3 h-3">
+                </label>
+            </div>
+
+            <div class="h-px bg-slate-800/80 my-1"></div>
+
+            <!-- IOC type filters -->
+            <div class="space-y-0.5">
+                <p class="text-[9px] font-bold uppercase tracking-widest text-slate-600 px-1 mb-1">IOC Types</p>
+                ${chk("ipv4-addr_checkbox",   "IPv4 Addresses")}
+                ${chk("domain-name_checkbox", "Domains")}
+                ${chk("url_checkbox",         "URLs")}
+                ${chk("stixfile_checkbox",    "Hashes (MD5 / SHA-1)")}
+            </div>
+
+            <div class="h-px bg-slate-800/80 my-1"></div>
+
+            <!-- Date range -->
+            <div class="space-y-2">
+                <p class="text-[9px] font-bold uppercase tracking-widest text-slate-600 px-1">Time Range</p>
+                <div class="space-y-1.5">
+                    <div>
+                        <p class="text-[9px] text-slate-500 px-1 mb-0.5">Start</p>
+                        <input type="datetime-local" value="${ds}"
+                               onchange="SIEMModule.update('date_start', this.value)"
+                               class="w-full bg-slate-900 border border-slate-700/70 rounded px-2 py-1
+                                      text-[11px] text-slate-300 font-mono
+                                      focus:outline-none focus:ring-1 focus:ring-teal-500/50
+                                      [color-scheme:dark]">
+                    </div>
+                    <div>
+                        <p class="text-[9px] text-slate-500 px-1 mb-0.5">End</p>
+                        <input type="datetime-local" value="${de}"
+                               onchange="SIEMModule.update('date_end', this.value)"
+                               class="w-full bg-slate-900 border border-slate-700/70 rounded px-2 py-1
+                                      text-[11px] text-slate-300 font-mono
+                                      focus:outline-none focus:ring-1 focus:ring-teal-500/50
+                                      [color-scheme:dark]">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Run -->
+            <button onclick="SIEMModule.run()"
+                    ${!isConfigured ? "disabled" : ""}
+                    class="w-full flex items-center justify-center gap-2 py-2 rounded
+                           bg-teal-600/20 hover:bg-teal-600/35 border border-teal-500/30
+                           text-teal-300 text-[11px] font-bold tracking-wide transition
+                           disabled:opacity-40 disabled:cursor-not-allowed mt-1">
+                <i data-lucide="play" class="w-3.5 h-3.5"></i>
+                Lancer Recherche SIEM
+            </button>
+        `;
+
         lucide.createIcons();
     },
 
-    update(key, value) { this.state[key] = value; this._saveState(); },
-
+    // ─────────────────────────────────────────────────────
+    // Run
+    // ─────────────────────────────────────────────────────
     run() {
         const tabId  = App?.state?.activeTab;
         const caseId = tabId ? App?.state?.tabs[tabId]?.caseId : null;
-        if (!caseId) return;
-        App.runAction({ action: "siem", case_id: caseId, ...this.state });
+        if (!caseId) { console.warn("[SIEM] no active case"); return; }
+
+        // Compute date strings → ISO or null
+        const ds = this.state.date_start || null;
+        const de = this.state.date_end   || null;
+
+        const extraConfig = {
+            qradar:              SecretStore?.get("qradar")                   || "",
+            qradar_url:          SecretStore?.get("extra_qradar_url")         || "",
+            qradar_md5_sources:  SecretStore?.get("extra_qradar_md5_sources") || "18865,40100",
+            qradar_sha1_sources: SecretStore?.get("extra_qradar_sha1_sources")|| "879,5711",
+        };
+
+        // Show spinner in SIEM row result panel if present
+        const panel = document.getElementById("siem-results-panel");
+        if (panel) {
+            panel.innerHTML = `
+            <div class="flex items-center gap-2 text-[11px] text-slate-500 py-2">
+                <i data-lucide="loader" class="w-3.5 h-3.5 animate-spin text-teal-400"></i>
+                Running AQL queries…
+            </div>`;
+            lucide.createIcons();
+        }
+
+        App.runAction({
+            action:              "siem",
+            case_id:             caseId,
+            include_correlated:  this.state.include_correlated ?? false,
+            "ipv4-addr_checkbox":   this.state["ipv4-addr_checkbox"]   ?? true,
+            "domain-name_checkbox": this.state["domain-name_checkbox"] ?? true,
+            "url_checkbox":         this.state["url_checkbox"]         ?? true,
+            "stixfile_checkbox":    this.state["stixfile_checkbox"]    ?? true,
+            date_start:          ds,
+            date_end:            de,
+            extra_config:        extraConfig,
+        });
+    },
+
+    // ─────────────────────────────────────────────────────
+    // Result handler (socket siem_result)
+    // ─────────────────────────────────────────────────────
+    _onResult(data) {
+        const tabId  = App?.state?.activeTab;
+        const caseId = tabId ? App?.state?.tabs[tabId]?.caseId : null;
+        if (data.case_id && caseId && data.case_id !== caseId) return;
+
+        const panel = document.getElementById("siem-results-panel");
+        if (!panel) return;
+
+        const results = data.results || {};
+        const iocs    = Object.keys(results);
+
+        if (!iocs.length) {
+            panel.innerHTML = `<p class="text-[11px] text-slate-600 italic py-2">No hits found in QRadar.</p>`;
+            return;
+        }
+
+        const totalHits = iocs.reduce((acc, ioc) => acc + ((results[ioc]["qradar"] || {}).events || 0), 0);
+
+        let html = `
+        <div class="flex items-center justify-between mb-3 text-[10px]">
+            <span class="text-slate-400">
+                <span class="text-teal-400 font-bold font-mono">${iocs.length}</span> IOCs ·
+                <span class="text-teal-400 font-bold font-mono">${totalHits}</span> total hits
+            </span>
+        </div>
+        <div class="space-y-1.5">`;
+
+        const sorted = iocs.sort((a, b) =>
+            ((results[b]["qradar"]||{}).events||0) - ((results[a]["qradar"]||{}).events||0)
+        );
+
+        for (const ioc of sorted) {
+            const src      = results[ioc]["qradar"] || {};
+            const hits     = src.events || 0;
+            const rows     = src.rows || src.event_rows || [];
+            const flows    = src.flows || [];
+            const link     = src.link || "";
+            const flowLink = src.flow_link || "";
+
+            const hitColor = hits > 0
+                ? "text-red-400 bg-red-500/10 border-red-500/30"
+                : "text-slate-600 bg-slate-800 border-slate-700";
+
+            // Preview: first 3 rows, pick meaningful cols
+            const allRows  = [...rows, ...flows];
+            const preview  = allRows.slice(0, 3);
+            const headers  = preview.length ? Object.keys(preview[0]).slice(0, 4) : [];
+
+            const tableHtml = preview.length ? `
+            <div class="overflow-x-auto mt-1.5 rounded border border-slate-800/80">
+                <table class="w-full text-[9px] font-mono">
+                    <thead><tr class="bg-slate-900 text-slate-600">
+                        ${headers.map(h => `<th class="px-1.5 py-0.5 text-left whitespace-nowrap">${h}</th>`).join("")}
+                    </tr></thead>
+                    <tbody class="divide-y divide-slate-800/60">
+                        ${preview.map(row => `
+                        <tr class="hover:bg-slate-800/30">
+                            ${headers.map(h => `
+                            <td class="px-1.5 py-0.5 text-slate-400 max-w-[90px] truncate"
+                                title="${String(row[h]||"").replace(/"/g,"&quot;")}">${row[h]||""}</td>
+                            `).join("")}
+                        </tr>`).join("")}
+                    </tbody>
+                </table>
+            </div>
+            ${allRows.length > 3 ? `<p class="text-[9px] text-slate-700 px-1 pt-0.5">+${allRows.length - 3} more rows</p>` : ""}
+            ` : "";
+
+            html += `
+            <div class="rounded-lg border border-slate-800 bg-slate-900/40 overflow-hidden">
+                <div class="flex items-center gap-2 px-2.5 py-1.5">
+                    <span class="flex-1 font-mono text-[10px] text-slate-200 truncate" title="${ioc}">${ioc}</span>
+                    <span class="text-[9px] px-1.5 py-0.5 rounded border font-bold shrink-0 ${hitColor}">
+                        ${hits} hit${hits !== 1 ? "s" : ""}
+                    </span>
+                    ${link ? `<a href="${link}" target="_blank" rel="noopener"
+                                 title="Events in QRadar"
+                                 class="text-slate-600 hover:text-teal-400 transition shrink-0">
+                                 <i data-lucide="external-link" class="w-3 h-3"></i></a>` : ""}
+                    ${flowLink ? `<a href="${flowLink}" target="_blank" rel="noopener"
+                                     title="Flows in QRadar"
+                                     class="text-slate-600 hover:text-blue-400 transition shrink-0">
+                                     <i data-lucide="activity" class="w-3 h-3"></i></a>` : ""}
+                </div>
+                ${tableHtml}
+            </div>`;
+        }
+
+        html += "</div>";
+        panel.innerHTML = html;
+        lucide.createIcons();
     },
 };
