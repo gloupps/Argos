@@ -1,8 +1,9 @@
 <aside class="argos-left w-64 flex flex-col overflow-y-auto" style="width:var(--sidebar-width,260px)">
 
     <!-- Logo + Controls -->
-    <div class="argos-logo-zone flex items-center gap-2 shrink-0">
-        <div class="flex items-center">
+    <div class="argos-logo-zone shrink-0">
+        <!-- Logo full width -->
+        <div class="argos-logo-row">
             <img id="argos-logo-img"
                  class="argos-logo-img object-contain"
                  src="{{ url_for('static', filename='images/argos-logo-full.svg') }}"
@@ -11,17 +12,20 @@
                  alt="Argos">
         </div>
 
-        <!-- Theme toggle -->
-        <button class="argos-theme-toggle shrink-0" id="argos-theme-btn" onclick="ArgosTheme.toggle()" title="Toggle dark/light mode">
-            <span class="toggle-track"><span class="toggle-thumb"></span></span>
-        </button>
+        <!-- Controls row -->
+        <div class="argos-logo-controls">
+            <!-- Theme toggle -->
+            <button class="argos-theme-toggle" id="argos-theme-btn" onclick="ArgosTheme.toggle()" title="Toggle dark/light mode">
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            </button>
 
-        <!-- Settings -->
-        <button class="argos-btn-icon shrink-0 ml-1"
-                data-action="open-settings"
-                title="Settings">
-            <i data-lucide="settings" class="w-4 h-4"></i>
-        </button>
+            <!-- Settings -->
+            <button class="argos-btn-icon"
+                    data-action="open-settings"
+                    title="Settings">
+                <i data-lucide="settings" class="w-4 h-4"></i>
+            </button>
+        </div>
     </div>
 
     <div class="p-3 space-y-5 flex-1">
