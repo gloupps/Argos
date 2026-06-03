@@ -1,4 +1,4 @@
-# 🔍 PivotLens
+# 🔍 Argos
 
 > **⚠️ Actively under development — unstable, incomplete, broken in places.**
 > Designed to run **locally only**. Do not deploy in production.
@@ -9,7 +9,7 @@
 
 ## What is it?
 
-PivotLens is a local **Cyber Threat Intelligence (CTI)** investigation tool. It lets you analyze indicators of compromise (IOCs — IPs, domains, URLs, hashes), enrich them in parallel across multiple threat intelligence sources, and explore correlations visually as an interactive graph.
+Argos is a local **Cyber Threat Intelligence (CTI)** investigation tool. It lets you analyze indicators of compromise (IOCs — IPs, domains, URLs, hashes), enrich them in parallel across multiple threat intelligence sources, and explore correlations visually as an interactive graph.
 
 The idea: one place to open a case, paste your IOCs, fire off enrichment across several APIs at once, and pivot visually — without relying on a commercial platform.
 
@@ -18,7 +18,7 @@ The idea: one place to open a case, paste your IOCs, fire off enrichment across 
 ## How it works
 
 1. **Create a case** — from a raw IOC list, a report URL, a STIX2 file, or an existing case.
-2. **Enrichment** — PivotLens queries all configured sources in parallel and stores results locally.
+2. **Enrichment** — Argos queries all configured sources in parallel and stores results locally.
 3. **Correlation / Pivot** — the tool finds links between IOCs (IPs sharing a Shodan service hash, communicating files on VT, similar domains on URLScan, etc.).
 4. **Interactive graph** — nodes and pivots rendered with Cytoscape.js. Right-click any node to enrich on demand.
 5. **STIX2 export** — cases can be exported as a STIX2 bundle.
@@ -58,8 +58,8 @@ The idea: one place to open a case, paste your IOCs, fire off enrichment across 
 
 ```bash
 # Clone the repo
-git clone https://github.com/gloupps/PivotLens.git
-cd pivotlens
+git clone https://github.com/gloupps/Argos.git
+cd Argos
 
 # Create a virtual environment
 python -m venv venv
