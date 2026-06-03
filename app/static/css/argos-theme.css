@@ -105,14 +105,6 @@
   --scrollbar-hover: #7a5210;
 }
 
-/* ── Light mode : logo SVG — on remplace le fond sombre par transparent/adapté ── */
-[data-theme="light"] .argos-logo-img {
-  /* On masque le SVG original et on affiche une version CSS-filtrée lisible */
-  filter: brightness(0) saturate(100%)
-          invert(22%) sepia(60%) saturate(800%) hue-rotate(25deg) brightness(60%);
-  /* Résultat : teinte or sombre sur fond clair, lisible */
-}
-
 /* ── Light mode : override global Tailwind colors ── */
 [data-theme="light"] body,
 [data-theme="light"] .argos-body {
@@ -194,6 +186,41 @@
   color: var(--text-secondary);
 }
 
+/* ── Light mode : correlation & pivot toggle tracks ── */
+
+/* Track OFF — remplacement du bg-slate-700 invisible */
+[data-theme="light"] #pivot-container .w-8.h-4,
+[data-theme="light"] #correlation-container .w-8.h-4 {
+  background-color: #c8bca0 !important;
+  border: 1px solid var(--border-default);
+}
+
+/* Track ON pivot (amber) */
+[data-theme="light"] #pivot-container label:has(input:checked) .w-8.h-4 {
+  background-color: #b45309 !important; /* amber-700 lisible sur fond clair */
+}
+
+/* Track ON correlation (violet) */
+[data-theme="light"] #correlation-container label:has(input:checked) .w-8.h-4 {
+  background-color: #6d28d9 !important; /* violet-700 */
+}
+
+/* Thumb reste blanc dans les deux cas */
+[data-theme="light"] #pivot-container .w-3.h-3,
+[data-theme="light"] #correlation-container .w-3.h-3 {
+  background-color: #ffffff !important;
+}
+/* ── Light mode : input[type=range] couleurs par conteneur ── */
+
+/* Pivot (amber) */
+[data-theme="light"] #pivot-container input[type="range"] {
+  accent-color: #b45309 !important; /* amber-700 */
+}
+
+/* Correlation (violet) */
+[data-theme="light"] #correlation-container input[type="range"] {
+  accent-color: #6d28d9 !important; /* violet-700 */
+}
 /* Icônes de couleur spécifique : on les laisse avec leur couleur */
 [data-theme="light"] .text-blue-400   { color: #1d6fa8 !important; }
 [data-theme="light"] .text-cyan-400   { color: #0e7490 !important; }
@@ -377,7 +404,40 @@
 [data-theme="light"] .argos-theme-toggle .toggle-track {
   background: var(--bg-hover);
 }
+/* ── Light mode : module toggle switches (bg-slate-700 → visible) ── */
+[data-theme="light"] #modules-internal .w-9.h-5,
+[data-theme="light"] #modules-external .w-9.h-5,
+[data-theme="light"] #modules-internal div.w-9,
+[data-theme="light"] #modules-external div.w-9 {
+  background-color: #c8bca0 !important; /* track OFF : beige moyen lisible */
+  border: 1px solid var(--border-default);
+}
 
+/* Track activé (peer-checked) : on réutilise l'accent bleu adapté au light */
+[data-theme="light"] #modules-internal input:checked ~ div.w-9,
+[data-theme="light"] #modules-external input:checked ~ div.w-9 {
+  background-color: #1d6fa8 !important;
+}
+
+/* Thumb du toggle : reste blanc, ok */
+
+/* ── Light mode : logo SVG lisible ── */
+[data-theme="light"] .argos-logo-img {
+  filter: brightness(0) saturate(100%)
+          invert(22%) sepia(60%) saturate(800%) hue-rotate(25deg) brightness(60%);
+}
+
+/* ── Light mode : bouton expand/fullscreen du graph ── */
+[data-theme="light"] #graph-expand-btn {
+  background-color: var(--bg-elevated) !important;
+  border-color: var(--border-default) !important;
+  color: var(--text-secondary) !important;
+}
+[data-theme="light"] #graph-expand-btn:hover {
+  color: #1d6fa8 !important;
+  border-color: #1d6fa8 !important;
+  background-color: var(--bg-hover) !important;
+}
 /* ══════════════════════════════════════════════════════
    BASE RESET
    ══════════════════════════════════════════════════════ */
@@ -451,7 +511,7 @@ aside.argos-right {
 .argos-logo-zone {
   display: flex;
   align-items: center;
-  padding: 0.6rem 1rem;
+  padding: 0.6rem 0.75rem;
   border-bottom: 1px solid var(--border-default);
   background: linear-gradient(135deg, var(--bg-elevated) 0%, var(--bg-surface) 100%);
   position: relative;
@@ -463,6 +523,12 @@ aside.argos-right {
   bottom: 0; left: 0; right: 0;
   height: 1px;
   background: linear-gradient(90deg, transparent, var(--gold-dim), transparent);
+}
+
+.argos-logo-img {
+  max-height: 52px;
+  width: 100%;
+  max-width: 200px;
 }
 
 /* ══════════════════════════════════════════════════════
