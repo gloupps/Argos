@@ -34,6 +34,7 @@ class Services:
         from app.modules.threatfox_module import ThreatFoxModule
         from app.modules.elasticsearch_module import ElasticsearchModule
         from app.modules.censys_module import CensysModule
+        from app.modules.qradar_module import QRadarModule
 
         self.modules = {
             "shodan": ShodanModule(self.requester),
@@ -45,6 +46,7 @@ class Services:
             "threatfox": ThreatFoxModule(self.requester),
             "elasticsearch": ElasticsearchModule(self.requester),
             "censys": CensysModule(self.requester),
+            "qradar": QRadarModule(self.requester),
         }
 
     # ── Public ────────────────────────────────────────────
@@ -78,6 +80,8 @@ class Services:
                 await self._check_quotas(job_id, data)
             elif action == "fetch_internal_source":
                 await self._handle_fetch_internal_source(job_id, data)
+            elif action == "siem":
+                await self._run_siem(job_id, data)
             else:
                 self.job_manager.add_log(job_id, f"❌ Unknown action: {action}")
         except Exception as e:
@@ -772,3 +776,97 @@ class Services:
                 iocs.append((val, _MISP_IOC_TYPES[atype]))
 
         return iocs
+    
+    async def _run_siem(self, job_id: str, data: dict):
+        """
+        SIEM investigation — IOCs lus depuis le graph du case.
+
+        Payload :
+          case_id              — case actif
+          include_correlated   — bool : inclure correlated/pivoted (défaut False)
+          ipv4-addr_checkbox, domain-name_checkbox,
+          url_checkbox, stixfile_checkbox
+          date_start, date_end — ISO datetime strings ("2026-05-01T00:00")
+          extra_config         — { qradar, qradar_url,
+                                   qradar_md5_sources, qradar_sha1_sources }
+        """
+        from app.modules.qradar_module import classify_indicators, clean_results
+
+        case_id            = data.get("case_id")
+        include_correlated = data.get("include_correlated", False)
+        date_start         = data.get("date_start") or ""
+        date_end           = data.get("date_end")   or ""
+        extra              = data.get("extra_config", {})
+
+        if not case_id:
+            self.job_manager.add_log(job_id, "Missing case_id", "failed")
+            return
+
+        # ── 1. Lire le graph ───────────────────────────────
+        await self.database.connect()
+        graph = await self.database.get_graph(case_id)
+        nodes = graph.get("nodes", [])
+
+        if not nodes:
+            self.job_manager.add_log(job_id, "No indicators in case graph", "failed")
+            return
+
+        if include_correlated:
+            selected = [n["value"] for n in nodes if n.get("value")]
+        else:
+            selected = [n["value"] for n in nodes
+                        if n.get("value") and n.get("node_type") == "root"]
+
+        if not selected:
+            self.job_manager.add_log(job_id, "No IOCs match the selected scope", "failed")
+            return
+
+        scope_label = "root + correlated" if include_correlated else "root only"
+        self.job_manager.add_log(job_id, f"Loaded {len(selected)} IOCs ({scope_label})")
+
+        # ── 2. Classifier ──────────────────────────────────
+        dict_indicators = classify_indicators(selected)
+
+        # ── 3. Filtres type ────────────────────────────────
+        if not data.get("ipv4-addr_checkbox", True):
+            dict_indicators.pop("IPv4-Addr", None)
+        if not data.get("domain-name_checkbox", True):
+            dict_indicators.pop("Domain-Name", None)
+        if not data.get("url_checkbox", True):
+            dict_indicators.pop("Url", None)
+        if not data.get("stixfile_checkbox", True):
+            dict_indicators.pop("StixFile", None)
+
+        if not dict_indicators:
+            self.job_manager.add_log(job_id, "No indicators left after filtering", "failed")
+            return
+
+        # ── 4. Contexte QRadar ─────────────────────────────
+        context = {
+            "api_key":             extra.get("qradar", ""),
+            "qradar_url":          extra.get("qradar_url", ""),
+            "qradar_md5_sources":  extra.get("qradar_md5_sources", "18865,40100"),
+            "qradar_sha1_sources": extra.get("qradar_sha1_sources", "879,5711"),
+            "date_start":          date_start,
+            "date_end":            date_end,
+        }
+
+        # ── 5. Run ─────────────────────────────────────────
+        qradar_mod = self.modules.get("qradar")
+        if not qradar_mod:
+            self.job_manager.add_log(job_id, "QRadar module not registered", "failed")
+            return
+
+        self.job_manager.add_log(job_id, f"Running AQL queries ({date_start} → {date_end})…")
+        results = await qradar_mod.investigate(dict_indicators, context)
+        results = clean_results(results)
+
+        # ── 6. Emit ────────────────────────────────────────
+        self.socketio.emit("siem_result", {
+            "job_id":  job_id,
+            "case_id": case_id,
+            "results": results,
+        })
+        self.job_manager.add_log(job_id, "SIEM investigation done")
+        return results
+
