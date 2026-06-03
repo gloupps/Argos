@@ -1243,13 +1243,19 @@ window.EnrichPanel = {
     // ── IOC COMPARE ──────────────────────────────────────
     // ══════════════════════════════════════════════════════
 
+    // Fields that are not meaningful to compare across IOCs
+    _COMPARE_SKIP: new Set([
+        "malicious", "suspicious", "reputation", "misp_link", "link", "Labels", "Domain Count", "In OpenCTI", "Last Seen", "Detection",
+        "MISP Link", "Malicious", "Suspicious", "Reputation", "Censys Host", "Tags", "Last Scanned", "OpenCTI Link", "Last Resolved",
+        "Detection Score", "detection_score", "scan_count", "Scan Count", "In MISP", "Matching Events", "Report Count", "Comments",
+    ]),
+
     _startCompare() {
         if (!this._current) {
             JobLog?.push?.({ message: "Select an IOC first", status: "running" });
             return;
         }
         const caseId = this._current.caseId;
-        // Charger la liste des IOCs du case
         fetch(`/api/cases/${caseId}/info`)
             .then(r => r.json())
             .then(all => {
@@ -1267,23 +1273,26 @@ window.EnrichPanel = {
         const modal = document.createElement("div");
         modal.id = "compare-picker-modal";
         modal.className = "fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm";
-        const list = keys.map(k => {
+
+        const list = keys.map((k, i) => {
             const fields = allInfo[k];
             const hasData = fields && Object.keys(fields.modules || {}).length > 0;
             return `
-                <button onclick="EnrichPanel._runCompare('${this._esc(k)}')"
-                        class="w-full text-left px-3 py-2 rounded-lg border border-slate-700/60
-                            bg-slate-900 hover:bg-slate-800 hover:border-violet-500/40 transition
-                            flex items-center gap-2 group">
+                <label class="w-full text-left px-3 py-2 rounded-lg border border-slate-700/60
+                    bg-slate-900 hover:bg-slate-800 hover:border-violet-500/40 transition
+                    flex items-center gap-2 cursor-pointer group">
+                    <input type="checkbox" data-ioc="${this._esc(k)}" value="${this._esc(k)}"
+                           class="compare-ioc-checkbox accent-violet-500 w-3.5 h-3.5 shrink-0">
                     <span class="font-mono text-sm text-slate-200 flex-1 truncate">${this._esc(k)}</span>
                     ${hasData
                         ? `<span class="text-[11px] text-green-400 border border-green-500/20 bg-green-500/10 px-1.5 py-0.5 rounded">enriched</span>`
                         : `<span class="text-[11px] text-slate-600 border border-slate-700 px-1.5 py-0.5 rounded">no data</span>`}
-                </button>`;
+                </label>`;
         }).join("");
+
         modal.innerHTML = `
             <div class="bg-slate-950 border border-slate-700 rounded-xl shadow-2xl w-full max-w-md mx-4 flex flex-col max-h-[70vh]">
-                <div class="flex items-center gap-2 px-4 py-3 border-b border-slate-800">
+                <div class="flex items-center gap-2 px-4 py-3 border-b border-slate-800 shrink-0">
                     <i data-lucide="diff" class="w-4 h-4 text-violet-400"></i>
                     <span class="text-sm font-semibold text-white flex-1">Compare with…</span>
                     <span class="text-xs text-slate-500 font-mono truncate max-w-[160px]">${this._esc(this._current.nodeData.label)}</span>
@@ -1293,34 +1302,54 @@ window.EnrichPanel = {
                     </button>
                 </div>
                 <div class="flex-1 overflow-y-auto p-3 space-y-1.5">${list}</div>
+                <div class="px-4 py-3 border-t border-slate-800 shrink-0 flex items-center justify-between gap-2">
+                    <span class="text-xs text-slate-600" id="compare-selection-count">0 selected</span>
+                    <button onclick="EnrichPanel._runCompareMulti()"
+                            class="flex items-center gap-1.5 px-3 py-1.5 rounded bg-violet-600 hover:bg-violet-500
+                                text-white text-xs font-semibold transition">
+                        <i data-lucide="diff" class="w-3 h-3"></i> Compare
+                    </button>
+                </div>
             </div>`;
+
         modal.addEventListener("click", e => { if (e.target === modal) modal.remove(); });
         document.body.appendChild(modal);
         lucide.createIcons({ nodes: [modal] });
+
+        // Live selection counter
+        modal.querySelectorAll(".compare-ioc-checkbox").forEach(cb => {
+            cb.addEventListener("change", () => {
+                const n = modal.querySelectorAll(".compare-ioc-checkbox:checked").length;
+                modal.querySelector("#compare-selection-count").textContent =
+                    n === 0 ? "0 selected" : `${n} selected`;
+            });
+        });
     },
 
-    async _runCompare(targetLabel) {
-        document.getElementById("compare-picker-modal")?.remove();
-        const { nodeData, caseId } = this._current;
-        const srcLabel = nodeData.label;
-
-        // Fetch enrichment data for both IOCs
-        const res  = await fetch(`/api/cases/${caseId}/info`);
-        const all  = await res.json();
-        const srcInfo = all[srcLabel];
-        const tgtInfo = all[targetLabel];
-
-        if (!srcInfo && !tgtInfo) {
-            JobLog?.push?.({ message: "No enrichment data for either IOC", status: "running" });
+    async _runCompareMulti() {
+        const modal = document.getElementById("compare-picker-modal");
+        const checked = [...(modal?.querySelectorAll(".compare-ioc-checkbox:checked") || [])];
+        if (!checked.length) {
+            JobLog?.push?.({ message: "Select at least one IOC to compare", status: "running" });
             return;
         }
+        modal?.remove();
 
-        // Flatten fields : { "ModuleName::FieldName" -> { value, mod } }
+        const { nodeData, caseId } = this._current;
+        const srcLabel = nodeData.label;
+        const targetLabels = checked.map(cb => cb.value);
+
+        const res = await fetch(`/api/cases/${caseId}/info`);
+        const all = await res.json();
+
+        const allLabels = [srcLabel, ...targetLabels];
+
         const flatten = (info) => {
             const map = {};
             Object.entries(info?.modules || {}).forEach(([mod, fields]) => {
                 (fields || []).forEach(f => {
                     if (this._isEmpty(f.value)) return;
+                    if (this._COMPARE_SKIP.has(f.name)) return;
                     const key = `${mod}::${f.name}`;
                     const val = Array.isArray(f.value) ? f.value.join(", ") : String(f.value);
                     map[key] = { val, mod, name: f.name, type: f.type };
@@ -1329,117 +1358,150 @@ window.EnrichPanel = {
             return map;
         };
 
-        const srcMap = flatten(srcInfo);
-        const tgtMap = flatten(tgtInfo);
-        const allKeys = new Set([...Object.keys(srcMap), ...Object.keys(tgtMap)]);
+        // Build a map per IOC label
+        const maps = {};
+        allLabels.forEach(lbl => { maps[lbl] = flatten(all[lbl]); });
 
-        const common   = [];
-        const srcOnly  = [];
-        const tgtOnly  = [];
+        // Collect all field keys across all IOCs
+        const allKeys = new Set(allLabels.flatMap(lbl => Object.keys(maps[lbl])));
 
+        // Build rows: for each key, collect values per IOC
+        const rows = [];
         allKeys.forEach(k => {
-            const s = srcMap[k];
-            const t = tgtMap[k];
-            if (s && t) {
-                const same = s.val === t.val;
-                common.push({ key: k, srcVal: s.val, tgtVal: t.val, same, mod: s.mod, name: s.name });
-            } else if (s) {
-                srcOnly.push({ key: k, val: s.val, mod: s.mod, name: s.name });
-            } else {
-                tgtOnly.push({ key: k, val: t.val, mod: t.mod, name: t.name });
-            }
+            const vals = allLabels.map(lbl => maps[lbl][k] ?? null);
+            const presentVals = vals.filter(Boolean);
+            if (!presentVals.length) return;
+            const firstVal = presentVals[0].val;
+            const allSame = presentVals.every(v => v.val === firstVal);
+            const allPresent = vals.every(Boolean);
+            const mod = presentVals[0].mod;
+            const name = presentVals[0].name;
+            rows.push({ key: k, mod, name, vals, allSame, allPresent });
         });
 
-        this._showCompareResultModal(srcLabel, targetLabel, common, srcOnly, tgtOnly);
+        this._showCompareResultMultiModal(allLabels, rows);
     },
 
-    _showCompareResultModal(srcLabel, tgtLabel, common, srcOnly, tgtOnly) {
+    _showCompareResultMultiModal(labels, rows) {
         document.getElementById("compare-result-modal")?.remove();
 
-        const renderRow = (name, mod, srcVal, tgtVal, status) => {
-            // status: "same" | "diff" | "src-only" | "tgt-only"
-            const statusCfg = {
-                same:     { cls: "border-green-500/20 bg-green-500/5",   dot: "bg-green-500",  label: "=" },
-                diff:     { cls: "border-amber-500/20 bg-amber-500/5",   dot: "bg-amber-400",  label: "≠" },
-                "src-only": { cls: "border-blue-500/20 bg-blue-500/5",   dot: "bg-blue-400",   label: "A" },
-                "tgt-only": { cls: "border-violet-500/20 bg-violet-500/5", dot: "bg-violet-400", label: "B" },
-            }[status];
-            const srcCell = srcVal != null
-                ? `<span class="font-mono text-[12px] text-slate-300 truncate block max-w-[140px]" title="${this._esc(srcVal)}">${this._esc(srcVal.slice(0, 30))}${srcVal.length > 30 ? "…" : ""}</span>`
-                : `<span class="text-slate-700 text-[12px]">—</span>`;
-            const tgtCell = tgtVal != null
-                ? `<span class="font-mono text-[12px] text-slate-300 truncate block max-w-[140px]" title="${this._esc(tgtVal)}">${this._esc(tgtVal.slice(0, 30))}${tgtVal.length > 30 ? "…" : ""}</span>`
-                : `<span class="text-slate-700 text-[12px]">—</span>`;
+        // Color palette per IOC column
+        const COLORS = [
+            { text: "text-blue-400",   bg: "bg-blue-500/10",   border: "border-blue-500/30",   dot: "bg-blue-400"   },
+            { text: "text-violet-400", bg: "bg-violet-500/10", border: "border-violet-500/30", dot: "bg-violet-400" },
+            { text: "text-emerald-400",bg: "bg-emerald-500/10",border: "border-emerald-500/30",dot: "bg-emerald-400"},
+            { text: "text-amber-400",  bg: "bg-amber-500/10",  border: "border-amber-500/30",  dot: "bg-amber-400"  },
+            { text: "text-rose-400",   bg: "bg-rose-500/10",   border: "border-rose-500/30",   dot: "bg-rose-400"   },
+            { text: "text-cyan-400",   bg: "bg-cyan-500/10",   border: "border-cyan-500/30",   dot: "bg-cyan-400"   },
+        ];
+
+        const colCount = labels.length;
+
+        // Header labels row
+        const headerCells = labels.map((lbl, i) => {
+            const c = COLORS[i % COLORS.length];
+            return `<th class="text-left px-2 py-1.5 text-[11px] font-semibold ${c.text} max-w-[140px]">
+                <span class="font-mono truncate block max-w-[120px]" title="${this._esc(lbl)}">${this._esc(lbl.slice(0, 22))}${lbl.length > 22 ? "…" : ""}</span>
+            </th>`;
+        }).join("");
+
+        const renderTableRow = (row) => {
+            const { mod, name, vals, allSame, allPresent } = row;
+            const statusCls = allSame && allPresent
+                ? "bg-green-500/5 border-l-2 border-l-green-500/40"
+                : allSame && !allPresent
+                    ? "bg-slate-800/30 border-l-2 border-l-slate-600/40"
+                    : "bg-amber-500/5 border-l-2 border-l-amber-500/40";
+
+            const cells = vals.map((v, i) => {
+                const c = COLORS[i % COLORS.length];
+                if (!v) return `<td class="px-2 py-1.5"><span class="text-slate-700 text-[12px]">—</span></td>`;
+                const display = v.val.length > 28 ? v.val.slice(0, 26) + "…" : v.val;
+                return `<td class="px-2 py-1.5">
+                    <span class="font-mono text-[12px] ${c.text} block truncate max-w-[140px]"
+                          title="${this._esc(v.val)}">${this._esc(display)}</span>
+                </td>`;
+            }).join("");
+
             return `
-                <div class="flex items-start gap-2 px-3 py-2 rounded-lg border ${statusCfg.cls}">
-                    <div class="w-4 h-4 rounded-full ${statusCfg.dot} shrink-0 mt-0.5 flex items-center justify-center">
-                        <span class="text-[9px] font-bold text-white">${statusCfg.label}</span>
-                    </div>
-                    <div class="flex-1 min-w-0">
-                        <div class="text-[11px] text-slate-500 truncate">${this._esc(mod)} · ${this._esc(name)}</div>
-                        <div class="flex gap-3 mt-0.5 flex-wrap">
-                            ${srcCell}
-                            ${status !== "src-only" && status !== "tgt-only" ? `<span class="text-slate-700 text-[12px] self-center">→</span>${tgtCell}` : ""}
-                        </div>
-                    </div>
-                </div>`;
+                <tr class="${statusCls} rounded">
+                    <td class="px-2 py-1.5 whitespace-nowrap">
+                        <span class="text-[11px] text-slate-500">${this._esc(mod)}</span>
+                        <span class="text-[11px] text-slate-300 ml-1 font-medium">${this._esc(name)}</span>
+                    </td>
+                    ${cells}
+                </tr>`;
         };
 
-        const sameRows  = common.filter(r => r.same) .map(r => renderRow(r.name, r.mod, r.srcVal, r.tgtVal, "same"));
-        const diffRows  = common.filter(r => !r.same).map(r => renderRow(r.name, r.mod, r.srcVal, r.tgtVal, "diff"));
-        const srcRows   = srcOnly.map(r => renderRow(r.name, r.mod, r.val, null, "src-only"));
-        const tgtRows   = tgtOnly.map(r => renderRow(r.name, r.mod, null, r.val, "tgt-only"));
+        // Split into sections: identical / divergent / partial
+        const identical  = rows.filter(r => r.allSame && r.allPresent);
+        const divergent  = rows.filter(r => !r.allSame);
+        const partialSame = rows.filter(r => r.allSame && !r.allPresent);
 
-        const section = (title, icon, colorCls, rows) => {
-            if (!rows.length) return "";
+        const section = (title, icon, colorCls, sectionRows) => {
+            if (!sectionRows.length) return "";
             return `
-                <div class="mb-4">
+                <div class="mb-5">
                     <div class="flex items-center gap-1.5 mb-2 px-1">
                         <i data-lucide="${icon}" class="w-3.5 h-3.5 ${colorCls}"></i>
                         <span class="text-xs font-semibold uppercase tracking-widest ${colorCls}">${title}</span>
-                        <span class="text-slate-600 text-xs ml-1">${rows.length}</span>
+                        <span class="text-slate-600 text-xs ml-1">${sectionRows.length}</span>
                     </div>
-                    <div class="space-y-1">${rows.join("")}</div>
+                    <div class="rounded-lg border border-slate-800 overflow-hidden">
+                        <table class="w-full">
+                            <thead class="bg-slate-900/60 border-b border-slate-800">
+                                <tr>
+                                    <th class="text-left px-2 py-1.5 text-[11px] font-semibold text-slate-500">Field</th>
+                                    ${headerCells}
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-800/50">
+                                ${sectionRows.map(renderTableRow).join("")}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>`;
         };
+
+        // Legend pills
+        const legendPills = labels.map((lbl, i) => {
+            const c = COLORS[i % COLORS.length];
+            return `<span class="flex items-center gap-1">
+                <span class="w-2 h-2 rounded-full ${c.dot} inline-block shrink-0"></span>
+                <span class="font-mono text-[11px] ${c.text} truncate max-w-[100px]" title="${this._esc(lbl)}">${this._esc(lbl.slice(0,16))}${lbl.length>16?"…":""}</span>
+            </span>`;
+        }).join("");
 
         const modal = document.createElement("div");
         modal.id = "compare-result-modal";
         modal.className = "fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm";
         modal.innerHTML = `
-            <div class="bg-slate-950 border border-slate-700 rounded-xl shadow-2xl w-full max-w-2xl mx-4
-                        flex flex-col max-h-[85vh]">
-                <!-- Header -->
-                <div class="flex items-center gap-3 px-4 py-3 border-b border-slate-800 shrink-0">
-                    <i data-lucide="diff" class="w-4 h-4 text-violet-400"></i>
-                    <div class="flex-1 flex items-center gap-2 min-w-0 flex-wrap">
-                        <span class="font-mono text-sm text-blue-400 truncate max-w-[200px]" title="${this._esc(srcLabel)}">${this._esc(srcLabel)}</span>
-                        <i data-lucide="arrow-right" class="w-3.5 h-3.5 text-slate-600 shrink-0"></i>
-                        <span class="font-mono text-sm text-violet-400 truncate max-w-[200px]" title="${this._esc(tgtLabel)}">${this._esc(tgtLabel)}</span>
+            <div class="bg-slate-950 border border-slate-700 rounded-xl shadow-2xl w-full max-w-5xl mx-4
+                        flex flex-col max-h-[90vh]">
+                <div class="flex items-center gap-3 px-4 py-3 border-b border-slate-800 shrink-0 flex-wrap gap-y-2">
+                    <i data-lucide="diff" class="w-4 h-4 text-violet-400 shrink-0"></i>
+                    <span class="text-sm font-semibold text-white shrink-0">IOC Comparison</span>
+                    <div class="flex-1 flex items-center gap-3 flex-wrap min-w-0">
+                        ${legendPills}
                     </div>
-                    <!-- Legend -->
-                    <div class="flex gap-2 text-[11px] shrink-0">
-                        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-green-500 inline-block"></span><span class="text-slate-500">Same</span></span>
-                        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-400 inline-block"></span><span class="text-slate-500">Diff</span></span>
-                        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-blue-400 inline-block"></span><span class="text-slate-500">A only</span></span>
-                        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-violet-400 inline-block"></span><span class="text-slate-500">B only</span></span>
+                    <div class="flex items-center gap-3 text-[11px] text-slate-500 shrink-0">
+                        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded bg-green-500/40 inline-block"></span>Identical</span>
+                        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded bg-amber-500/40 inline-block"></span>Divergent</span>
+                        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded bg-slate-600/40 inline-block"></span>Partial</span>
                     </div>
                     <button onclick="document.getElementById('compare-result-modal').remove()"
-                            class="text-slate-500 hover:text-white transition ml-2 shrink-0">
+                            class="text-slate-500 hover:text-white transition shrink-0">
                         <i data-lucide="x" class="w-4 h-4"></i>
                     </button>
                 </div>
-                <!-- Body -->
                 <div class="flex-1 overflow-y-auto p-4">
-                    ${section("Fields in common — identical", "check-circle-2", "text-green-400", sameRows)}
-                    ${section("Fields in common — divergent", "alert-triangle", "text-amber-400", diffRows)}
-                    ${section("Only in A · " + this._esc(srcLabel.slice(0,20)), "arrow-left-from-line", "text-blue-400", srcRows)}
-                    ${section("Only in B · " + this._esc(tgtLabel.slice(0,20)), "arrow-right-from-line", "text-violet-400", tgtRows)}
-                    ${!sameRows.length && !diffRows.length && !srcRows.length && !tgtRows.length
-                        ? `<p class="text-slate-600 italic text-sm text-center py-8">No enrichment data to compare.</p>`
-                        : ""}
+                    ${section("Identical across all IOCs", "check-circle-2", "text-green-400", identical)}
+                    ${section("Divergent fields", "alert-triangle", "text-amber-400", divergent)}
+                    ${section("Partial — not present in all IOCs", "minus-circle", "text-slate-400", partialSame)}
+                    ${!rows.length ? `<p class="text-slate-600 italic text-sm text-center py-8">No enrichment data to compare.</p>` : ""}
                 </div>
             </div>`;
+
         modal.addEventListener("click", e => { if (e.target === modal) modal.remove(); });
         document.body.appendChild(modal);
         lucide.createIcons({ nodes: [modal] });
