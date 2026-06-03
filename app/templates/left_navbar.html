@@ -3,8 +3,11 @@
     <!-- Logo + Controls -->
     <div class="argos-logo-zone flex items-center gap-2 shrink-0">
         <div class="flex-1 flex items-center min-w-0">
-            <img class="argos-logo-img h-16 w-auto object-contain"
+            <img id="argos-logo-img"
+                 class="argos-logo-img w-full max-w-[220px] h-auto object-contain"
                  src="{{ url_for('static', filename='images/argos-logo-full.svg') }}"
+                 data-dark="{{ url_for('static', filename='images/argos-logo-full.svg') }}"
+                 data-light="{{ url_for('static', filename='images/argos-logo-full-light.svg') }}"
                  alt="Argos">
         </div>
 
@@ -46,12 +49,19 @@ window.ArgosTheme = {
         const next = current === 'dark' ? 'light' : 'dark';
         html.setAttribute('data-theme', next);
         localStorage.setItem('argos-theme', next);
+        this._applyLogo(next);
         document.dispatchEvent(new CustomEvent('argos:theme-changed', { detail: { theme: next } }));
+    },
+    _applyLogo(theme) {
+        const img = document.getElementById('argos-logo-img');
+        if (!img) return;
+        img.src = theme === 'light' ? img.dataset.light : img.dataset.dark;
     }
 };
-// Init on load
 (function() {
     const t = localStorage.getItem('argos-theme') || 'dark';
     document.documentElement.setAttribute('data-theme', t);
+    // Apply logo on init after DOM ready
+    document.addEventListener('DOMContentLoaded', () => ArgosTheme._applyLogo(t), { once: true });
 })();
 </script>
