@@ -1689,22 +1689,21 @@ window.EnrichPanel = {
                 const c = COLORS[i % COLORS.length];
                 if (!v) return `<td class="px-2 py-1.5"><span class="text-slate-700 text-[12px]">—</span></td>`;
                 const display = v.val.length > 28 ? v.val.slice(0, 26) + "…" : v.val;
-                return `<tr class="${statusCls}" data-mod="${EnrichPanel._esc(mod)}">
-                        <td class="px-2 py-1.5">
+                return `<td class="px-2 py-1.5">
                     <span class="font-mono text-[12px] ${c.text} block truncate max-w-[140px]"
                           title="${this._esc(v.val)}">${this._esc(display)}</span>
                 </td>`;
             }).join("");
 
             return `
-                <tr class="${statusCls}" data-mod="${this._esc(ref?.mod || mod || '')}">
+                <tr class="${statusCls}" data-mod="${this._esc(mod || '')}">
                     <td class="px-2 py-1.5 whitespace-nowrap">
                         <span class="text-[11px] text-slate-500">${this._esc(mod)}</span>
                         <span class="text-[11px] text-slate-300 ml-1 font-medium">${this._esc(name)}</span>
                     </td>
                     ${cells}
                 </tr>`;
-        };
+                    };
 
         // Split into sections: identical / divergent / partial
         const identical  = rows.filter(r => r.allSame && r.allPresent);
