@@ -42,7 +42,6 @@ window.SIEMModule = {
 
         const isConfigured = !!SecretStore?.has?.("qradar");
 
-        // Default dates: today - 7d → today
         const now  = new Date();
         const week = new Date(now - 7 * 86400000);
         const fmt  = d => d.toISOString().slice(0, 16);
@@ -50,107 +49,85 @@ window.SIEMModule = {
         const ds = this.state.date_start || fmt(week);
         const de = this.state.date_end   || fmt(now);
 
-        const chk = (key, label) => {
-            const on = this.state[key] !== false;
-            return `
-            <label class="flex items-center justify-between px-2 py-1.5
-                          rounded hover:bg-slate-800/50 cursor-pointer text-[11px] transition">
-                <span class="text-slate-300">${label}</span>
-                <input type="checkbox" ${on ? "checked" : ""}
-                       onchange="SIEMModule.update('${key}', this.checked)"
-                       class="accent-teal-500 w-3 h-3">
-            </label>`;
-        };
-
         container.innerHTML = `
+            <div class="bg-slate-950 p-3 rounded-lg border border-slate-800 space-y-3">
 
-            ${!isConfigured ? `
-            <div class="flex items-center gap-2 text-[10px] text-amber-400/80
-                        bg-amber-500/10 border border-amber-500/20 rounded px-2 py-1.5 mb-2">
-                <i data-lucide="alert-triangle" class="w-3 h-3 shrink-0"></i>
-                QRadar token missing — check Settings
-            </div>` : ""}
-
-            <!-- IOC scope -->
-            <div class="space-y-0.5">
-                <p class="text-[9px] font-bold uppercase tracking-widest text-slate-600 px-1 mb-1">Scope</p>
-                <label class="flex items-center justify-between px-2 py-1.5
-                              rounded hover:bg-slate-800/50 cursor-pointer text-[11px] transition">
-                    <span class="flex items-center gap-1.5 text-slate-300">
-                        <span class="w-1.5 h-1.5 rounded-full bg-red-500 inline-block"></span>
-                        Root IOCs only
-                    </span>
-                    <input type="radio" name="siem_scope" value="root"
-                           ${!this.state.include_correlated ? "checked" : ""}
-                           onchange="SIEMModule.update('include_correlated', false)"
-                           class="accent-teal-500 w-3 h-3">
-                </label>
-                <label class="flex items-center justify-between px-2 py-1.5
-                              rounded hover:bg-slate-800/50 cursor-pointer text-[11px] transition">
-                    <span class="flex items-center gap-1.5 text-slate-300">
-                        <span class="w-1.5 h-1.5 rounded-full bg-cyan-500 inline-block"></span>
-                        Root + Correlated / Pivoted
-                    </span>
-                    <input type="radio" name="siem_scope" value="all"
-                           ${this.state.include_correlated ? "checked" : ""}
-                           onchange="SIEMModule.update('include_correlated', true)"
-                           class="accent-teal-500 w-3 h-3">
-                </label>
-            </div>
-
-            <div class="h-px bg-slate-800/80 my-1"></div>
-
-            <!-- IOC type filters -->
-            <div class="space-y-0.5">
-                <p class="text-[9px] font-bold uppercase tracking-widest text-slate-600 px-1 mb-1">IOC Types</p>
-                ${chk("ipv4-addr_checkbox",   "IPv4 Addresses")}
-                ${chk("domain-name_checkbox", "Domains")}
-                ${chk("url_checkbox",         "URLs")}
-                ${chk("stixfile_checkbox",    "Hashes (MD5 / SHA-1)")}
-            </div>
-
-            <div class="h-px bg-slate-800/80 my-1"></div>
-
-            <!-- Date range -->
-            <div class="space-y-2">
-                <p class="text-[9px] font-bold uppercase tracking-widest text-slate-600 px-1">Time Range</p>
-                <div class="space-y-1.5">
-                    <div>
-                        <p class="text-[9px] text-slate-500 px-1 mb-0.5">Start</p>
+                ${!isConfigured ? `
+                <div class="flex items-center gap-2 text-[10px] text-amber-400/80
+                            bg-amber-500/10 border border-amber-500/20 rounded px-2 py-1.5">
+                    <i data-lucide="alert-triangle" class="w-3 h-3 shrink-0"></i>
+                    QRadar token missing — check Settings
+                </div>` : ""}
+                
+                <!-- Date range -->
+                <div class="grid grid-cols-2 gap-2">
+                    <div class="space-y-1">
+                        <p class="text-[9px] text-slate-500 uppercase">Start Date</p>
                         <input type="datetime-local" value="${ds}"
                                onchange="SIEMModule.update('date_start', this.value)"
-                               class="w-full bg-slate-900 border border-slate-700/70 rounded px-2 py-1
-                                      text-[11px] text-slate-300 font-mono
-                                      focus:outline-none focus:ring-1 focus:ring-teal-500/50
-                                      [color-scheme:dark]">
+                               class="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-[13px] font-mono text-slate-300
+                                      focus:outline-none focus:ring-1 focus:ring-teal-500/50 [color-scheme:dark]">
                     </div>
-                    <div>
-                        <p class="text-[9px] text-slate-500 px-1 mb-0.5">End</p>
+                    <div class="space-y-1">
+                        <p class="text-[9px] text-slate-500 uppercase">End Date</p>
                         <input type="datetime-local" value="${de}"
                                onchange="SIEMModule.update('date_end', this.value)"
-                               class="w-full bg-slate-900 border border-slate-700/70 rounded px-2 py-1
-                                      text-[11px] text-slate-300 font-mono
-                                      focus:outline-none focus:ring-1 focus:ring-teal-500/50
-                                      [color-scheme:dark]">
+                               class="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-[13px] font-mono text-slate-300
+                                      focus:outline-none focus:ring-1 focus:ring-teal-500/50 [color-scheme:dark]">
                     </div>
                 </div>
-            </div>
 
-            <!-- Run -->
-            <button onclick="SIEMModule.run()"
-                    ${!isConfigured ? "disabled" : ""}
-                    class="w-full flex items-center justify-center gap-2 py-2 rounded
-                           bg-teal-600/20 hover:bg-teal-600/35 border border-teal-500/30
-                           text-teal-300 text-[11px] font-bold tracking-wide transition
-                           disabled:opacity-40 disabled:cursor-not-allowed mt-1">
-                <i data-lucide="play" class="w-3.5 h-3.5"></i>
-                Lancer Recherche SIEM
-            </button>
+                <!-- Scope toggle -->
+                <div class="flex p-1 bg-slate-900 rounded-md border border-slate-800">
+                    <label class="flex-1 text-center py-1.5 text-[10px] font-bold rounded cursor-pointer transition
+                                  ${!this.state.include_correlated ? "bg-teal-600 text-white" : "text-slate-400 hover:text-slate-200"}">
+                        <input type="radio" name="siem_scope" class="hidden"
+                               ${!this.state.include_correlated ? "checked" : ""}
+                               onchange="SIEMModule.update('include_correlated', false); SIEMModule._render()">
+                        ROOT IOC
+                    </label>
+                    <label class="flex-1 text-center py-1.5 text-[10px] font-bold rounded cursor-pointer transition
+                                  ${this.state.include_correlated ? "bg-teal-600 text-white" : "text-slate-400 hover:text-slate-200"}">
+                        <input type="radio" name="siem_scope" class="hidden"
+                               ${this.state.include_correlated ? "checked" : ""}
+                               onchange="SIEMModule.update('include_correlated', true); SIEMModule._render()">
+                        ALL IOC
+                    </label>
+                </div>
+
+                <!-- IOC type filters — compact pill row -->
+                <div class="flex items-center justify-center gap-1">
+                    ${[
+                        ["ipv4-addr_checkbox",   "IPv4"],
+                        ["domain-name_checkbox", "Domain"],
+                        ["url_checkbox",         "URL"],
+                        ["stixfile_checkbox",    "Hash"],
+                    ].map(([key, label]) => {
+                        const on = this.state[key] !== false;
+                        return `
+                        <label class="flex items-center gap-1 px-2 py-0.5 rounded-full border cursor-pointer transition text-[10px] font-bold
+                                      ${on ? "bg-teal-600/20 border-teal-500/40 text-teal-300" : "bg-slate-800 border-slate-700 text-slate-500"}">
+                            <input type="checkbox" class="hidden" ${on ? "checked" : ""}
+                                   onchange="SIEMModule.update('${key}', this.checked); SIEMModule._render()">
+                            ${label}
+                        </label>`;
+                    }).join("")}
+                </div>
+                
+                <!-- Run -->
+                <button onclick="SIEMModule.run()"
+                        ${!isConfigured ? "disabled" : ""}
+                        class="w-full bg-slate-800 hover:bg-teal-600/30 border border-slate-700 hover:border-teal-500/40
+                               py-2 rounded text-[11px] font-bold text-teal-300 transition flex items-center justify-center gap-2
+                               disabled:opacity-40 disabled:cursor-not-allowed">
+                    <i data-lucide="play" class="w-3 h-3"></i> Run Investigation
+                </button>
+            </div>
         `;
 
         lucide.createIcons();
     },
-
+    
     // ─────────────────────────────────────────────────────
     // Run
     // ─────────────────────────────────────────────────────
