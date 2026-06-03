@@ -35,6 +35,7 @@ class Services:
         from app.modules.elasticsearch_module import ElasticsearchModule
         from app.modules.censys_module import CensysModule
         from app.modules.qradar_module import QRadarModule
+        from app.modules.splunk_module import SplunkModule
 
         self.modules = {
             "shodan": ShodanModule(self.requester),
@@ -47,6 +48,7 @@ class Services:
             "elasticsearch": ElasticsearchModule(self.requester),
             "censys": CensysModule(self.requester),
             "qradar": QRadarModule(self.requester),
+            "splunk": SplunkModule(self.requester),
         }
 
     # ── Public ────────────────────────────────────────────
@@ -841,27 +843,43 @@ class Services:
             self.job_manager.add_log(job_id, "No indicators left after filtering", "failed")
             return
 
-        # ── 4. Contexte QRadar ─────────────────────────────
-        context = {
-            "api_key":             extra.get("qradar", ""),
-            "qradar_url":          extra.get("qradar_url", ""),
-            "qradar_md5_sources":  extra.get("qradar_md5_sources", "18865,40100"),
-            "qradar_sha1_sources": extra.get("qradar_sha1_sources", "879,5711"),
-            "date_start":          date_start,
-            "date_end":            date_end,
-        }
+        # ── 4. Dispatch selon siem_type ───────────────────
+        siem_type = extra.get("siem_type", "qradar")
 
-        # ── 5. Run ─────────────────────────────────────────
-        qradar_mod = self.modules.get("qradar")
-        if not qradar_mod:
-            self.job_manager.add_log(job_id, "QRadar module not registered", "failed")
-            return
+        if siem_type == "splunk":
+            context = {
+                "api_key":      extra.get("splunk", ""),
+                "splunk_url":   extra.get("splunk_url", ""),
+                "splunk_index": extra.get("splunk_index", "*"),
+                "date_start":   date_start,
+                "date_end":     date_end,
+            }
+            mod = self.modules.get("splunk")
+            if not mod:
+                self.job_manager.add_log(job_id, "Splunk module not registered", "failed")
+                return
+            self.job_manager.add_log(job_id, f"Running SPL searches ({date_start} → {date_end})…")
+            results = await mod.investigate(dict_indicators, context)
 
-        self.job_manager.add_log(job_id, f"Running AQL queries ({date_start} → {date_end})…")
-        results = await qradar_mod.investigate(dict_indicators, context)
+        else:  # qradar (défaut)
+            context = {
+                "api_key":             extra.get("qradar", ""),
+                "qradar_url":          extra.get("qradar_url", ""),
+                "qradar_md5_sources":  extra.get("qradar_md5_sources", "18865,40100"),
+                "qradar_sha1_sources": extra.get("qradar_sha1_sources", "879,5711"),
+                "date_start":          date_start,
+                "date_end":            date_end,
+            }
+            mod = self.modules.get("qradar")
+            if not mod:
+                self.job_manager.add_log(job_id, "QRadar module not registered", "failed")
+                return
+            self.job_manager.add_log(job_id, f"Running AQL queries ({date_start} → {date_end})…")
+            results = await mod.investigate(dict_indicators, context)
+
         results = clean_results(results)
 
-        # ── 6. Emit ────────────────────────────────────────
+        # ── 5. Emit ────────────────────────────────────────
         self.socketio.emit("siem_result", {
             "job_id":  job_id,
             "case_id": case_id,
