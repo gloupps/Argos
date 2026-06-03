@@ -43,9 +43,7 @@ window.SIEMModule = {
         // ── SIEM type sélectionné (défaut: qradar) ──
         const siemType = this.state.siem_type || "qradar";
 
-        const isConfigured = siemType === "qradar"
-            ? !!SecretStore?.has?.("qradar")
-            : !!SecretStore?.has?.(siemType);   // extensible pour Splunk plus tard
+        const isConfigured = !!SecretStore?.has?.(siemType)
 
         const now  = new Date();
         const week = new Date(now - 7 * 86400000);
@@ -56,7 +54,7 @@ window.SIEMModule = {
 
         // Labels des SIEM dispo (extensible)
         const siemOptions = [
-            { key: "splunk",  label: "SPLUNK",  soon: true  },
+            { key: "splunk",  label: "SPLUNK",  soon: false  },
             { key: "qradar",  label: "QRADAR",  soon: false },
         ];
 
@@ -170,10 +168,16 @@ window.SIEMModule = {
         const de = this.state.date_end   || null;
 
         const extraConfig = {
+            siem_type:           siemType,
+            // QRadar
             qradar:              SecretStore?.get("qradar")                   || "",
             qradar_url:          SecretStore?.get("extra_qradar_url")         || "",
             qradar_md5_sources:  SecretStore?.get("extra_qradar_md5_sources") || "18865,40100",
             qradar_sha1_sources: SecretStore?.get("extra_qradar_sha1_sources")|| "879,5711",
+            // Splunk
+            splunk:              SecretStore?.get("splunk")                   || "",
+            splunk_url:          SecretStore?.get("extra_splunk_url")         || "",
+            splunk_index:        SecretStore?.get("extra_splunk_index")       || "*",
         };
 
         // Show spinner in SIEM row result panel if present
@@ -182,7 +186,7 @@ window.SIEMModule = {
             panel.innerHTML = `
             <div class="flex items-center gap-2 text-[11px] text-slate-500 py-2">
                 <i data-lucide="loader" class="w-3.5 h-3.5 animate-spin text-teal-400"></i>
-                Running AQL queries…
+                ${siemType === "splunk" ? "Running SPL searches…" : "Running AQL queries…"}
             </div>`;
             lucide.createIcons();
         }
@@ -216,7 +220,7 @@ window.SIEMModule = {
         const iocs    = Object.keys(results);
 
         if (!iocs.length) {
-            panel.innerHTML = `<p class="text-[11px] text-slate-600 italic py-2">No hits found in QRadar.</p>`;
+            panel.innerHTML = `<p class="text-[11px] text-slate-600 italic py-2">No hits found.</p>`;
             return;
         }
 
