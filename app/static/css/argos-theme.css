@@ -241,56 +241,78 @@
 /* ── Light mode : settings — carte quota ── */
 
 /* Conteneur principal de la quota zone */
-[data-theme="light"] #settings-keys .rounded-md.border {
+[data-theme="light"] #settings-keys .rounded-md.border,
+[data-theme="light"] #settings-keys-internal .rounded-md.border,
+[data-theme="light"] #settings-keys-external .rounded-md.border {
   background-color: var(--bg-elevated) !important;
   border-color: var(--border-default) !important;
 }
 
 /* Barre de fond de la progress bar */
-[data-theme="light"] #settings-keys .bg-slate-800.rounded-full {
+[data-theme="light"] #settings-keys .bg-slate-800.rounded-full,
+[data-theme="light"] #settings-keys-internal .bg-slate-800.rounded-full,
+[data-theme="light"] #settings-keys-external .bg-slate-800.rounded-full {
   background-color: var(--bg-hover) !important;
 }
 
 /* Textes dans la quota zone */
-[data-theme="light"] #settings-keys .text-slate-300 {
+[data-theme="light"] #settings-keys .text-slate-300,
+[data-theme="light"] #settings-keys-internal .text-slate-300,
+[data-theme="light"] #settings-keys-external .text-slate-300 {
   color: var(--text-primary) !important;
 }
-[data-theme="light"] #settings-keys .text-slate-600 {
+[data-theme="light"] #settings-keys .text-slate-600,
+[data-theme="light"] #settings-keys-internal .text-slate-600,
+[data-theme="light"] #settings-keys-external .text-slate-600 {
   color: var(--text-muted) !important;
 }
-[data-theme="light"] #settings-keys .text-slate-400 {
+[data-theme="light"] #settings-keys .text-slate-400,
+[data-theme="light"] #settings-keys-internal .text-slate-400,
+[data-theme="light"] #settings-keys-external .text-slate-400 {
   color: var(--text-secondary) !important;
 }
-[data-theme="light"] #settings-keys .text-slate-500 {
+[data-theme="light"] #settings-keys .text-slate-500,
+[data-theme="light"] #settings-keys-internal .text-slate-500,
+[data-theme="light"] #settings-keys-external .text-slate-500 {
   color: var(--text-muted) !important;
 }
 
 /* Badge plan "free" (fond slate sombre) */
-[data-theme="light"] #settings-keys .bg-slate-700\/40 {
+[data-theme="light"] #settings-keys .bg-slate-700\/40,
+[data-theme="light"] #settings-keys-internal .bg-slate-700\/40,
+[data-theme="light"] #settings-keys-external .bg-slate-700\/40 {
   background-color: var(--bg-overlay) !important;
   border-color: var(--border-default) !important;
   color: var(--text-secondary) !important;
 }
 
 /* Quota "public / no tracking" row */
-[data-theme="light"] #settings-keys .bg-slate-800\/60 {
+[data-theme="light"] #settings-keys .bg-slate-800\/60,
+[data-theme="light"] #settings-keys-internal .bg-slate-800\/60,
+[data-theme="light"] #settings-keys-external .bg-slate-800\/60 {
   background-color: var(--bg-elevated) !important;
   border-color: var(--border-default) !important;
 }
 
 /* Bouton refresh quota */
-[data-theme="light"] #settings-keys .text-slate-600.hover\:text-blue-400 {
+[data-theme="light"] #settings-keys .text-slate-600.hover\:text-blue-400,
+[data-theme="light"] #settings-keys-internal .text-slate-600.hover\:text-blue-400,
+[data-theme="light"] #settings-keys-external .text-slate-600.hover\:text-blue-400 {
   color: var(--text-muted) !important;
 }
 
 /* Badge SET/MISSING — SET */
-[data-theme="light"] #settings-keys .bg-green-500\/15 {
+[data-theme="light"] #settings-keys .bg-green-500\/15,
+[data-theme="light"] #settings-keys-internal .bg-green-500\/15,
+[data-theme="light"] #settings-keys-external .bg-green-500\/15 {
   background-color: rgba(22, 101, 52, 0.12) !important;
   border-color: rgba(22, 101, 52, 0.3) !important;
 }
 
 /* Badge MISSING */
-[data-theme="light"] #settings-keys .bg-red-500\/15 {
+[data-theme="light"] #settings-keys .bg-red-500\/15,
+[data-theme="light"] #settings-keys-internal .bg-red-500\/15,
+[data-theme="light"] #settings-keys-external .bg-red-500\/15 {
   background-color: rgba(155, 28, 28, 0.12) !important;
   border-color: rgba(155, 28, 28, 0.3) !important;
 }
@@ -373,8 +395,9 @@
   background-color: var(--bg-elevated) !important;
   border-color: var(--border-accent) !important;
 }
-
 [data-theme="light"] #settings-keys input,
+[data-theme="light"] #settings-keys-internal input,
+[data-theme="light"] #settings-keys-external input,
 [data-theme="light"] .argos-input,
 [data-theme="light"] input.w-full,
 [data-theme="light"] textarea,
