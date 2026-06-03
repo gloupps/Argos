@@ -116,6 +116,23 @@ window.EnrichPanel = {
                     <i data-lucide="copy" class="w-2.5 h-2.5 inline"></i>
                 </button>`;
     },
+    
+    // Bouton "voir tout" pour les listes tronquées
+    _listExpandBtn(label, allItems) {
+        let encTitle = "", encItems = "";
+        try {
+            encTitle = btoa(unescape(encodeURIComponent(label)));
+            encItems = btoa(unescape(encodeURIComponent(JSON.stringify(allItems))));
+        } catch(e) {
+            try { encTitle = btoa(label); encItems = btoa(JSON.stringify(allItems)); } catch(e2) {}
+        }
+        return `<button onclick="EnrichPanel._openListModal('${encTitle}', '${encItems}')"
+                        class="text-[11px] text-slate-500 hover:text-violet-400 transition flex items-center gap-1 shrink-0"
+                        title="Show all ${allItems.length} items">
+                    <i data-lucide="maximize-2" class="w-2.5 h-2.5"></i>
+                    <span>+${allItems.length} more</span>
+                </button>`;
+    },
 
     // ── Modal service unifié (Shodan + Censys) ────────────
 
@@ -707,8 +724,7 @@ window.EnrichPanel = {
                         ${vulnBadge}${tlsBadge}${srcBadge}
                     </button>`;
             }).join("");
-            const overflow = allServices.length > 30
-                ? `<div class="text-[12px] text-slate-600 pt-1">+${allServices.length - 30} more</div>` : "";
+            const overflow = allServices.length > 30 ? `<div class="pt-1">${this._listExpandBtn("Services", allServices.map(s => `${s.port}/${s.transport||"tcp"}${s.product?" ("+s.product+")":""}`))}</div>` : "";
             return `<div class="space-y-0.5">${btns}${overflow}</div>`;
         }
 
@@ -725,7 +741,7 @@ window.EnrichPanel = {
                     class="text-[15px] px-1.5 py-0.5 rounded border bg-red-500/10 border-red-500/30
                            text-red-400 hover:text-red-300 font-mono transition">${v}</a>`
             ).join("");
-            const overflow = arr.length > 20 ? `<span class="text-[12px] text-slate-600">+${arr.length - 20}</span>` : "";
+            const overflow = arr.length > 20 ? this._listExpandBtn("Vulnerabilities", arr) : "";
             return `<div class="flex flex-wrap gap-1">${badges}${overflow}</div>`;
         }
 
@@ -747,7 +763,7 @@ window.EnrichPanel = {
                                           border-slate-700/50 text-slate-300 font-mono truncate max-w-full"
                                    title="${this._esc(v)}">${disp}</span>`;
                 }).join("");
-                const overflow = arr.length > 12 ? `<span class="text-[12px] text-slate-600">+${arr.length-12}</span>` : "";
+                const overflow = arr.length > 12 ? this._listExpandBtn(name, arr) : "";
                 sections.push(`
                     <div class="mb-2">
                         <div class="text-[12px] text-slate-500 uppercase tracking-wider mb-1">${name}</div>
@@ -768,7 +784,7 @@ window.EnrichPanel = {
             const tags = arr.slice(0, 15).map(v =>
                 `<span class="text-[15px] px-1.5 py-0.5 rounded border bg-slate-800 border-slate-700/50 text-slate-400">${v}</span>`
             ).join("");
-            const overflow = arr.length > 15 ? `<span class="text-[15px] text-slate-600">+${arr.length-15}</span>` : "";
+            const overflow = arr.length > 15 ? this._listExpandBtn("Tags", arr) : "";
             return `<div class="flex flex-wrap gap-1">${tags}${overflow}</div>`;
         }
 
@@ -926,6 +942,18 @@ window.EnrichPanel = {
         const seen = {};
         items.forEach(({ field }) => { if (!seen[field.name]) seen[field.name] = field; });
         const rows = Object.values(seen).map(field => {
+            if (Array.isArray(field.value) && field.value.length > 3) {
+                const preview = field.value.slice(0, 3).map(x => String(x)).join(", ");
+                const expandBtn = this._listExpandBtn(field.name, field.value.map(x => String(x)));
+                return `
+                    <tr>
+                        <td class="text-[15px] text-slate-500 pr-3 py-0.5 whitespace-nowrap align-top">${field.name}</td>
+                        <td class="py-0.5">
+                            <span class="text-[15px] text-slate-300 font-mono">${this._esc(preview)}…</span>
+                            <span class="inline-block ml-1 align-middle">${expandBtn}</span>
+                        </td>
+                    </tr>`;
+            }
             const v = Array.isArray(field.value) ? field.value.join(", ") : String(field.value ?? "");
             if (!v || v === "0") return "";
             const isTrunc = v.length > 26;
@@ -962,6 +990,27 @@ window.EnrichPanel = {
             const seen = {};
             visible.forEach(f => { if (!seen[f.name]) seen[f.name] = f; });
             const rows = Object.values(seen).map(f => {
+                // List fields: show first few + expand button
+                if (Array.isArray(f.value) && f.value.length > 3 && f.type === "list") {
+                    const preview = f.value.slice(0, 3).map(x => String(x)).join(", ");
+                    const expandBtn = this._listExpandBtn(f.name, f.value.map(x => String(x)));
+                    if (f.link) return `
+                        <tr>
+                            <td class="text-[15px] text-slate-500 pr-3 py-0.5 whitespace-nowrap align-top">${f.name}</td>
+                            <td class="py-0.5">
+                                <span class="text-[15px] text-slate-300 font-mono">${preview}… </span>
+                                ${expandBtn}
+                            </td>
+                        </tr>`;
+                    return `
+                        <tr>
+                            <td class="text-[15px] text-slate-500 pr-3 py-0.5 whitespace-nowrap align-top">${f.name}</td>
+                            <td class="py-0.5 flex items-center gap-2 flex-wrap">
+                                <span class="text-[15px] text-slate-300 font-mono">${this._esc(preview)}…</span>
+                                ${expandBtn}
+                            </td>
+                        </tr>`;
+                }
                 const v      = Array.isArray(f.value) ? f.value.join(", ") : String(f.value);
                 const isTrunc = v.length > 32;
                 const disp   = isTrunc ? v.slice(0, 30) + "…" : v;
@@ -1206,6 +1255,127 @@ window.EnrichPanel = {
         document.getElementById("text-modal-content").textContent = text;
         lucide.createIcons({ nodes: [modal] });
     },
+    
+    // ── Modal liste complète (champs type "list") ─────────
+
+    _openListModal(encodedTitle, encodedItems) {
+        let title = "";
+        let items = [];
+        try { title = decodeURIComponent(escape(atob(encodedTitle))); } catch(e) { title = "List"; }
+        try { items = JSON.parse(decodeURIComponent(escape(atob(encodedItems)))); } catch(e) { items = []; }
+
+        document.getElementById("list-detail-modal")?.remove();
+        const modal = document.createElement("div");
+        modal.id = "list-detail-modal";
+        modal.className = "fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4";
+
+        // Search state
+        const modalId = "list-detail-modal";
+
+        const rows = items.map(v => {
+            const s = String(v);
+            const isIp = /^\d{1,3}(\.\d{1,3}){3}$/.test(s);
+            const isDomain = /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(s) && !isIp;
+            const isHash = /^[a-f0-9]{32,64}$/i.test(s);
+            const isCve = /^CVE-\d{4}-\d+$/i.test(s);
+            const isPort = /^\d{1,5}(\/\w+)?$/.test(s);
+
+            let badge = "";
+            if (isIp)     badge = `<span class="text-[10px] px-1 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-400 shrink-0">IP</span>`;
+            else if (isDomain) badge = `<span class="text-[10px] px-1 py-0.5 rounded bg-violet-500/10 border border-violet-500/20 text-violet-400 shrink-0">domain</span>`;
+            else if (isHash) badge = `<span class="text-[10px] px-1 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400 shrink-0">hash</span>`;
+            else if (isCve) badge = `<span class="text-[10px] px-1 py-0.5 rounded bg-red-500/10 border border-red-500/20 text-red-400 shrink-0">CVE</span>`;
+            else if (isPort) badge = `<span class="text-[10px] px-1 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 shrink-0">port</span>`;
+
+            const copyId = "lm-" + Math.random().toString(36).slice(2, 8);
+            return `
+                <div class="list-modal-row flex items-center gap-2 px-3 py-1.5 rounded hover:bg-slate-800/60 group"
+                     data-val="${this._esc(s.toLowerCase())}">
+                    ${badge}
+                    <span class="font-mono text-[13px] text-slate-300 flex-1 break-all select-all">${this._esc(s)}</span>
+                    <button id="${copyId}" data-copy="${this._esc(s)}"
+                            class="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-slate-300 transition shrink-0"
+                            title="Copy">
+                        <i data-lucide="copy" class="w-3 h-3"></i>
+                    </button>
+                </div>`;
+        }).join("");
+
+        let titleEncSafe = "";
+        try { titleEncSafe = btoa(unescape(encodeURIComponent(title))); } catch(e) { titleEncSafe = encodedTitle; }
+
+        modal.innerHTML = `
+            <div class="bg-slate-950 border border-slate-700 rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[80vh]">
+                <!-- Header -->
+                <div class="flex items-center gap-2 px-4 py-3 border-b border-slate-800 shrink-0">
+                    <i data-lucide="list" class="w-4 h-4 text-slate-400 shrink-0"></i>
+                    <span class="text-sm font-semibold text-white flex-1 truncate">${this._esc(title)}</span>
+                    <span class="text-xs text-slate-500 shrink-0">${items.length} items</span>
+                    <button onclick="EnrichPanel._copyAllList('${titleEncSafe}', '${encodedItems}')"
+                            class="text-slate-500 hover:text-slate-300 transition ml-1 shrink-0" title="Copy all">
+                        <i data-lucide="clipboard-copy" class="w-4 h-4"></i>
+                    </button>
+                    <button onclick="document.getElementById('list-detail-modal').remove()"
+                            class="text-slate-500 hover:text-white transition ml-1 shrink-0">
+                        <i data-lucide="x" class="w-4 h-4"></i>
+                    </button>
+                </div>
+                <!-- Search -->
+                <div class="px-3 py-2 border-b border-slate-800/60 shrink-0">
+                    <div class="flex items-center gap-2 bg-slate-900 border border-slate-700/60 rounded-lg px-2.5 py-1.5">
+                        <i data-lucide="search" class="w-3.5 h-3.5 text-slate-600 shrink-0"></i>
+                        <input id="list-modal-search" type="text" placeholder="Filter…"
+                               class="bg-transparent text-sm text-slate-300 placeholder-slate-600 outline-none flex-1 min-w-0"
+                               oninput="EnrichPanel._filterListModal(this.value)">
+                        <span id="list-modal-count" class="text-xs text-slate-600 shrink-0">${items.length}</span>
+                    </div>
+                </div>
+                <!-- List -->
+                <div id="list-modal-body" class="flex-1 overflow-y-auto py-1">
+                    ${rows}
+                </div>
+            </div>`;
+
+        modal.addEventListener("click", e => { if (e.target === modal) modal.remove(); });
+        document.body.appendChild(modal);
+        lucide.createIcons({ nodes: [modal] });
+
+        // Wire copy buttons
+        modal.querySelectorAll("[data-copy]").forEach(btn => {
+            btn.addEventListener("click", e => {
+                e.stopPropagation();
+                navigator.clipboard.writeText(btn.dataset.copy).then(() => {
+                    btn.classList.add("text-green-400");
+                    setTimeout(() => btn.classList.remove("text-green-400"), 1200);
+                });
+            });
+        });
+
+        // Focus search
+        setTimeout(() => document.getElementById("list-modal-search")?.focus(), 50);
+    },
+
+    _filterListModal(query) {
+        const q = query.toLowerCase().trim();
+        const body = document.getElementById("list-modal-body");
+        if (!body) return;
+        let visible = 0;
+        body.querySelectorAll(".list-modal-row").forEach(row => {
+            const match = !q || row.dataset.val.includes(q);
+            row.style.display = match ? "" : "none";
+            if (match) visible++;
+        });
+        const counter = document.getElementById("list-modal-count");
+        if (counter) counter.textContent = q ? `${visible} / ${body.querySelectorAll(".list-modal-row").length}` : String(body.querySelectorAll(".list-modal-row").length);
+    },
+
+    _copyAllList(encodedTitle, encodedItems) {
+        let items = [];
+        try { items = JSON.parse(decodeURIComponent(escape(atob(encodedItems)))); } catch(e) {}
+        navigator.clipboard.writeText(items.join("\n")).then(() => {
+            JobLog?.push?.({ message: `Copied ${items.length} items to clipboard`, status: "running" });
+        });
+    },
 
     _copyTextModal() {
         const content = document.getElementById("text-modal-content")?.textContent || "";
@@ -1344,15 +1514,80 @@ window.EnrichPanel = {
 
         const allLabels = [srcLabel, ...targetLabels];
 
+        // ── Field types that are list-like and should be exploded item-by-item ──
+        const LIST_TYPES = new Set(["list", "vt_relation", "censys_services"]);
+
+        // ── For vt_relation objects, extract a stable pivot string ──
+        const _pivotVtRelation = (obj) => {
+            if (typeof obj === "string") return obj;
+            if (!obj || typeof obj !== "object") return null;
+            // resolutions: {hostname, ip, date} → hostname or ip
+            return obj.hostname || obj.ip || obj.url || obj.hash ||
+                   obj.sha256 || obj.name || obj.value || JSON.stringify(obj);
+        };
+
+        // ── For censys_services objects, extract a stable pivot key and a display label ──
+        const _pivotService = (obj) => {
+            if (typeof obj !== "object" || !obj) return null;
+            const port = obj.port || "?";
+            const proto = (obj.transport || "tcp").toLowerCase();
+            const key = `${port}/${proto}`;
+            const label = obj.product || obj.service || obj.module || proto;
+            return { key, display: label ? `${key} (${label})` : key };
+        };
+
+        // ── Flatten: expand list/relation/service fields into atomic entries ──
+        // Returns Map<canonicalKey, { val: displayString, mod, name, type }>
         const flatten = (info) => {
-            const map = {};
+            const map = new Map();
             Object.entries(info?.modules || {}).forEach(([mod, fields]) => {
                 (fields || []).forEach(f => {
                     if (this._isEmpty(f.value)) return;
                     if (this._COMPARE_SKIP.has(f.name)) return;
-                    const key = `${mod}::${f.name}`;
-                    const val = Array.isArray(f.value) ? f.value.join(", ") : String(f.value);
-                    map[key] = { val, mod, name: f.name, type: f.type };
+
+                    if (LIST_TYPES.has(f.type) && Array.isArray(f.value)) {
+                        f.value.forEach((item, idx) => {
+                            if (!item && item !== 0) return;
+
+                            let atomicKey, displayVal;
+
+                            if (f.type === "censys_services") {
+                                const parsed = _pivotService(item);
+                                if (!parsed) return;
+                                atomicKey = `${mod}::${f.name}::svc::${parsed.key}`;
+                                displayVal = parsed.display;
+                            } else if (f.type === "vt_relation") {
+                                const pivot = _pivotVtRelation(item);
+                                if (!pivot) return;
+                                atomicKey = `${mod}::${f.name}::${pivot}`;
+                                displayVal = pivot.length > 60 ? pivot.slice(0, 58) + "…" : pivot;
+                            } else {
+                                // plain list: strings or primitives
+                                const s = String(item);
+                                if (!s) return;
+                                atomicKey = `${mod}::${f.name}::${s}`;
+                                displayVal = s;
+                            }
+
+                            // Display name: "Field › item"
+                            const displayName = `${f.name}`;
+                            map.set(atomicKey, {
+                                val: displayVal,
+                                mod,
+                                name: displayName,
+                                subItem: displayVal,   // the atomic value itself
+                                type: f.type,
+                                isListItem: true,
+                            });
+                        });
+                    } else {
+                        // Scalar field: string/number/label-capsule/score etc.
+                        const key = `${mod}::${f.name}`;
+                        const val = Array.isArray(f.value)
+                            ? f.value.join(", ")
+                            : String(f.value);
+                        map.set(key, { val, mod, name: f.name, type: f.type, isListItem: false });
+                    }
                 });
             });
             return map;
@@ -1362,21 +1597,31 @@ window.EnrichPanel = {
         const maps = {};
         allLabels.forEach(lbl => { maps[lbl] = flatten(all[lbl]); });
 
-        // Collect all field keys across all IOCs
-        const allKeys = new Set(allLabels.flatMap(lbl => Object.keys(maps[lbl])));
+        // Collect all canonical keys across all IOCs
+        const allKeys = new Set(allLabels.flatMap(lbl => [...maps[lbl].keys()]));
 
-        // Build rows: for each key, collect values per IOC
+        // Build rows: for each key, collect presence + value per IOC
         const rows = [];
         allKeys.forEach(k => {
-            const vals = allLabels.map(lbl => maps[lbl][k] ?? null);
-            const presentVals = vals.filter(Boolean);
-            if (!presentVals.length) return;
-            const firstVal = presentVals[0].val;
-            const allSame = presentVals.every(v => v.val === firstVal);
-            const allPresent = vals.every(Boolean);
-            const mod = presentVals[0].mod;
-            const name = presentVals[0].name;
-            rows.push({ key: k, mod, name, vals, allSame, allPresent });
+            const entries = allLabels.map(lbl => maps[lbl].get(k) ?? null);
+            const presentEntries = entries.filter(Boolean);
+            if (!presentEntries.length) return;
+
+            const firstVal = presentEntries[0].val;
+            const allSame  = presentEntries.every(e => e.val === firstVal);
+            const allPresent = entries.every(Boolean);
+            const ref = presentEntries[0];
+
+            rows.push({
+                key: k,
+                mod: ref.mod,
+                name: ref.name,
+                subItem: ref.subItem || null,
+                isListItem: ref.isListItem || false,
+                vals: entries.map(e => e ? { val: e.val } : null),
+                allSame,
+                allPresent,
+            });
         });
 
         this._showCompareResultMultiModal(allLabels, rows);
@@ -1406,13 +1651,40 @@ window.EnrichPanel = {
         }).join("");
 
         const renderTableRow = (row) => {
-            const { mod, name, vals, allSame, allPresent } = row;
+            const { mod, name, subItem, isListItem, vals, allSame, allPresent } = row;
             const statusCls = allSame && allPresent
                 ? "bg-green-500/5 border-l-2 border-l-green-500/40"
                 : allSame && !allPresent
                     ? "bg-slate-800/30 border-l-2 border-l-slate-600/40"
                     : "bg-amber-500/5 border-l-2 border-l-amber-500/40";
 
+            // For list items, show the item value once in the Field column
+            // and just a presence indicator (✓ / —) per IOC column
+            if (isListItem) {
+                const itemDisplay = subItem && subItem.length > 36
+                    ? subItem.slice(0, 34) + "…"
+                    : (subItem || "");
+
+                const presenceCells = vals.map((v, i) => {
+                    const c = COLORS[i % COLORS.length];
+                    if (!v) return `<td class="px-2 py-1 text-center"><span class="text-slate-700 text-[12px]">—</span></td>`;
+                    return `<td class="px-2 py-1 text-center">
+                        <span class="inline-block w-4 h-4 rounded-full ${c.dot} opacity-80" title="${this._esc(v.val)}"></span>
+                    </td>`;
+                }).join("");
+
+                return `
+                    <tr class="${statusCls}">
+                        <td class="px-2 py-1 whitespace-nowrap">
+                            <span class="text-[11px] text-slate-500">${this._esc(mod)}</span>
+                            <span class="text-[11px] text-slate-400 ml-1">${this._esc(name)}</span>
+                            <span class="font-mono text-[12px] text-slate-200 ml-2" title="${this._esc(subItem || "")}">${this._esc(itemDisplay)}</span>
+                        </td>
+                        ${presenceCells}
+                    </tr>`;
+            }
+
+            // Scalar field: show value in each IOC column
             const cells = vals.map((v, i) => {
                 const c = COLORS[i % COLORS.length];
                 if (!v) return `<td class="px-2 py-1.5"><span class="text-slate-700 text-[12px]">—</span></td>`;
@@ -1424,7 +1696,7 @@ window.EnrichPanel = {
             }).join("");
 
             return `
-                <tr class="${statusCls} rounded">
+                <tr class="${statusCls}">
                     <td class="px-2 py-1.5 whitespace-nowrap">
                         <span class="text-[11px] text-slate-500">${this._esc(mod)}</span>
                         <span class="text-[11px] text-slate-300 ml-1 font-medium">${this._esc(name)}</span>
