@@ -605,10 +605,11 @@ aside.argos-right {
    LOGO ZONE
    ══════════════════════════════════════════════════════ */
 .argos-logo-zone {
-  padding: 0.8rem 0.75rem;   /* un peu plus de vertical */
-  min-height: 64px;
+  padding: 0.6rem 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
+  gap: 0.5rem;
   border-bottom: 1px solid var(--border-default);
   background: linear-gradient(135deg, var(--bg-elevated) 0%, var(--bg-surface) 100%);
   position: relative;
@@ -622,10 +623,26 @@ aside.argos-right {
   background: linear-gradient(90deg, transparent, var(--gold-dim), transparent);
 }
 
+.argos-logo-row {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
 .argos-logo-img {
   display: block;
-  width: 210px;       /* ← valeur fixe, pas de max */
+  width: 100%;
+  max-width: 100%;
   height: auto;
+  padding: 0;
+}
+
+.argos-logo-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding-bottom: 0.4rem;
 }
 
 /* ══════════════════════════════════════════════════════
