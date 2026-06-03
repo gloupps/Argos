@@ -136,6 +136,35 @@
             <!-- boxes injectées par JS -->
         </div>
     </div>
+    
+    <!-- ══════════════════════════════════════════════════════════════════════════ -->
+    <!-- ROW 4 : SIEM Investigation                                               -->
+    <!-- Coller dans ongoing_case.html après ROW 3 (Enrichment)                  -->
+    <!-- ══════════════════════════════════════════════════════════════════════════ -->
+
+    <div class="glass rounded-xl p-4" id="siem-row">
+        <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-bold flex items-center gap-2">
+                <i data-lucide="database" class="w-4 h-4 text-teal-400"></i> SIEM Investigation
+            </h3>
+            <button onclick="document.getElementById('siem-row-body').classList.toggle('hidden');
+                             this.querySelector('i').setAttribute('data-lucide',
+                                 document.getElementById('siem-row-body').classList.contains('hidden')
+                                 ? 'chevron-down' : 'chevron-up');
+                             lucide.createIcons();"
+                    class="text-slate-600 hover:text-teal-400 transition">
+                <i data-lucide="chevron-up" class="w-3.5 h-3.5"></i>
+            </button>
+        </div>
+
+        <div id="siem-row-body">
+            <!-- Results will be injected here by SIEMModule._onResult() -->
+            <div id="siem-results-panel"
+                 class="text-[11px] text-slate-600 italic min-h-[24px]">
+                No investigation run yet — use the SIEM panel on the right.
+            </div>
+        </div>
+    </div>
 
     <!-- Job log -->
     <div id="job-log"
