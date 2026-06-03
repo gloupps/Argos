@@ -433,23 +433,22 @@ window.Modules = {
     // SETTINGS — API keys + extra fields
     // ══════════════════════════════════════════
     renderSettingsKeys() {
-        const container = document.getElementById("settings-keys");
-        if (!container) return;
-        container.innerHTML = "";
         if (!this._grouped) return;
 
-        Object.entries(this._grouped).forEach(([group, modules]) => {
-            const title = document.createElement("p");
-            title.className = "text-[12px] text-slate-500 uppercase tracking-wider mt-4 mb-2 font-semibold";
-            title.textContent = group;
-            container.appendChild(title);
+        const colInternal = document.getElementById("settings-keys-internal");
+        const colExternal = document.getElementById("settings-keys-external");
+        if (!colInternal || !colExternal) return;
 
-            const grid = document.createElement("div");
-            grid.className = "grid grid-cols-2 gap-2 mb-2";
+        colInternal.innerHTML = "";
+        colExternal.innerHTML = "";
+
+        Object.entries(this._grouped).forEach(([group, modules]) => {
+            const isInternal = group.toLowerCase().includes("internal");
+            const col = isInternal ? colInternal : colExternal;
+
             modules.forEach(mod => {
-                grid.appendChild(this._buildSettingsCard(mod, false));
+                col.appendChild(this._buildSettingsCard(mod, true));
             });
-            container.appendChild(grid);
         });
 
         lucide.createIcons();
