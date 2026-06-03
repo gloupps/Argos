@@ -156,6 +156,8 @@ window.Modules = {
 
         Object.entries(this._grouped).forEach(([group, modules]) => {
             const isInternal = group.toLowerCase().includes("internal");
+            const isSiem     = group.toLowerCase() === "siem";
+            if (isSiem) return;   // SIEM modules → right_navbar only, not left_navbar
             const container  = isInternal ? internalEl : externalEl;
             if (!container) return;
 
@@ -437,14 +439,18 @@ window.Modules = {
 
         const colInternal = document.getElementById("settings-keys-internal");
         const colExternal = document.getElementById("settings-keys-external");
+        const colSiem     = document.getElementById("settings-keys-siem");
         if (!colInternal || !colExternal) return;
 
         colInternal.innerHTML = "";
         colExternal.innerHTML = "";
+        if (colSiem) colSiem.innerHTML = "";
 
         Object.entries(this._grouped).forEach(([group, modules]) => {
             const isInternal = group.toLowerCase().includes("internal");
-            const col = isInternal ? colInternal : colExternal;
+            const isSiem     = group.toLowerCase() === "siem";
+            const col = isSiem ? (colSiem || colExternal)
+                                : isInternal ? colInternal : colExternal;
 
             modules.forEach(mod => {
                 col.appendChild(this._buildSettingsCard(mod, true));
