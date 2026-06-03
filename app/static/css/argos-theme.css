@@ -216,10 +216,83 @@
 [data-theme="light"] #pivot-container input[type="range"] {
   accent-color: #b45309 !important; /* amber-700 */
 }
+[data-theme="light"] #pivot-container input[type="checkbox"] {
+  accent-color: #b45309 !important; /* amber-700 */
+}
 
 /* Correlation (violet) */
 [data-theme="light"] #correlation-container input[type="range"] {
   accent-color: #6d28d9 !important; /* violet-700 */
+}
+/* Correlation (violet) */
+[data-theme="light"] #correlation-container input[type="checkbox"] {
+  accent-color: #6d28d9 !important; /* violet-700 */
+}
+/* ── Light mode : settings — bouton Add instance MISP ── */
+[data-theme="light"] #misp-add-btn {
+  background-color: rgba(194, 120, 30, 0.15) !important;
+  color: #92400e !important;
+  border-color: rgba(146, 64, 14, 0.4) !important;
+}
+[data-theme="light"] #misp-add-btn:hover {
+  background-color: rgba(194, 120, 30, 0.3) !important;
+}
+
+/* ── Light mode : settings — carte quota ── */
+
+/* Conteneur principal de la quota zone */
+[data-theme="light"] #settings-keys .rounded-md.border {
+  background-color: var(--bg-elevated) !important;
+  border-color: var(--border-default) !important;
+}
+
+/* Barre de fond de la progress bar */
+[data-theme="light"] #settings-keys .bg-slate-800.rounded-full {
+  background-color: var(--bg-hover) !important;
+}
+
+/* Textes dans la quota zone */
+[data-theme="light"] #settings-keys .text-slate-300 {
+  color: var(--text-primary) !important;
+}
+[data-theme="light"] #settings-keys .text-slate-600 {
+  color: var(--text-muted) !important;
+}
+[data-theme="light"] #settings-keys .text-slate-400 {
+  color: var(--text-secondary) !important;
+}
+[data-theme="light"] #settings-keys .text-slate-500 {
+  color: var(--text-muted) !important;
+}
+
+/* Badge plan "free" (fond slate sombre) */
+[data-theme="light"] #settings-keys .bg-slate-700\/40 {
+  background-color: var(--bg-overlay) !important;
+  border-color: var(--border-default) !important;
+  color: var(--text-secondary) !important;
+}
+
+/* Quota "public / no tracking" row */
+[data-theme="light"] #settings-keys .bg-slate-800\/60 {
+  background-color: var(--bg-elevated) !important;
+  border-color: var(--border-default) !important;
+}
+
+/* Bouton refresh quota */
+[data-theme="light"] #settings-keys .text-slate-600.hover\:text-blue-400 {
+  color: var(--text-muted) !important;
+}
+
+/* Badge SET/MISSING — SET */
+[data-theme="light"] #settings-keys .bg-green-500\/15 {
+  background-color: rgba(22, 101, 52, 0.12) !important;
+  border-color: rgba(22, 101, 52, 0.3) !important;
+}
+
+/* Badge MISSING */
+[data-theme="light"] #settings-keys .bg-red-500\/15 {
+  background-color: rgba(155, 28, 28, 0.12) !important;
+  border-color: rgba(155, 28, 28, 0.3) !important;
 }
 /* Icônes de couleur spécifique : on les laisse avec leur couleur */
 [data-theme="light"] .text-blue-400   { color: #1d6fa8 !important; }
