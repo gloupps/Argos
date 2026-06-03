@@ -1515,7 +1515,7 @@ window.EnrichPanel = {
         const allLabels = [srcLabel, ...targetLabels];
 
         // ── Field types that are list-like and should be exploded item-by-item ──
-        const LIST_TYPES = new Set(["list", "vt_relation", "censys_services"]);
+        const LIST_TYPES = new Set(["list", "vt_relation", "censys_services", "shodan_services"]);
 
         // ── For vt_relation objects, extract a stable pivot string ──
         const _pivotVtRelation = (obj) => {
@@ -1551,7 +1551,7 @@ window.EnrichPanel = {
 
                             let atomicKey, displayVal;
 
-                            if (f.type === "censys_services") {
+                            if (f.type === "censys_services" || f.type === "shodan_services") {
                                 const parsed = _pivotService(item);
                                 if (!parsed) return;
                                 atomicKey = `${mod}::${f.name}::svc::${parsed.key}`;
@@ -1674,7 +1674,7 @@ window.EnrichPanel = {
                 }).join("");
 
                 return `
-                    <tr class="${statusCls}">
+                    <tr class="${statusCls}" data-mod="${EnrichPanel._esc(mod)}">
                         <td class="px-2 py-1 whitespace-nowrap">
                             <span class="text-[11px] text-slate-500">${this._esc(mod)}</span>
                             <span class="text-[11px] text-slate-400 ml-1">${this._esc(name)}</span>
@@ -1689,14 +1689,15 @@ window.EnrichPanel = {
                 const c = COLORS[i % COLORS.length];
                 if (!v) return `<td class="px-2 py-1.5"><span class="text-slate-700 text-[12px]">—</span></td>`;
                 const display = v.val.length > 28 ? v.val.slice(0, 26) + "…" : v.val;
-                return `<td class="px-2 py-1.5">
+                return `<tr class="${statusCls}" data-mod="${EnrichPanel._esc(mod)}">
+                        <td class="px-2 py-1.5">
                     <span class="font-mono text-[12px] ${c.text} block truncate max-w-[140px]"
                           title="${this._esc(v.val)}">${this._esc(display)}</span>
                 </td>`;
             }).join("");
 
             return `
-                <tr class="${statusCls}">
+                <tr class="${statusCls}" data-mod="${this._esc(ref?.mod || mod || '')}">
                     <td class="px-2 py-1.5 whitespace-nowrap">
                         <span class="text-[11px] text-slate-500">${this._esc(mod)}</span>
                         <span class="text-[11px] text-slate-300 ml-1 font-medium">${this._esc(name)}</span>
@@ -1713,7 +1714,7 @@ window.EnrichPanel = {
         const section = (title, icon, colorCls, sectionRows) => {
             if (!sectionRows.length) return "";
             return `
-                <div class="mb-5">
+                <div class="mb-5 compare-section">
                     <div class="flex items-center gap-1.5 mb-2 px-1">
                         <i data-lucide="${icon}" class="w-3.5 h-3.5 ${colorCls}"></i>
                         <span class="text-xs font-semibold uppercase tracking-widest ${colorCls}">${title}</span>
@@ -1747,9 +1748,23 @@ window.EnrichPanel = {
         const modal = document.createElement("div");
         modal.id = "compare-result-modal";
         modal.className = "fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm";
+        // Collect unique modules present in rows
+        const allMods = [...new Set(rows.map(r => r.mod))].sort();
+
+        const modPills = allMods.map(m =>
+            `<button data-mod="${this._esc(m)}"
+                     onclick="EnrichPanel._toggleCompareMod(this)"
+                     class="compare-mod-pill text-[11px] px-2 py-0.5 rounded border border-slate-700
+                            bg-slate-800 text-slate-400 hover:border-violet-500/50 hover:text-violet-300
+                            transition whitespace-nowrap font-mono" data-active="true">
+                ${this._esc(m)}
+             </button>`
+        ).join("");
+
         modal.innerHTML = `
             <div class="bg-slate-950 border border-slate-700 rounded-xl shadow-2xl w-full max-w-5xl mx-4
                         flex flex-col max-h-[90vh]">
+                <!-- Header -->
                 <div class="flex items-center gap-3 px-4 py-3 border-b border-slate-800 shrink-0 flex-wrap gap-y-2">
                     <i data-lucide="diff" class="w-4 h-4 text-violet-400 shrink-0"></i>
                     <span class="text-sm font-semibold text-white shrink-0">IOC Comparison</span>
@@ -1766,13 +1781,70 @@ window.EnrichPanel = {
                         <i data-lucide="x" class="w-4 h-4"></i>
                     </button>
                 </div>
-                <div class="flex-1 overflow-y-auto p-4">
+                <!-- Module filter bar -->
+                ${allMods.length > 1 ? `
+                <div class="flex items-center gap-2 px-4 py-2 border-b border-slate-800/60 shrink-0 flex-wrap">
+                    <i data-lucide="filter" class="w-3 h-3 text-slate-600 shrink-0"></i>
+                    <span class="text-[11px] text-slate-600 shrink-0 mr-1">Module</span>
+                    <button onclick="EnrichPanel._selectAllCompareMods(true)"
+                            class="text-[11px] text-slate-600 hover:text-violet-400 transition px-1">all</button>
+                    <span class="text-slate-700 text-[11px]">·</span>
+                    <button onclick="EnrichPanel._selectAllCompareMods(false)"
+                            class="text-[11px] text-slate-600 hover:text-violet-400 transition px-1">none</button>
+                    <div class="flex items-center gap-1.5 flex-wrap" id="compare-mod-pills">
+                        ${modPills}
+                    </div>
+                </div>` : ""}
+                <!-- Body -->
+                <div class="flex-1 overflow-y-auto p-4" id="compare-result-body">
                     ${section("Identical across all IOCs", "check-circle-2", "text-green-400", identical)}
                     ${section("Divergent fields", "alert-triangle", "text-amber-400", divergent)}
                     ${section("Partial — not present in all IOCs", "minus-circle", "text-slate-400", partialSame)}
                     ${!rows.length ? `<p class="text-slate-600 italic text-sm text-center py-8">No enrichment data to compare.</p>` : ""}
                 </div>
             </div>`;
+        
+        // ── Module filter helpers (scoped to this modal instance) ──
+        EnrichPanel._toggleCompareMod = function(btn) {
+            const active = btn.dataset.active === "true";
+            btn.dataset.active = active ? "false" : "true";
+            btn.classList.toggle("bg-violet-600/30", !active);
+            btn.classList.toggle("border-violet-500/60", !active);
+            btn.classList.toggle("text-violet-300", !active);
+            btn.classList.toggle("bg-slate-800", active);
+            btn.classList.toggle("border-slate-700", active);
+            btn.classList.toggle("text-slate-400", active);
+            EnrichPanel._applyCompareModFilter();
+        };
+
+        EnrichPanel._selectAllCompareMods = function(selectAll) {
+            document.querySelectorAll(".compare-mod-pill").forEach(btn => {
+                btn.dataset.active = selectAll ? "true" : "false";
+                btn.classList.toggle("bg-violet-600/30", !selectAll);
+                btn.classList.toggle("border-violet-500/60", !selectAll);
+                btn.classList.toggle("text-violet-300", !selectAll);
+                btn.classList.toggle("bg-slate-800", selectAll);
+                btn.classList.toggle("border-slate-700", selectAll);
+                btn.classList.toggle("text-slate-400", selectAll);
+            });
+            EnrichPanel._applyCompareModFilter();
+        };
+
+        EnrichPanel._applyCompareModFilter = function() {
+            const activeMods = new Set(
+                [...document.querySelectorAll(".compare-mod-pill[data-active='true']")]
+                    .map(b => b.dataset.mod)
+            );
+            document.querySelectorAll("#compare-result-body tr[data-mod]").forEach(tr => {
+                tr.style.display = activeMods.has(tr.dataset.mod) ? "" : "none";
+            });
+            // Hide section wrappers that have no visible rows
+            document.querySelectorAll("#compare-result-body .compare-section").forEach(sec => {
+                const visible = [...sec.querySelectorAll("tr[data-mod]")]
+                    .some(tr => tr.style.display !== "none");
+                sec.style.display = visible ? "" : "none";
+            });
+        };
 
         modal.addEventListener("click", e => { if (e.target === modal) modal.remove(); });
         document.body.appendChild(modal);
