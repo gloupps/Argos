@@ -6,19 +6,74 @@ window.Settings = {
     },
 
     open() {
-        Modules?.renderSettingsKeys?.();
-
-        // Injecter le bloc "External MISP Instances" dans le modal
         const modalBody = document.querySelector("#settings-modal > div");
-        document.getElementById("misp-instances-section")?.remove();
-        if (modalBody) {
-            const saveBar = modalBody.lastElementChild;
-            const wrapper = document.createElement("div");
-            modalBody.insertBefore(wrapper, saveBar);
-            MISPInstances?.render?.(wrapper);
+        if (!modalBody) {
+            document.getElementById("settings-modal")?.classList.remove("hidden");
+            return;
         }
 
+        // ── Reconstruire le body proprement ─────────────────────────
+        const header  = modalBody.querySelector(".flex.items-center.justify-between");
+        const divider = modalBody.querySelector(".argos-divider");
+        modalBody.innerHTML = "";
+        if (header)  modalBody.appendChild(header);
+        if (divider) modalBody.appendChild(divider);
+
+        // ── Grid 3 colonnes ──────────────────────────────────────────
+        const grid = document.createElement("div");
+        grid.className = "grid grid-cols-3 gap-4 items-start";
+
+        // Colonne 1 : Internal
+        const colInternal = document.createElement("div");
+        colInternal.innerHTML = `
+            <p class="text-[11px] text-slate-500 uppercase tracking-wider mb-3 font-semibold flex items-center gap-1.5">
+                <i data-lucide="server" class="w-3.5 h-3.5 text-teal-400"></i> Internal
+            </p>`;
+        const keysInternal = document.createElement("div");
+        keysInternal.id = "settings-keys-internal";
+        keysInternal.className = "space-y-2";
+        colInternal.appendChild(keysInternal);
+
+        // Colonne 2 : External
+        const colExternal = document.createElement("div");
+        colExternal.innerHTML = `
+            <p class="text-[11px] text-slate-500 uppercase tracking-wider mb-3 font-semibold flex items-center gap-1.5">
+                <i data-lucide="globe" class="w-3.5 h-3.5 text-blue-400"></i> External
+            </p>`;
+        const keysExternal = document.createElement("div");
+        keysExternal.id = "settings-keys-external";
+        keysExternal.className = "space-y-2";
+        colExternal.appendChild(keysExternal);
+
+        // Colonne 3 : External MISP Instances
+        const colMisp = document.createElement("div");
+
+        // IMPORTANT : attacher la grid au DOM AVANT d'appeler MISPInstances.render()
+        // car _renderList() fait getElementById("misp-instances-list")
+        grid.appendChild(colInternal);
+        grid.appendChild(colExternal);
+        grid.appendChild(colMisp);
+        modalBody.appendChild(grid);
+
+        // ── Save bar ─────────────────────────────────────────────────
+        const saveBar = document.createElement("div");
+        saveBar.className = "flex justify-end pt-3";
+        saveBar.style.borderTop = "1px solid var(--border-default)";
+        saveBar.innerHTML = `
+            <button data-action="save-settings" class="argos-btn argos-btn-primary">
+                <i data-lucide="save" class="w-4 h-4"></i> Save
+            </button>`;
+        modalBody.appendChild(saveBar);
+
+        // ── Remplir les colonnes APRÈS insertion dans le DOM ─────────
+        Modules?.renderSettingsKeys?.();
+
+        // Nettoyer l'éventuelle ancienne section avant de re-rendre
+        document.getElementById("misp-instances-section")?.remove();
+        MISPInstances?.render?.(colMisp);
+
         document.getElementById("settings-modal")?.classList.remove("hidden");
+        lucide.createIcons({ nodes: [modalBody] });
     },
 
     close() {
@@ -26,17 +81,14 @@ window.Settings = {
     },
 
     save() {
-        // API keys
-        document.querySelectorAll("#settings-keys input[data-key]").forEach(input => {
+        document.querySelectorAll("#settings-modal input[data-key]").forEach(input => {
             const val = input.value.trim();
             if (val) SecretStore.set(input.dataset.key, val);
         });
-        // Champs extra (opencti_url, misp_url…)
-        document.querySelectorAll("#settings-keys input[data-extra-key]").forEach(input => {
+        document.querySelectorAll("#settings-modal input[data-extra-key]").forEach(input => {
             const val = input.value.trim();
             SecretStore.set(`extra_${input.dataset.extraKey}`, val);
         });
-        // Instances MISP externes — tout dans SecretStore
         MISPInstances?.collect?.();
 
         this.close();
