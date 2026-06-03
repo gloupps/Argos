@@ -186,7 +186,7 @@ window.Modules = {
     _buildSidebarItem(mod, hasKey, on) {
         const wrap = document.createElement("div");
         wrap.className = "flex items-center justify-between px-2 py-1.5 rounded transition group " +
-                         (hasKey ? "hover:bg-slate-800" : "opacity-30");
+                 (hasKey ? "hover:bg-slate-800 cursor-pointer" : "opacity-40");
         wrap.title = mod.description || mod.name;
 
         // Label + icon (cliquable pour lancer enrichissement si ON)
@@ -203,8 +203,8 @@ window.Modules = {
         const quotaBadgeText = qc?.exhausted ? "EXHAUSTED" : qc?.low ? "LOW" : "";
 
         labelSpan.innerHTML = `
-            <i data-lucide="${mod.icon}" class="w-4 h-4 text-slate-300 shrink-0"></i>
-            <span class="text-sm truncate ${on ? "" : "text-slate-500"}">${mod.name}</span>
+            <i data-lucide="${mod.icon}" class="w-4 h-4 shrink-0 argos-sidebar-icon" style="color:var(--gold-main)"></i>
+            <span class="text-sm truncate" style="color:${on ? "var(--text-primary)" : "var(--text-muted)"}">${mod.name}</span>
             <span id="sidebar-quota-badge-${mod.key}" class="${quotaBadgeClass}">${quotaBadgeText}</span>
         `;
         if (hasKey && on) {
