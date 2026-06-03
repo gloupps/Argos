@@ -48,7 +48,7 @@ window.Settings = {
         // Colonne 3 : External MISP Instances
         const colMisp = document.createElement("div");
         
-        // Colonne 4 : SIEM
+        // Colonne 4 : SIEM  (dans open(), à la place de colSiem actuel)
         const colSiem = document.createElement("div");
         colSiem.innerHTML = `
             <p class="text-[11px] text-slate-500 uppercase tracking-wider mb-3 font-semibold flex items-center gap-1.5">
@@ -58,7 +58,17 @@ window.Settings = {
         keysSiem.id = "settings-keys-siem";
         keysSiem.className = "space-y-2";
         colSiem.appendChild(keysSiem);
-        
+
+        // Sous-section QRadar LogSources
+        const siemSourcesQradar = document.createElement("div");
+        siemSourcesQradar.className = "mt-4";
+        colSiem.appendChild(siemSourcesQradar);
+
+        // Sous-section Splunk Indexes
+        const siemSourcesSplunk = document.createElement("div");
+        siemSourcesSplunk.className = "mt-4";
+        colSiem.appendChild(siemSourcesSplunk);
+
         grid.appendChild(colInternal);
         grid.appendChild(colExternal);
         grid.appendChild(colSiem);
@@ -81,6 +91,11 @@ window.Settings = {
         // Nettoyer l'éventuelle ancienne section avant de re-rendre
         document.getElementById("misp-instances-section")?.remove();
         MISPInstances?.render?.(colMisp);
+        
+        document.getElementById(`siem-sources-section-qradar`)?.remove();
+        document.getElementById(`siem-sources-section-splunk`)?.remove();
+        SIEMInstances?.render?.(siemSourcesQradar, "qradar");
+        SIEMInstances?.render?.(siemSourcesSplunk, "splunk");
 
         document.getElementById("settings-modal")?.classList.remove("hidden");
         lucide.createIcons({ nodes: [modalBody] });
@@ -101,6 +116,9 @@ window.Settings = {
         });
         MISPInstances?.collect?.();
 
+        SIEMInstances?.collect?.("qradar");
+        SIEMInstances?.collect?.("splunk");
+        
         this.close();
         document.dispatchEvent(new Event("settings:updated"));
     },
