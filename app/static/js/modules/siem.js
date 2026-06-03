@@ -40,7 +40,12 @@ window.SIEMModule = {
         const container = document.getElementById("siem-container");
         if (!container) return;
 
-        const isConfigured = !!SecretStore?.has?.("qradar");
+        // ── SIEM type sélectionné (défaut: qradar) ──
+        const siemType = this.state.siem_type || "qradar";
+
+        const isConfigured = siemType === "qradar"
+            ? !!SecretStore?.has?.("qradar")
+            : !!SecretStore?.has?.(siemType);   // extensible pour Splunk plus tard
 
         const now  = new Date();
         const week = new Date(now - 7 * 86400000);
@@ -49,16 +54,40 @@ window.SIEMModule = {
         const ds = this.state.date_start || fmt(week);
         const de = this.state.date_end   || fmt(now);
 
+        // Labels des SIEM dispo (extensible)
+        const siemOptions = [
+            { key: "splunk",  label: "SPLUNK",  soon: true  },
+            { key: "qradar",  label: "QRADAR",  soon: false },
+        ];
+
+        const typePickerHtml = `
+            <div class="flex p-1 bg-slate-900 rounded-md border border-slate-800">
+                ${siemOptions.map(opt => `
+                <label class="relative flex-1 text-center py-1.5 text-[10px] font-bold rounded cursor-pointer transition
+                              ${siemType === opt.key ? "bg-teal-600/80 text-white" : "text-slate-400 hover:text-slate-200"}
+                              ${opt.soon ? "opacity-40 cursor-not-allowed" : ""}">
+                    <input type="radio" name="siem_type" class="hidden"
+                           ${siemType === opt.key ? "checked" : ""}
+                           ${opt.soon ? "disabled" : ""}
+                           onchange="SIEMModule.update('siem_type', '${opt.key}'); SIEMModule._render()">
+                    ${opt.label}
+                    ${opt.soon ? `<span class="absolute -top-1.5 -right-1 text-[8px] bg-slate-700 text-slate-400 px-1 rounded">soon</span>` : ""}
+                </label>`).join("")}
+            </div>`;
+
         container.innerHTML = `
             <div class="bg-slate-950 p-3 rounded-lg border border-slate-800 space-y-3">
+
+                <!-- SIEM type picker -->
+                ${typePickerHtml}
 
                 ${!isConfigured ? `
                 <div class="flex items-center gap-2 text-[10px] text-amber-400/80
                             bg-amber-500/10 border border-amber-500/20 rounded px-2 py-1.5">
                     <i data-lucide="alert-triangle" class="w-3 h-3 shrink-0"></i>
-                    QRadar token missing — check Settings
+                    ${siemType === "qradar" ? "QRadar" : siemType} token missing — check Settings
                 </div>` : ""}
-                
+
                 <!-- Date range -->
                 <div class="grid grid-cols-2 gap-2">
                     <div class="space-y-1">
@@ -95,7 +124,7 @@ window.SIEMModule = {
                     </label>
                 </div>
 
-                <!-- IOC type filters — compact pill row -->
+                <!-- IOC type filters -->
                 <div class="flex items-center justify-center gap-1">
                     ${[
                         ["ipv4-addr_checkbox",   "IPv4"],
@@ -113,7 +142,7 @@ window.SIEMModule = {
                         </label>`;
                     }).join("")}
                 </div>
-                
+
                 <!-- Run -->
                 <button onclick="SIEMModule.run()"
                         ${!isConfigured ? "disabled" : ""}
