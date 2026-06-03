@@ -1753,9 +1753,9 @@ window.EnrichPanel = {
         const modPills = allMods.map(m =>
             `<button data-mod="${this._esc(m)}"
                      onclick="EnrichPanel._toggleCompareMod(this)"
-                     class="compare-mod-pill text-[11px] px-2 py-0.5 rounded border border-slate-700
-                            bg-slate-800 text-slate-400 hover:border-violet-500/50 hover:text-violet-300
-                            transition whitespace-nowrap font-mono" data-active="true">
+                     class="compare-mod-pill text-[11px] px-2 py-0.5 rounded border
+                           bg-violet-600/30 border-violet-500/60 text-white
+                           transition whitespace-nowrap font-mono" data-active="true">
                 ${this._esc(m)}
              </button>`
         ).join("");
