@@ -168,17 +168,29 @@ window.SIEMModule = {
         const de = this.state.date_end   || null;
 
         const extraConfig = {
-            siem_type:           siemType,
-            // QRadar
-            qradar:              SecretStore?.get("qradar")                   || "",
-            qradar_url:          SecretStore?.get("extra_qradar_url")         || "",
-            qradar_md5_sources:  SecretStore?.get("extra_qradar_md5_sources") || "18865,40100",
-            qradar_sha1_sources: SecretStore?.get("extra_qradar_sha1_sources")|| "879,5711",
-            // Splunk
-            splunk:              SecretStore?.get("splunk")                   || "",
-            splunk_url:          SecretStore?.get("extra_splunk_url")         || "",
-            splunk_index:        SecretStore?.get("extra_splunk_index")       || "*",
+            siem_type: siemType,
+ 
+            // ── QRadar ──────────────────────────────────────────
+            qradar:                  SecretStore?.get("qradar")                          || "",
+            qradar_url:              SecretStore?.get("extra_qradar_url")                || "",
+            qradar_md5_sources:      SecretStore?.get("extra_qradar_md5_sources")        || "",
+            qradar_sha1_sources:     SecretStore?.get("extra_qradar_sha1_sources")       || "",
+            qradar_sha256_sources:   SecretStore?.get("extra_qradar_sha256_sources")     || "",
+            qradar_url_sources:      SecretStore?.get("extra_qradar_url_sources")        || "",
+            qradar_result_key:       SecretStore?.get("extra_qradar_result_key")         || "qradar",
+            qradar_anonymize:        SecretStore?.get("extra_qradar_anonymize")          || "false",
+ 
+            // ── Splunk ──────────────────────────────────────────
+            splunk:                  SecretStore?.get("splunk")                          || "",
+            splunk_url:              SecretStore?.get("extra_splunk_url")                || "",
+            splunk_index:            SecretStore?.get("extra_splunk_index")              || "*",
+            splunk_index_ip:         SecretStore?.get("extra_splunk_index_ip")           || "",
+            splunk_index_domain:     SecretStore?.get("extra_splunk_index_domain")       || "",
+            splunk_index_url:        SecretStore?.get("extra_splunk_index_url")          || "",
+            splunk_index_hash:       SecretStore?.get("extra_splunk_index_hash")         || "",
+            splunk_result_key:       SecretStore?.get("extra_splunk_result_key")         || "splunk",
         };
+
 
         // Show spinner in SIEM row result panel if present
         const panel = document.getElementById("siem-results-panel");
