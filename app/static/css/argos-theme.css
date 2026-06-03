@@ -976,3 +976,372 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { filter: invert
 #enrich-grid {
   color: var(--text-primary);
 }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   LIGHT MODE — SIEM Investigation (right_navbar #siem-container)
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* Conteneur principal du panel SIEM */
+[data-theme="light"] #siem-container > div {
+  background-color: var(--bg-elevated) !important;
+  border-color: var(--border-default) !important;
+}
+
+/* ── Type picker (SPLUNK / QRADAR pill bar) ── */
+[data-theme="light"] #siem-container .flex.p-1.bg-slate-900.rounded-md {
+  background-color: var(--bg-overlay) !important;
+  border-color: var(--border-default) !important;
+}
+
+/* Label inactif dans le type picker */
+[data-theme="light"] #siem-container label.text-slate-400 {
+  color: var(--text-muted) !important;
+}
+[data-theme="light"] #siem-container label.hover\:text-slate-200:hover {
+  color: var(--text-primary) !important;
+}
+
+/* Badge "soon" dans le type picker */
+[data-theme="light"] #siem-container .bg-slate-700.text-slate-400 {
+  background-color: var(--bg-hover) !important;
+  color: var(--text-muted) !important;
+}
+
+/* ── Bandeau warning "token missing" ── */
+[data-theme="light"] #siem-container .bg-amber-500\/10 {
+  background-color: rgba(180, 83, 9, 0.10) !important;
+  border-color: rgba(180, 83, 9, 0.30) !important;
+  color: #92400e !important;
+}
+
+/* ── Labels "START DATE / END DATE" ── */
+[data-theme="light"] #siem-container .text-slate-500 {
+  color: var(--text-muted) !important;
+}
+
+/* ── Inputs datetime-local ── */
+[data-theme="light"] #siem-container input[type="datetime-local"] {
+  background-color: var(--bg-overlay) !important;
+  border-color: var(--border-default) !important;
+  color: var(--text-primary) !important;
+  color-scheme: light !important;  /* force le picker natif en clair */
+}
+[data-theme="light"] #siem-container input[type="datetime-local"]:focus {
+  border-color: var(--teal-main) !important;
+  box-shadow: 0 0 0 2px rgba(58, 136, 136, 0.20) !important;
+}
+
+/* ── Scope toggle (ROOT IOC / ALL IOC) ── */
+[data-theme="light"] #siem-container .flex.p-1.bg-slate-900.rounded-md.border {
+  background-color: var(--bg-overlay) !important;
+  border-color: var(--border-default) !important;
+}
+
+/* Label scope inactif */
+[data-theme="light"] #siem-container label.text-slate-400.hover\:text-slate-200 {
+  color: var(--text-muted) !important;
+}
+
+/* ── IOC type filter pills (IPv4, Domain, URL, Hash) ── */
+/* Pill OFF */
+[data-theme="light"] #siem-container label.bg-slate-800.border-slate-700 {
+  background-color: var(--bg-overlay) !important;
+  border-color: var(--border-default) !important;
+  color: var(--text-muted) !important;
+}
+
+/* Pill ON (teal) — on garde la couleur teal mais on l'adapte au fond clair */
+[data-theme="light"] #siem-container label.bg-teal-600\/20 {
+  background-color: rgba(58, 136, 136, 0.15) !important;
+  border-color: rgba(58, 136, 136, 0.45) !important;
+  color: #0d6b6b !important;
+}
+
+/* accent checkbox (IOC pills) */
+[data-theme="light"] #siem-container input[type="checkbox"] {
+  accent-color: var(--teal-main) !important;
+}
+
+/* ── Bouton Run Investigation ── */
+[data-theme="light"] #siem-container button.bg-slate-800 {
+  background-color: var(--bg-overlay) !important;
+  border-color: var(--border-default) !important;
+  color: var(--teal-main) !important;
+}
+[data-theme="light"] #siem-container button.bg-slate-800:hover:not(:disabled) {
+  background-color: rgba(58, 136, 136, 0.12) !important;
+  border-color: rgba(58, 136, 136, 0.45) !important;
+}
+[data-theme="light"] #siem-container button.text-teal-300 {
+  color: var(--teal-main) !important;
+}
+
+/* ── SIEM row (main panel — ongoing_case) ── */
+[data-theme="light"] #siem-row {
+  background: var(--glass-bg) !important;
+  border-color: var(--glass-border) !important;
+}
+[data-theme="light"] #siem-row h3 {
+  color: var(--text-primary) !important;
+}
+[data-theme="light"] #siem-row .text-slate-600,
+[data-theme="light"] #siem-results-panel {
+  color: var(--text-muted) !important;
+}
+[data-theme="light"] #siem-row button.text-slate-600 {
+  color: var(--text-muted) !important;
+}
+[data-theme="light"] #siem-row button.hover\:text-teal-400:hover {
+  color: var(--teal-main) !important;
+}
+
+/* ── SIEM result cards injected by _onResult() ── */
+[data-theme="light"] #siem-results-panel .bg-slate-900,
+[data-theme="light"] #siem-results-panel .bg-slate-800 {
+  background-color: var(--bg-elevated) !important;
+  border-color: var(--border-default) !important;
+}
+[data-theme="light"] #siem-results-panel .text-slate-300,
+[data-theme="light"] #siem-results-panel .text-slate-200 {
+  color: var(--text-primary) !important;
+}
+[data-theme="light"] #siem-results-panel .text-slate-400,
+[data-theme="light"] #siem-results-panel .text-slate-500,
+[data-theme="light"] #siem-results-panel .text-slate-600 {
+  color: var(--text-muted) !important;
+}
+[data-theme="light"] #siem-results-panel .border-slate-700,
+[data-theme="light"] #siem-results-panel .border-slate-800 {
+  border-color: var(--border-default) !important;
+}
+[data-theme="light"] #siem-results-panel pre {
+  background-color: var(--bg-overlay) !important;
+  color: var(--text-secondary) !important;
+}
+
+
+/* ════════════════════════════════════════════════════════════════════════════
+   LIGHT MODE — Modals enrichment (service-detail, text-content, compare-*, screenshot)
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Fond partagé overlay ── */
+[data-theme="light"] #service-detail-modal,
+[data-theme="light"] #text-content-modal,
+[data-theme="light"] #compare-picker-modal,
+[data-theme="light"] #compare-result-modal,
+[data-theme="light"] #screenshot-modal {
+  /* backdrop reste sombre pour le focus, on ne touche pas bg-black/80 */
+}
+
+/* ── Boîte intérieure de tous les modals ── */
+[data-theme="light"] #service-detail-modal > div,
+[data-theme="light"] #text-content-modal > div,
+[data-theme="light"] #compare-picker-modal > div,
+[data-theme="light"] #compare-result-modal > div {
+  background-color: var(--bg-elevated) !important;
+  border-color: var(--border-default) !important;
+  color: var(--text-primary) !important;
+}
+
+/* ── Header des modals (barre titre) ── */
+[data-theme="light"] #service-detail-modal .border-b,
+[data-theme="light"] #text-content-modal .border-b,
+[data-theme="light"] #compare-picker-modal .border-b,
+[data-theme="light"] #compare-result-modal .border-b {
+  border-color: var(--border-default) !important;
+  background-color: var(--bg-surface, var(--bg-elevated)) !important;
+}
+
+/* Titres dans les headers */
+[data-theme="light"] #service-detail-modal .text-slate-200,
+[data-theme="light"] #text-content-modal .text-slate-200,
+[data-theme="light"] #compare-picker-modal .text-slate-200,
+[data-theme="light"] #compare-result-modal .text-slate-200,
+[data-theme="light"] #service-detail-modal .text-white,
+[data-theme="light"] #text-content-modal .text-white {
+  color: var(--text-primary) !important;
+}
+
+/* Textes secondaires / muted dans les modals */
+[data-theme="light"] #service-detail-modal .text-slate-400,
+[data-theme="light"] #service-detail-modal .text-slate-500,
+[data-theme="light"] #service-detail-modal .text-slate-600,
+[data-theme="light"] #text-content-modal .text-slate-400,
+[data-theme="light"] #text-content-modal .text-slate-500,
+[data-theme="light"] #compare-picker-modal .text-slate-400,
+[data-theme="light"] #compare-picker-modal .text-slate-500,
+[data-theme="light"] #compare-result-modal .text-slate-400,
+[data-theme="light"] #compare-result-modal .text-slate-500,
+[data-theme="light"] #compare-result-modal .text-slate-600 {
+  color: var(--text-muted) !important;
+}
+
+/* Bouton close (×) dans les modals */
+[data-theme="light"] #service-detail-modal button.text-slate-500,
+[data-theme="light"] #text-content-modal button.text-slate-500,
+[data-theme="light"] #compare-picker-modal button.text-slate-500,
+[data-theme="light"] #compare-result-modal button.text-slate-500 {
+  color: var(--text-muted) !important;
+}
+[data-theme="light"] #service-detail-modal button.hover\:text-white:hover,
+[data-theme="light"] #text-content-modal button.hover\:text-white:hover,
+[data-theme="light"] #compare-picker-modal button.hover\:text-white:hover,
+[data-theme="light"] #compare-result-modal button.hover\:text-white:hover {
+  color: var(--text-primary) !important;
+}
+
+/* ── Sections internes (service-detail : General, TLS, SSH, HTTP, Vulns, Banner) ── */
+[data-theme="light"] #service-detail-modal .bg-slate-900\/40,
+[data-theme="light"] #service-detail-modal .bg-slate-900\/60,
+[data-theme="light"] #service-detail-modal .bg-slate-900 {
+  background-color: var(--bg-overlay) !important;
+}
+[data-theme="light"] #service-detail-modal .border-slate-700,
+[data-theme="light"] #service-detail-modal .border-slate-800 {
+  border-color: var(--border-default) !important;
+}
+
+/* Headers de section (General, TLS…) */
+[data-theme="light"] #service-detail-modal .text-teal-400 {
+  color: var(--teal-main) !important;
+}
+
+/* KV rows dans les sections */
+[data-theme="light"] #service-detail-modal .bg-slate-900\/30 {
+  background-color: rgba(200, 190, 164, 0.30) !important;
+}
+
+/* Badges CVE (vulns) */
+[data-theme="light"] #service-detail-modal .bg-red-500\/10 {
+  background-color: rgba(155, 28, 28, 0.10) !important;
+}
+[data-theme="light"] #service-detail-modal .border-red-500\/30 {
+  border-color: rgba(155, 28, 28, 0.30) !important;
+}
+
+/* Pre banner */
+[data-theme="light"] #service-detail-modal pre {
+  background-color: var(--bg-overlay) !important;
+  color: var(--text-secondary) !important;
+  border-color: var(--border-default) !important;
+}
+
+/* ── text-content-modal (DOM / text viewer) ── */
+[data-theme="light"] #text-content-modal pre,
+[data-theme="light"] #text-modal-content {
+  background-color: var(--bg-overlay) !important;
+  color: var(--text-primary) !important;
+}
+[data-theme="light"] #text-content-modal .text-blue-400 {
+  color: #1d6fa8 !important;
+}
+
+/* ── compare-picker-modal (liste des IOCs à comparer) ── */
+[data-theme="light"] #compare-picker-modal button {
+  color: var(--text-secondary) !important;
+  border-color: var(--border-default) !important;
+}
+[data-theme="light"] #compare-picker-modal button:hover {
+  background-color: var(--bg-hover) !important;
+  border-color: var(--border-accent) !important;
+  color: var(--text-primary) !important;
+}
+/* badge "enriched" */
+[data-theme="light"] #compare-picker-modal .bg-green-500\/10 {
+  background-color: rgba(22, 101, 52, 0.10) !important;
+  border-color: rgba(22, 101, 52, 0.30) !important;
+  color: #166534 !important;
+}
+/* badge "no data" */
+[data-theme="light"] #compare-picker-modal .border-slate-700 {
+  border-color: var(--border-default) !important;
+  color: var(--text-muted) !important;
+}
+
+/* ── compare-result-modal (tableau same/diff/src-only/tgt-only) ── */
+/* Rows same (vert) */
+[data-theme="light"] #compare-result-modal .border-green-500\/20 {
+  background-color: rgba(22, 101, 52, 0.06) !important;
+  border-color: rgba(22, 101, 52, 0.25) !important;
+}
+/* Rows diff (amber) */
+[data-theme="light"] #compare-result-modal .border-amber-500\/20 {
+  background-color: rgba(146, 64, 14, 0.06) !important;
+  border-color: rgba(146, 64, 14, 0.25) !important;
+}
+/* Rows src-only (bleu) */
+[data-theme="light"] #compare-result-modal .border-blue-500\/20 {
+  background-color: rgba(29, 111, 168, 0.06) !important;
+  border-color: rgba(29, 111, 168, 0.25) !important;
+}
+/* Rows tgt-only (violet) */
+[data-theme="light"] #compare-result-modal .border-violet-500\/20 {
+  background-color: rgba(91, 33, 182, 0.06) !important;
+  border-color: rgba(91, 33, 182, 0.25) !important;
+}
+/* Valeurs mono dans les compare rows */
+[data-theme="light"] #compare-result-modal .text-slate-300 {
+  color: var(--text-secondary) !important;
+}
+[data-theme="light"] #compare-result-modal .text-slate-700 {
+  color: var(--text-muted) !important;
+}
+
+/* Section headers dans compare-result (Same / Different / …) */
+[data-theme="light"] #compare-result-modal .text-green-400 { color: #166534 !important; }
+[data-theme="light"] #compare-result-modal .text-amber-400 { color: #92400e !important; }
+[data-theme="light"] #compare-result-modal .text-blue-400  { color: #1d6fa8 !important; }
+[data-theme="light"] #compare-result-modal .text-violet-400 { color: #5b21b6 !important; }
+
+
+/* ════════════════════════════════════════════════════════════════════════════
+   LIGHT MODE — Boutons "Services" dans #enrich-grid (Shodan / Censys)
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* Bouton service (port/proto + product) */
+[data-theme="light"] #enrich-grid button.bg-slate-900\/40 {
+  background-color: var(--bg-elevated) !important;
+  border-color: var(--border-default) !important;
+  color: var(--text-primary) !important;
+}
+[data-theme="light"] #enrich-grid button.bg-slate-900\/40:hover {
+  background-color: var(--bg-hover) !important;
+  border-color: var(--border-accent) !important;
+}
+
+/* Port/proto (text-cyan-400) → bleu foncé lisible */
+[data-theme="light"] #enrich-grid .text-cyan-400 {
+  color: #0e7490 !important;
+}
+
+/* Nom du product (text-slate-400) */
+[data-theme="light"] #enrich-grid button .text-slate-400 {
+  color: var(--text-secondary) !important;
+}
+
+/* Badge source SHD (text-amber-500/70) */
+[data-theme="light"] #enrich-grid .text-amber-500\/70 {
+  color: #92400e !important;
+  opacity: 1 !important;
+}
+
+/* Badge source CSY (text-cyan-500/70) */
+[data-theme="light"] #enrich-grid .text-cyan-500\/70 {
+  color: #0e7490 !important;
+  opacity: 1 !important;
+}
+
+/* Badge CVE count (text-red-400) */
+[data-theme="light"] #enrich-grid .text-red-400 {
+  color: #9b1c1c !important;
+}
+
+/* Badge TLS (text-cyan-600) */
+[data-theme="light"] #enrich-grid .text-cyan-600 {
+  color: #0e7490 !important;
+}
+
+/* Overflow "+N more" */
+[data-theme="light"] #enrich-grid .text-slate-600 {
+  color: var(--text-muted) !important;
+}
