@@ -21,7 +21,7 @@ window.Settings = {
 
         // ── Grid 3 colonnes ──────────────────────────────────────────
         const grid = document.createElement("div");
-        grid.className = "grid grid-cols-3 gap-4 items-start";
+        grid.className = "grid grid-cols-4 gap-4 items-start";
 
         // Colonne 1 : Internal
         const colInternal = document.createElement("div");
@@ -47,11 +47,21 @@ window.Settings = {
 
         // Colonne 3 : External MISP Instances
         const colMisp = document.createElement("div");
-
-        // IMPORTANT : attacher la grid au DOM AVANT d'appeler MISPInstances.render()
-        // car _renderList() fait getElementById("misp-instances-list")
+        
+        // Colonne 4 : SIEM
+        const colSiem = document.createElement("div");
+        colSiem.innerHTML = `
+            <p class="text-[11px] text-slate-500 uppercase tracking-wider mb-3 font-semibold flex items-center gap-1.5">
+                <i data-lucide="database" class="w-3.5 h-3.5 text-teal-400"></i> SIEM
+            </p>`;
+        const keysSiem = document.createElement("div");
+        keysSiem.id = "settings-keys-siem";
+        keysSiem.className = "space-y-2";
+        colSiem.appendChild(keysSiem);
+        
         grid.appendChild(colInternal);
         grid.appendChild(colExternal);
+        grid.appendChild(colSiem);
         grid.appendChild(colMisp);
         modalBody.appendChild(grid);
 
