@@ -30,7 +30,6 @@ window.MISPInstances = {
     render(container) {
         const section = document.createElement("div");
         section.id        = "misp-instances-section";
-        section.className = "mt-6 border-t border-slate-800 pt-5";
         section.innerHTML = `
             <div class="flex items-center justify-between mb-3">
                 <h3 class="text-xs uppercase text-slate-500 tracking-wider flex items-center gap-2">
