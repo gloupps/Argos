@@ -36,6 +36,10 @@ class Services:
         from app.modules.censys_module import CensysModule
         from app.modules.qradar_module import QRadarModule
         from app.modules.splunk_module import SplunkModule
+        from app.modules.hurricane_electric_module import HurricaneElectricModule
+        from app.modules.phishtank_module import PhishTankModule
+        from app.modules.anyrun_module import AnyRunModule
+
 
         self.modules = {
             "shodan": ShodanModule(self.requester),
@@ -49,6 +53,10 @@ class Services:
             "censys": CensysModule(self.requester),
             "qradar": QRadarModule(self.requester),
             "splunk": SplunkModule(self.requester),
+            "hurricane_electric": HurricaneElectricModule(self.requester),
+            "phishtank": PhishTankModule(self.requester),
+            "anyrun": AnyRunModule(self.requester),
+
         }
 
     # ── Public ────────────────────────────────────────────
