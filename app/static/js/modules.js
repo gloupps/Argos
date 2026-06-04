@@ -201,6 +201,19 @@ window.Modules = {
                 externalEl.appendChild(this._buildSidebarItem(mod, hasKey, on));
             });
         }
+        
+        // ── Injecter les instances Elasticsearch internes dans Internal Sources ──  ← AJOUTER
+        if (internalEl) {
+            const esInstances = SecretStore.getJSON?.("es_instances", []) ?? [];
+            esInstances.forEach(inst => {
+                const key    = `es_inst_${inst.id}`;
+                const mod    = this.registry[key];
+                if (!mod) return;
+                const hasKey = SecretStore?.has?.(`extra_es_inst_${inst.id}_url`) ?? false;
+                const on     = hasKey && (this.state.enabled[key] !== false);
+                internalEl.appendChild(this._buildSidebarItem(mod, hasKey, on));
+            });
+        }
 
         lucide.createIcons();
         document.dispatchEvent(new Event("modules:rendered"));
