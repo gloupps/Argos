@@ -48,26 +48,31 @@ window.Settings = {
         // Colonne 3 : External MISP Instances
         const colMisp = document.createElement("div");
         
-        // Colonne 4 : SIEM  (dans open(), à la place de colSiem actuel)
+        // Colonne 4 : SIEM — QRadar complet, puis Splunk complet
         const colSiem = document.createElement("div");
         colSiem.innerHTML = `
             <p class="text-[11px] text-slate-500 uppercase tracking-wider mb-3 font-semibold flex items-center gap-1.5">
                 <i data-lucide="database" class="w-3.5 h-3.5 text-teal-400"></i> SIEM
             </p>`;
-        const keysSiem = document.createElement("div");
-        keysSiem.id = "settings-keys-siem";
-        keysSiem.className = "space-y-2";
-        colSiem.appendChild(keysSiem);
 
-        // Sous-section QRadar LogSources
+        // Bloc QRadar : clé API + LogSources
+        const qradarBlock = document.createElement("div");
+        qradarBlock.id = "siem-block-qradar";
+        colSiem.appendChild(qradarBlock);
+
+        // Séparateur
+        const siemDivider = document.createElement("div");
+        siemDivider.className = "argos-divider my-4";
+        colSiem.appendChild(siemDivider);
+
+        // Bloc Splunk : clé API + Indexes
+        const splunkBlock = document.createElement("div");
+        splunkBlock.id = "siem-block-splunk";
+        colSiem.appendChild(splunkBlock);
+
+        // Conteneurs sources (référencés plus bas)
         const siemSourcesQradar = document.createElement("div");
-        siemSourcesQradar.className = "mt-4";
-        colSiem.appendChild(siemSourcesQradar);
-
-        // Sous-section Splunk Indexes
         const siemSourcesSplunk = document.createElement("div");
-        siemSourcesSplunk.className = "mt-4";
-        colSiem.appendChild(siemSourcesSplunk);
 
         grid.appendChild(colInternal);
         grid.appendChild(colExternal);
@@ -86,12 +91,33 @@ window.Settings = {
         modalBody.appendChild(saveBar);
 
         // ── Remplir les colonnes APRÈS insertion dans le DOM ─────────
+
+        // Internal + External via renderSettingsKeys (inchangé)
         Modules?.renderSettingsKeys?.();
 
-        // Nettoyer l'éventuelle ancienne section avant de re-rendre
+        const qradarMod = Object.values(Modules?.registry || {}).find(m => m.key === "qradar");
+        const splunkMod = Object.values(Modules?.registry || {}).find(m => m.key === "splunk");
+
+        const qradarBlockEl = document.getElementById("siem-block-qradar");
+        const splunkBlockEl = document.getElementById("siem-block-splunk");
+
+        if (qradarMod && qradarBlockEl) {
+            qradarBlockEl.appendChild(Modules._buildSettingsCard(qradarMod, true));
+            siemSourcesQradar.className = "mt-3";
+            qradarBlockEl.appendChild(siemSourcesQradar);
+        }
+
+        if (splunkMod && splunkBlockEl) {
+            splunkBlockEl.appendChild(Modules._buildSettingsCard(splunkMod, true));
+            siemSourcesSplunk.className = "mt-3";
+            splunkBlockEl.appendChild(siemSourcesSplunk);
+        }
+
+        // MISP
         document.getElementById("misp-instances-section")?.remove();
         MISPInstances?.render?.(colMisp);
-        
+
+        // Sources SIEM
         document.getElementById(`siem-sources-section-qradar`)?.remove();
         document.getElementById(`siem-sources-section-splunk`)?.remove();
         SIEMInstances?.render?.(siemSourcesQradar, "qradar");
