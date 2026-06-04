@@ -514,9 +514,9 @@ window.Modules = {
                            data-extra-key="${sf.key}"
                            value="${stored}"
                            placeholder="${sf.placeholder || ''}"
-                           class="w-full bg-slate-950 border border-slate-700/60 rounded-md
-                                  px-3 py-1.5 text-xs font-mono text-slate-200
-                                  focus:outline-none focus:ring-1 focus:ring-blue-500/70 placeholder-slate-600">
+                           class="w-full bg-slate-800 border border-slate-700 rounded-md
+                               px-3 py-1.5 pr-8 text-xs font-mono text-slate-200
+                               focus:outline-none focus:ring-1 focus:ring-blue-500/70 placeholder-slate-600">
                 </div>`;
         }).join("");
 
@@ -553,7 +553,7 @@ window.Modules = {
                        data-key="${mod.key}"
                        value="${current}"
                        placeholder="API key…"
-                       class="w-full bg-slate-950 border border-slate-700/60 rounded-md
+                       class="w-full bg-slate-800 border border-slate-700 rounded-md
                               px-3 py-1.5 pr-8 text-xs font-mono text-slate-200
                               focus:outline-none focus:ring-1 focus:ring-blue-500/70 placeholder-slate-600">
                 <button type="button"
