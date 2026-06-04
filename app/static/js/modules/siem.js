@@ -221,45 +221,67 @@ window.SIEMModule = {
         const panel = document.getElementById("siem-results-panel");
         if (!panel) return;
 
-        const results = data.results || {};
-        const iocs    = Object.keys(results);
+        const results  = data.results || {};
+        const iocs     = Object.keys(results);
+        // ── FIX 1 : siemType déduit du résultat ou du state ──
+        const siemType = data.siem_type || this.state.siem_type || "qradar";
 
         if (!iocs.length) {
             panel.innerHTML = `<p class="text-[11px] text-slate-600 italic py-2">No hits found.</p>`;
             return;
         }
 
-        const totalHits = iocs.reduce((acc, ioc) => acc + ((results[ioc]["qradar"] || {}).events || 0), 0);
+        // ── FIX 2 : totalHits utilise siemType ──
+        const totalHits = iocs.reduce((acc, ioc) => {
+            const src = results[ioc][siemType] || {};
+            return acc + (src.events || 0);
+        }, 0);
+
+        const hitIOCs = iocs.filter(ioc => (results[ioc][siemType] || {}).events > 0).length;
 
         let html = `
         <div class="flex items-center justify-between mb-3 text-[10px]">
             <span class="text-slate-400">
-                <span class="text-teal-400 font-bold font-mono">${iocs.length}</span> IOCs ·
-                <span class="text-teal-400 font-bold font-mono">${totalHits}</span> total hits
+                <span class="text-teal-400 font-bold font-mono">${hitIOCs}/${iocs.length}</span> IOCs with hits ·
+                <span class="text-teal-400 font-bold font-mono">${totalHits}</span> total events
             </span>
+            <span class="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-500 font-mono uppercase">${siemType}</span>
         </div>
         <div class="space-y-1.5">`;
 
+        // ── FIX 3 : tri par hits utilise siemType ──
         const sorted = iocs.sort((a, b) =>
-            ((results[b]["qradar"]||{}).events||0) - ((results[a]["qradar"]||{}).events||0)
+            ((results[b][siemType] || {}).events || 0) - ((results[a][siemType] || {}).events || 0)
         );
 
         for (const ioc of sorted) {
-            const src      = results[ioc]["qradar"] || {};
+            // ── FIX 4 : lecture de la source utilise siemType ──
+            const src      = results[ioc][siemType] || {};
             const hits     = src.events || 0;
-            const rows     = src.rows || src.event_rows || [];
-            const flows    = src.flows || [];
-            const link     = src.link || "";
+
+            // Pour Splunk, les résultats sont par index : { "splunk:proxy": {...}, "splunk:dns": {...} }
+            // On agrège toutes les sous-clés préfixées par siemType
+            const subSources = Object.entries(results[ioc] || {})
+                .filter(([k]) => k.startsWith(siemType + ":"));
+
+            const allRows = subSources.length
+                ? subSources.flatMap(([, v]) => [...(v.rows || []), ...(v.event_rows || [])])
+                : [...(src.rows || []), ...(src.event_rows || []), ...(src.flows || [])];
+
+            const totalSubHits = subSources.length
+                ? subSources.reduce((a, [, v]) => a + (v.events || 0), 0)
+                : hits;
+
+            const link     = src.link || (subSources[0]?.[1]?.link) || "";
             const flowLink = src.flow_link || "";
 
-            const hitColor = hits > 0
+            const hitColor = totalSubHits > 0
                 ? "text-red-400 bg-red-500/10 border-red-500/30"
                 : "text-slate-600 bg-slate-800 border-slate-700";
 
-            // Preview: first 3 rows, pick meaningful cols
-            const allRows  = [...rows, ...flows];
-            const preview  = allRows.slice(0, 3);
-            const headers  = preview.length ? Object.keys(preview[0]).slice(0, 4) : [];
+            // Preview : 3 premières lignes, 4 premières colonnes
+            const preview = allRows.slice(0, 3);
+            const headers = preview.length ? Object.keys(preview[0]).slice(0, 4) : [];
 
             const tableHtml = preview.length ? `
             <div class="overflow-x-auto mt-1.5 rounded border border-slate-800/80">
@@ -272,7 +294,7 @@ window.SIEMModule = {
                         <tr class="hover:bg-slate-800/30">
                             ${headers.map(h => `
                             <td class="px-1.5 py-0.5 text-slate-400 max-w-[90px] truncate"
-                                title="${String(row[h]||"").replace(/"/g,"&quot;")}">${row[h]||""}</td>
+                                title="${String(row[h] || "").replace(/"/g, "&quot;")}">${row[h] || ""}</td>
                             `).join("")}
                         </tr>`).join("")}
                     </tbody>
@@ -281,19 +303,29 @@ window.SIEMModule = {
             ${allRows.length > 3 ? `<p class="text-[9px] text-slate-700 px-1 pt-0.5">+${allRows.length - 3} more rows</p>` : ""}
             ` : "";
 
+            // Badge par sous-source (Splunk multi-index)
+            const subBadges = subSources.length > 1
+                ? subSources.map(([k, v]) => {
+                    const n = k.replace(siemType + ":", "");
+                    const c = v.events > 0 ? "text-orange-300 bg-orange-500/10 border-orange-500/30" : "text-slate-600 bg-slate-800 border-slate-700";
+                    return `<span class="text-[9px] px-1 py-0.5 rounded border font-mono ${c}">${n}: ${v.events}</span>`;
+                  }).join("")
+                : "";
+
             html += `
             <div class="rounded-lg border border-slate-800 bg-slate-900/40 overflow-hidden">
-                <div class="flex items-center gap-2 px-2.5 py-1.5">
-                    <span class="flex-1 font-mono text-[10px] text-slate-200 truncate" title="${ioc}">${ioc}</span>
+                <div class="flex items-center gap-2 px-2.5 py-1.5 flex-wrap">
+                    <span class="flex-1 font-mono text-[10px] text-slate-200 truncate min-w-0" title="${ioc}">${ioc}</span>
+                    ${subBadges}
                     <span class="text-[9px] px-1.5 py-0.5 rounded border font-bold shrink-0 ${hitColor}">
-                        ${hits} hit${hits !== 1 ? "s" : ""}
+                        ${totalSubHits} hit${totalSubHits !== 1 ? "s" : ""}
                     </span>
                     ${link ? `<a href="${link}" target="_blank" rel="noopener"
-                                 title="Events in QRadar"
+                                 title="Open in ${siemType}"
                                  class="text-slate-600 hover:text-teal-400 transition shrink-0">
                                  <i data-lucide="external-link" class="w-3 h-3"></i></a>` : ""}
                     ${flowLink ? `<a href="${flowLink}" target="_blank" rel="noopener"
-                                     title="Flows in QRadar"
+                                     title="Flows"
                                      class="text-slate-600 hover:text-blue-400 transition shrink-0">
                                      <i data-lucide="activity" class="w-3 h-3"></i></a>` : ""}
                 </div>
