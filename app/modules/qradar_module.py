@@ -5,7 +5,6 @@ QRadar SIEM module — PivotLens.
 Credentials / extra_config keys :
   api_key              → API token (SEC header)
   qradar_url           → Console base URL  (ex. https://qradar.corp)
-  qradar_result_key    → key name in result dict (default "qradar")
   qradar_logsources    → list of dicts [{id, name, ioc_type, output_fields}, ...]
                          stored in SecretStore as "siem_logsources_qradar"
   date_start           → ISO datetime string (ex. "2026-05-01T00:00")
@@ -151,12 +150,6 @@ class QRadarModule(Module):
             "label":       "QRadar Console URL",
             "placeholder": "https://qradar.corp",
         },
-        {
-            "key":         "qradar_result_key",
-            "type":        "text",
-            "label":       "Result key name (default: qradar)",
-            "placeholder": "qradar",
-        },
     ]
 
     def __init__(self, requester):
@@ -186,7 +179,6 @@ class QRadarModule(Module):
         if not base or not token:
             return {}
 
-        result_key  = context.get("qradar_result_key") or "qradar"
         logsources  = context.get("qradar_logsources") or []   # list[dict]
         tc          = _time_clause(
             context.get("date_start", ""),
@@ -225,7 +217,7 @@ class QRadarModule(Module):
                     base, token,
                     src_name, ioc_key, ioc_values,
                     output_fields, tc,
-                    results, result_key,
+                    results,
                 )
             )
 
@@ -248,7 +240,6 @@ class QRadarModule(Module):
         output_fields: List[str],
         tc: str,
         results: Dict,
-        rkey: str,
     ) -> None:
         aql_meta = _IOC_AQL_MAP.get(ioc_key)
         if not aql_meta:
@@ -297,7 +288,7 @@ class QRadarModule(Module):
         rows = await self._run_aql(base, token, aql) or []
 
         # ── Distribuer par IOC ────────────────────────
-        result_label = f"{rkey}:{src_name}"
+        result_label = f"qradar:{src_name}"
         for val in values:
             if ioc_key == "IPv4-Addr":
                 # IP peut apparaître dans src ou dst
