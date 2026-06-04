@@ -51,6 +51,7 @@ window.Modules = {
 
             // ── Injecter les modules MISP externes depuis SecretStore ──────
             this._injectExternalMispModules();
+            this._injectEsInstances();
 
             console.log("[Modules] registry:", Object.keys(this.registry));
 
@@ -77,6 +78,26 @@ window.Modules = {
                 correlation:     [],
                 // settings_fields vide : l'URL/key sont gérés directement dans
                 // le bloc MISPInstances (pas dans la section "API Keys" standard)
+                settings_fields: [],
+            };
+            if (this.state.enabled[key]     === undefined) this.state.enabled[key]     = true;
+            if (this._correlateEnabled[key] === undefined) this._correlateEnabled[key] = true;
+        });
+    },
+    
+    _injectEsInstances() {
+        const instances = SecretStore.getJSON?.("es_instances", []) ?? [];
+        instances.forEach(inst => {
+            const key = `es_inst_${inst.id}`;
+            this.registry[key] = {
+                key,
+                name:            `Elasticsearch — ${inst.label}`,
+                description:     `Internal Elasticsearch instance: ${inst.label}`,
+                type:            "internal",
+                icon:            "database",
+                url:             "",
+                supported_types: ["ip", "domain", "url", "hash"],
+                correlation:     [],
                 settings_fields: [],
             };
             if (this.state.enabled[key]     === undefined) this.state.enabled[key]     = true;
@@ -424,6 +445,25 @@ window.Modules = {
                 const urlKey = `extra_misp_ext_${inst.id}_url`;
                 const url    = SecretStore.get(urlKey);
                 if (url) extra[`misp_ext_${inst.id}_url`] = url;
+            });
+        }
+        
+        // Instances Elasticsearch internes
+        const esInstances = SecretStore.getJSON?.("es_instances", []) ?? [];
+        if (esInstances.length) {
+            extra["es_instances"] = esInstances;
+            esInstances.forEach(inst => {
+                const iid = inst.id;
+                const url  = SecretStore.get(`extra_es_inst_${iid}_url`);
+                const key  = SecretStore.get(`es_inst_${iid}`);
+                const user = SecretStore.get(`extra_es_inst_${iid}_user`);
+                const pass = SecretStore.get(`extra_es_inst_${iid}_pass`);
+                const idxs = SecretStore.getJSON(`es_inst_${iid}_indexes`, []);
+                if (url)  extra[`es_inst_${iid}_url`]     = url;
+                if (key)  extra[`es_inst_${iid}`]          = key;
+                if (user) extra[`es_inst_${iid}_user`]     = user;
+                if (pass) extra[`es_inst_${iid}_pass`]     = pass;
+                if (idxs.length) extra[`es_inst_${iid}_indexes`] = idxs;
             });
         }
 
