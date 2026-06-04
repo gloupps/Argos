@@ -5,13 +5,18 @@ Splunk SIEM module — PivotLens.
 Credentials / extra_config keys :
   api_key              → Bearer token (ou user:pass pour Basic Auth)
   splunk_url           → Splunk base URL  (ex. https://splunk.corp:8089)
-  splunk_indexes       → list of dicts [{id, name, ioc_type, output_fields}, ...]
+  splunk_indexes       → list of dicts [{id, name, ioc_type, search_field, output_fields}, ...]
                          stored in SecretStore as "siem_logsources_splunk"
   date_start           → ISO datetime string (ex. "2026-05-01T00:00")
   date_end             → ISO datetime string (ex. "2026-05-31T23:59")
 
 IOC type values (ioc_type field) :
   "IP" | "Domain" | "URL" | "Hash-MD5" | "Hash-SHA1" | "Hash-SHA256"
+
+search_field (optional) :
+  Champ SPL exact dans lequel rechercher la valeur de l'IOC.
+  Si vide, les champs candidats hardcodés (_IOC_SPL_FIELDS) sont utilisés en OR.
+  Ex : "src_ip", "destinationIP", "query", "sha256"
 
 Each index entry generates one SPL search scoped to:
   - index=<name>  (or no index filter if name is "*" or empty)
@@ -59,7 +64,7 @@ def _spl_values(values: List[str]) -> str:
 
 
 # ─────────────────────────────────────────────────────────────
-# IOC type → SPL search fields
+# IOC type → SPL search fields (fallback si search_field vide)
 # ─────────────────────────────────────────────────────────────
 
 # Maps internal IOC key → candidate SPL field names
@@ -105,7 +110,7 @@ class SplunkModule(Module):
     icon        = "database"
     supported_types = ["ip", "domain", "hash", "url"]
 
-    # Champs simples affichés dans Settings (URL + result key uniquement).
+    # Champs simples affichés dans Settings (URL uniquement).
     # Les Index sont gérés par SIEMInstances (siem_instances.js).
     settings_fields = [
         {
@@ -143,7 +148,7 @@ class SplunkModule(Module):
         if not base or not token:
             return {}
 
-        indexes    = context.get("splunk_indexes") or []   # list[dict]
+        indexes = context.get("splunk_indexes") or []  # list[dict]
 
         earliest, latest = _time_range(
             context.get("date_start", ""),
@@ -166,6 +171,7 @@ class SplunkModule(Module):
         for idx_cfg in indexes:
             idx_name      = (idx_cfg.get("name") or "").strip()
             ioc_type_raw  = idx_cfg.get("ioc_type") or ""
+            search_field  = (idx_cfg.get("search_field") or "").strip()
             output_fields = [
                 f.strip()
                 for f in (idx_cfg.get("output_fields") or "").split(",")
@@ -183,6 +189,7 @@ class SplunkModule(Module):
                     idx_name, ioc_key, ioc_values,
                     output_fields, earliest, latest,
                     results,
+                    search_field=search_field,
                 )
             )
 
@@ -206,32 +213,42 @@ class SplunkModule(Module):
         earliest: str,
         latest: str,
         results: Dict,
+        search_field: str = "",
     ) -> None:
-        spl_fields  = _IOC_SPL_FIELDS.get(ioc_key, [])
+        # Résolution des champs de recherche :
+        # - search_field non vide → champ unique explicite configuré par l'utilisateur
+        # - sinon → liste de champs candidats hardcodés (fallback)
+        if search_field:
+            spl_fields = [search_field]
+        else:
+            spl_fields = _IOC_SPL_FIELDS.get(ioc_key, [])
+
+        if not spl_fields:
+            return
+
         match_alias = _IOC_MATCH_ALIAS.get(ioc_key, "matched_value")
         idx_expr    = _index_expr(idx_name)
         prefix      = f"{idx_expr} " if idx_expr else ""
 
-        # Clause de base : OR des valeurs sur tous les champs candidats
+        # Clause de base : OR des valeurs sur tous les champs retenus
         base_filter = " OR ".join(
             f'{field}="{v}"'
-            for field in spl_fields[:3]   # limiter pour ne pas exploser l'AQL
+            for field in spl_fields
             for v in values
         )
 
         # eval matched = case(field="val","val", ..., true(), null())
         case_branches = " ".join(
             f'{field}="{v}", "{v}",'
-            for field in spl_fields[:3]
+            for field in spl_fields
             for v in values
         ).rstrip(",")
 
         # Colonnes output : _time + champs configurés par l'utilisateur
-        table_fields = "_time"
         if output_fields:
-            table_fields += ", " + ", ".join(output_fields)
+            table_fields = "_time, " + ", ".join(output_fields)
         else:
-            table_fields += ", host, user, src, dest"
+            table_fields = "_time, host, user, " + ", ".join(spl_fields[:2])
 
         spl = (
             f"{prefix}({base_filter}) "
