@@ -25,15 +25,21 @@ window.SIEMInstances = {
                     <i data-lucide="layers" class="w-3.5 h-3.5 text-teal-400"></i>
                     ${siemType === "qradar" ? "LogSources" : "Indexes"}
                 </h3>
-                <button id="siem-add-btn-${siemType}"
-                        class="flex items-center gap-1.5 text-[11px]
-                               bg-teal-600/20 hover:bg-teal-600/40
-                               text-teal-300 border border-teal-700/40
-                               px-2.5 py-1 rounded transition-colors">
-                    <i data-lucide="plus" class="w-3 h-3"></i> Add
-                </button>
             </div>
-            <div id="siem-sources-list-${siemType}" class="space-y-2"></div>
+            <!-- Sources sub-section — même style que es_instances indexes -->
+            <div class="pl-2 pt-1 border-t border-slate-700/50 space-y-2">
+                <div class="flex items-center justify-between">
+                    <span class="text-[10px] text-slate-500 uppercase tracking-wider">
+                        ${siemType === "qradar" ? "Log Sources" : "Indexes"}
+                    </span>
+                    <button id="siem-add-btn-${siemType}"
+                            class="flex items-center gap-1 text-[10px]
+                                   text-teal-400 hover:text-teal-300 transition">
+                        <i data-lucide="plus" class="w-3 h-3"></i> Add
+                    </button>
+                </div>
+                <div id="siem-sources-list-${siemType}" class="space-y-2"></div>
+            </div>
             <p class="text-[10px] text-slate-600 mt-2 leading-relaxed">
                 Each entry defines a <strong class="text-slate-500">source name</strong>,
                 the <strong class="text-slate-500">IOC type</strong> it covers, and
@@ -67,24 +73,24 @@ window.SIEMInstances = {
 
         sources.forEach((src, idx) => {
             const row = document.createElement("div");
-            row.className   = "bg-slate-900/70 border border-slate-700/60 rounded-lg p-3 space-y-2";
+            row.className = "bg-slate-800/60 border border-slate-700/40 rounded p-2 space-y-1.5";
             row.dataset.idx = idx;
-            row.innerHTML   = `
+            row.innerHTML = `
                 <!-- Header: name + delete -->
                 <div class="flex items-center gap-2">
-                    <i data-lucide="layers" class="w-3.5 h-3.5 text-teal-400 shrink-0"></i>
+                    <i data-lucide="layers" class="w-3 h-3 text-teal-500 shrink-0"></i>
                     <input type="hidden" class="siem-src-id" value="${this._esc(src.id)}">
                     <input type="text"
                            class="siem-src-name flex-1 bg-transparent border-b border-slate-700
-                                  text-sm font-semibold focus:outline-none focus:border-teal-500 px-1"
+                                  text-[11px] font-mono focus:outline-none focus:border-teal-500 px-1"
                            placeholder="${siemType === 'qradar' ? 'LogSource name (e.g. Windows_Events)' : 'Index name (e.g. main)'}"
                            value="${this._esc(src.name)}">
                     <button class="siem-del-btn text-slate-600 hover:text-red-400 transition shrink-0" title="Remove">
-                        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                        <i data-lucide="trash-2" class="w-3 h-3"></i>
                     </button>
                 </div>
                 <!-- IOC type -->
-                <div class="flex items-center gap-2 pl-5">
+                <div class="flex items-center gap-2 pl-4">
                     <label class="text-[10px] text-slate-500 w-16 shrink-0">IOC Type</label>
                     <select class="siem-src-ioc-type flex-1 bg-slate-800 border border-slate-700 rounded
                                    px-2 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-teal-500">
@@ -93,21 +99,20 @@ window.SIEMInstances = {
                     </select>
                 </div>
                 <!-- Search field -->
-                <div class="flex items-center gap-2 pl-5">
+                <div class="flex items-center gap-2 pl-4">
                     <label class="text-[10px] text-slate-500 w-16 shrink-0">Search field</label>
                     <input type="text"
                            class="siem-src-search-field flex-1 bg-slate-800/60 border border-slate-700 rounded
-                                  px-2 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-teal-500"
+                                  px-2 py-1 text-[11px] font-mono focus:outline-none focus:ring-1 focus:ring-teal-500"
                            placeholder="e.g. src_ip, query, sha256 (blank = auto)"
                            value="${this._esc(src.search_field || '')}">
                 </div>
                 <!-- Output fields -->
-                <div class="flex items-center gap-2 pl-5">
+                <div class="flex items-center gap-2 pl-4">
                     <label class="text-[10px] text-slate-500 w-16 shrink-0">Output fields</label>
                     <input type="text"
                            class="siem-src-fields flex-1 bg-slate-800 border border-slate-700 rounded
-                                  px-2 py-1 text-[11px] font-mono
-                                  focus:outline-none focus:ring-1 focus:ring-teal-500"
+                                  px-2 py-1 text-[11px] font-mono focus:outline-none focus:ring-1 focus:ring-teal-500"
                            placeholder="sourceIP, destinationIP, EventName"
                            value="${this._esc(src.output_fields || '')}">
                 </div>
