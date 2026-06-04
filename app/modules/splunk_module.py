@@ -5,7 +5,6 @@ Splunk SIEM module — PivotLens.
 Credentials / extra_config keys :
   api_key              → Bearer token (ou user:pass pour Basic Auth)
   splunk_url           → Splunk base URL  (ex. https://splunk.corp:8089)
-  splunk_result_key    → nom de la clé dans les résultats (défaut "splunk")
   splunk_indexes       → list of dicts [{id, name, ioc_type, output_fields}, ...]
                          stored in SecretStore as "siem_logsources_splunk"
   date_start           → ISO datetime string (ex. "2026-05-01T00:00")
@@ -115,12 +114,6 @@ class SplunkModule(Module):
             "label":       "Splunk REST URL",
             "placeholder": "https://splunk.corp:8089",
         },
-        {
-            "key":         "splunk_result_key",
-            "type":        "text",
-            "label":       "Result key name (default: splunk)",
-            "placeholder": "splunk",
-        },
     ]
 
     def __init__(self, requester):
@@ -150,7 +143,6 @@ class SplunkModule(Module):
         if not base or not token:
             return {}
 
-        result_key = context.get("splunk_result_key") or "splunk"
         indexes    = context.get("splunk_indexes") or []   # list[dict]
 
         earliest, latest = _time_range(
@@ -190,7 +182,7 @@ class SplunkModule(Module):
                     base, token,
                     idx_name, ioc_key, ioc_values,
                     output_fields, earliest, latest,
-                    results, result_key,
+                    results,
                 )
             )
 
@@ -214,7 +206,6 @@ class SplunkModule(Module):
         earliest: str,
         latest: str,
         results: Dict,
-        rkey: str,
     ) -> None:
         spl_fields  = _IOC_SPL_FIELDS.get(ioc_key, [])
         match_alias = _IOC_MATCH_ALIAS.get(ioc_key, "matched_value")
@@ -254,7 +245,7 @@ class SplunkModule(Module):
         link = self._make_link(base, spl, earliest, latest)
 
         # Distribuer par IOC
-        result_label = f"{rkey}:{idx_name}"
+        result_label = f""splunk:"{idx_name}"
         matched_map: Dict[str, List[Dict]] = {}
         for row in rows:
             key = str(row.get(match_alias, "")).lower()
