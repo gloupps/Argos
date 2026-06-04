@@ -28,7 +28,6 @@ window.Settings = {
         colInternal.innerHTML = `
             <p class="text-[11px] text-slate-500 uppercase tracking-wider mb-3 font-semibold flex items-center gap-1.5">
                 <i data-lucide="server" class="w-3.5 h-3.5 text-teal-400"></i> Internal
-                <div id="es-instances-container" class="mt-4"></div>
             </p>`;
         const keysInternal = document.createElement("div");
         keysInternal.id = "settings-keys-internal";
@@ -123,12 +122,12 @@ window.Settings = {
         document.getElementById("misp-instances-section")?.remove();
         MISPInstances?.render?.(colMisp);
         
-        // ES instances — dans la colonne internal
-        const colEsInstances = document.getElementById("es-instances-container");
-        if (colEsInstances) {
-            document.getElementById("es-instances-section")?.remove();
-            EsInstances?.render?.(colEsInstances);
-        }
+        // ES instances — en col 4, sous MISP
+        const esDivider = document.createElement("div");
+        esDivider.className = "argos-divider my-4";
+        colMisp.appendChild(esDivider);
+        document.getElementById("es-instances-section")?.remove();
+        EsInstances?.render?.(colMisp);
 
         // Sources SIEM — render dans les conteneurs déjà dans le DOM
         document.getElementById(`siem-sources-section-qradar`)?.remove();
