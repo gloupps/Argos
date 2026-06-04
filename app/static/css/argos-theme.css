@@ -1345,3 +1345,80 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { filter: invert
 [data-theme="light"] #enrich-grid .text-slate-600 {
   color: var(--text-muted) !important;
 }
+
+/* ── Light mode : settings — ES Instances ── */
+
+/* Bouton "Add instance" */
+[data-theme="light"] #es-add-btn {
+  background-color: rgba(14, 116, 144, 0.15) !important;
+  color: #0e5a72 !important;
+  border-color: rgba(14, 116, 144, 0.4) !important;
+}
+[data-theme="light"] #es-add-btn:hover {
+  background-color: rgba(14, 116, 144, 0.28) !important;
+}
+
+/* Boutons "Add index" (inline text-button) */
+[data-theme="light"] #es-instances-list .es-idx-add-btn {
+  color: #0e7490 !important;
+}
+[data-theme="light"] #es-instances-list .es-idx-add-btn:hover {
+  color: #0e5a72 !important;
+}
+
+/* Cartes instance */
+[data-theme="light"] #es-instances-list [data-idx] {
+  background-color: var(--bg-elevated) !important;
+  border-color: var(--border-default) !important;
+}
+
+/* Sous-cartes index */
+[data-theme="light"] #es-instances-list .es-idx-list [data-idx] {
+  background-color: var(--bg-overlay) !important;
+  border-color: var(--border-default) !important;
+}
+
+/* Champs input dans les instances ES (url, key, user, pass, idx-name, output-fields) */
+[data-theme="light"] #es-instances-list input.es-inst-url,
+[data-theme="light"] #es-instances-list input.es-inst-key,
+[data-theme="light"] #es-instances-list input.es-inst-user,
+[data-theme="light"] #es-instances-list input.es-inst-pass,
+[data-theme="light"] #es-instances-list input.es-idx-name,
+[data-theme="light"] #es-instances-list input.es-idx-output-fields {
+  background-color: var(--bg-overlay) !important;
+  border-color: var(--border-default) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Champ search_field — spécifiquement mentionné */
+[data-theme="light"] #es-instances-list input.es-idx-search-field {
+  background-color: var(--bg-overlay) !important;
+  border-color: var(--border-default) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Select IOC Type */
+[data-theme="light"] #es-instances-list select.es-idx-ioc-type {
+  background-color: var(--bg-overlay) !important;
+  border-color: var(--border-default) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Label "Indexes" + sous-section border */
+[data-theme="light"] #es-instances-list .border-t {
+  border-color: var(--border-default) !important;
+}
+
+/* Textes muted dans les cartes ES */
+[data-theme="light"] #es-instances-section .text-slate-500,
+[data-theme="light"] #es-instances-section .text-slate-600 {
+  color: var(--text-muted) !important;
+}
+[data-theme="light"] #es-instances-section .text-slate-400 {
+  color: var(--text-secondary) !important;
+}
+
+/* Titre de section */
+[data-theme="light"] #es-instances-section h3 {
+  color: var(--text-muted) !important;
+}
