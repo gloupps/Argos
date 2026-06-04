@@ -503,7 +503,6 @@ window.GraphModule = {
                 "shape":            "diamond",
                 "width": 34, "height": 34,
                 "font-size": 8,
-                "color":  "#fef3c7",
             }},
             { selector: "node.pivot-ioc", style: {
                 "background-color": "#f59e0b",   // Ambre
