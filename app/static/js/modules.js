@@ -489,8 +489,8 @@ window.Modules = {
         Object.entries(this._grouped).forEach(([group, modules]) => {
             const isInternal = group.toLowerCase().includes("internal");
             const isSiem     = group.toLowerCase() === "siem";
-            const col = isSiem ? (colSiem || colExternal)
-                                : isInternal ? colInternal : colExternal;
+            if (isSiem) return;   // rendus manuellement dans settings.js via siem-block-*
+            const col = isInternal ? colInternal : colExternal;
 
             modules.forEach(mod => {
                 col.appendChild(this._buildSettingsCard(mod, true));
