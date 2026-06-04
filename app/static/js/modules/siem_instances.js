@@ -146,7 +146,7 @@ window.SIEMInstances = {
             const id           = row.querySelector(".siem-src-id")?.value.trim();
             const name         = row.querySelector(".siem-src-name")?.value.trim();
             const ioc_type     = row.querySelector(".siem-src-ioc-type")?.value;
-            const search_field = row.querySelector(".siem-src-search-field")?.value.trim() || "",
+            const search_field = row.querySelector(".siem-src-search-field")?.value.trim() || "";
             const output_fields = row.querySelector(".siem-src-fields")?.value.trim();
             if (!name) return;
             updated.push({ id: id || `src${Date.now()}`, name, ioc_type, output_fields });
