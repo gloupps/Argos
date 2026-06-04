@@ -881,9 +881,10 @@ class Services:
 
         # ── 5. Emit ────────────────────────────────────────
         self.socketio.emit("siem_result", {
-            "job_id":  job_id,
-            "case_id": case_id,
-            "results": results,
+            "job_id":   job_id,
+            "case_id":  case_id,
+            "siem_type": siem_type,   # ← ajout
+            "results":  results,
         })
         self.job_manager.add_log(job_id, "SIEM investigation done")
         return results
