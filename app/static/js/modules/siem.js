@@ -183,6 +183,13 @@ window.SIEMModule = {
             splunk_url:          SecretStore?.get("extra_splunk_url")   || "",
             splunk_result_key:   SecretStore?.get("extra_splunk_result_key") || "splunk",
             splunk_indexes:      SecretStore?.getJSON("siem_logsources_splunk", []),
+
+            // ── Elasticsearch SIEM ───────────────────────────────
+            elasticsearch:          SecretStore?.get("elasticsearch")                  || "",
+            elasticsearch_url:      SecretStore?.get("extra_elasticsearch_url")        || "",
+            elasticsearch_user:     SecretStore?.get("extra_elasticsearch_user")       || "",
+            elasticsearch_pass:     SecretStore?.get("extra_elasticsearch_pass")       || "",
+            elasticsearch_indexes:  SecretStore?.getJSON("siem_logsources_elasticsearch", []),
         };
 
 
@@ -192,7 +199,7 @@ window.SIEMModule = {
             panel.innerHTML = `
             <div class="flex items-center gap-2 text-[11px] text-slate-500 py-2">
                 <i data-lucide="loader" class="w-3.5 h-3.5 animate-spin text-teal-400"></i>
-                ${siemType === "splunk" ? "Running SPL searches…" : "Running AQL queries…"}
+                ${{ splunk: "Running SPL searches…", elasticsearch: "Running ES queries…" }[siemType] || "Running AQL queries…"}
             </div>`;
             lucide.createIcons();
         }
