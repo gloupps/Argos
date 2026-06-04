@@ -37,7 +37,7 @@ window.EsInstances = {
             <div class="flex items-center justify-between mb-3">
                 <h3 class="text-xs uppercase text-slate-500 tracking-wider flex items-center gap-2">
                     <i data-lucide="database" class="w-3.5 h-3.5 text-cyan-400"></i>
-                    Internal Elasticsearch Instances
+                    Internal Elastic Instances
                 </h3>
                 <button id="es-add-btn"
                         class="flex items-center gap-1.5 text-[11px]
