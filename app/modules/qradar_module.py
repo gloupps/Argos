@@ -228,13 +228,58 @@ class QRadarModule(Module):
                 self._query_flows(base, token, ip_values, tc, results)
             )
             
+        # ── DNS : toujours exécuté pour les domaines
+        domain_values = dict_indicators.get("Domain-Name", [])
+        if domain_values:
+            tasks.append(
+                self._query_dns(base, token, domain_values, tc, results)
+            )
 
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 
         return clean_results(results)
 
-    
+    # ─────────────────────────────────────────────────────
+    # DNS — toujours exécuté pour Domain-Name
+    # ─────────────────────────────────────────────────────
+
+    async def _query_dns(
+        self,
+        base: str,
+        token: str,
+        domain_values: List[str],
+        tc: str,
+        results: Dict,
+    ) -> None:
+        fmt_vals = _fmt(domain_values)
+
+        aql = (
+            f'SELECT '
+            f'  "DNS Query" AS \'DNS Query\', '
+            f'  DATEFORMAT(startTime, \'YYYY-MM-dd HH:mm\') as \'startTime\', '
+            f'  "sourceIP", '
+            f'  "destinationIP", '
+            f'  LOGSOURCENAME(logSourceId) AS \'LogSource\', '
+            f'  QIDNAME(qid) as \'EventName\' '
+            f'FROM events '
+            f'WHERE "DNS Query" IN ({fmt_vals}) '
+            f'ORDER BY startTime DESC '
+            f'{tc}'
+        )
+
+        rows = await self._run_aql(base, token, aql) or []
+
+        for val in domain_values:
+            val_rows = [
+                r for r in rows
+                if str(r.get("DNS Query", "")).lower() == val.lower()
+            ]
+            results.setdefault(val, {})["qradar:dns"] = {
+                "events": len(val_rows),
+                "rows":   val_rows,
+            }
+            
     # ─────────────────────────────────────────────────────
     # Flows — toujours exécuté pour IPv4
     # ─────────────────────────────────────────────────────
