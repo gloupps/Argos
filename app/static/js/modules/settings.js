@@ -69,10 +69,20 @@ window.Settings = {
         const splunkBlock = document.createElement("div");
         splunkBlock.id = "siem-block-splunk";
         colSiem.appendChild(splunkBlock);
+        // Séparateur Splunk → Elasticsearch SIEM
+        const siemDivider2 = document.createElement("div");
+        siemDivider2.className = "argos-divider my-4";
+        colSiem.appendChild(siemDivider2);
+
+        // Bloc Elasticsearch SIEM : URL + indexes
+        const esBlock = document.createElement("div");
+        esBlock.id = "siem-block-elasticsearch";
+        colSiem.appendChild(esBlock);
 
         // Conteneurs sources (référencés plus bas)
         const siemSourcesQradar = document.createElement("div");
         const siemSourcesSplunk = document.createElement("div");
+        const siemSourcesElastic = document.createElement("div");
 
         grid.appendChild(colInternal);
         grid.appendChild(colExternal);
@@ -117,6 +127,17 @@ window.Settings = {
         } else {
             splunkBlockEl?.appendChild(siemSourcesSplunk);
         }
+        
+        const esMod = Object.values(Modules?.registry || {}).find(m => m.key === "elasticsearch");
+        const esBlockEl = document.getElementById("siem-block-elasticsearch");
+        if (esMod && esBlockEl) {
+            const card = Modules._buildSettingsCard(esMod, true);
+            siemSourcesElastic.className = "mt-3";
+            card.appendChild(siemSourcesElastic);
+            esBlockEl.appendChild(card);
+        } else if (esBlockEl) {
+            esBlockEl.appendChild(siemSourcesElastic);
+        }
 
         // MISP
         document.getElementById("misp-instances-section")?.remove();
@@ -132,8 +153,10 @@ window.Settings = {
         // Sources SIEM — render dans les conteneurs déjà dans le DOM
         document.getElementById(`siem-sources-section-qradar`)?.remove();
         document.getElementById(`siem-sources-section-splunk`)?.remove();
+        document.getElementById(`siem-sources-section-elasticsearch`)?.remove();
         SIEMInstances?.render?.(siemSourcesQradar, "qradar");
         SIEMInstances?.render?.(siemSourcesSplunk, "splunk");
+        SIEMInstances?.render?.(siemSourcesElastic, "elasticsearch");
 
         document.getElementById("settings-modal")?.classList.remove("hidden");
         lucide.createIcons({ nodes: [modalBody] });
