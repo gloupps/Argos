@@ -174,17 +174,24 @@ window.GraphModule = {
 
         (data.nodes || []).forEach(n => {
             const id      = String(n.id);
-            const isRoot  = (n.node_type || "correlated") === "root";
+            const nodeType = n.node_type || "correlated";
+            const isRoot   = nodeType === "root";
             nodeIndex.add(id);
 
-            // Classe de couleur selon origine (root reste root)
+            // Classe de couleur :
+            // 1. node_type en DB est autoritaire pour root/pivoted/correlated explicites
+            // 2. Sinon, on déduit depuis les edges (recon → amber, corrélation → violet)
             let originClass;
             if (isRoot) {
                 originClass = "root";
+            } else if (nodeType === "pivoted") {
+                originClass = "pivot-ioc";      // amber — défini manuellement ou par recon
+            } else if (nodeType === "correlated") {
+                originClass = "correlated-ioc"; // violet — défini manuellement ou par corrélation
             } else if (pivotLinkedIds.has(id)) {
-                originClass = "pivot-ioc";      // orange
+                originClass = "pivot-ioc";      // amber — déduit depuis les edges recon
             } else if (correlatedIds.has(id)) {
-                originClass = "correlated-ioc"; // violet
+                originClass = "correlated-ioc"; // violet — déduit depuis les edges corrélation
             } else {
                 originClass = "correlated-ioc"; // fallback
             }
