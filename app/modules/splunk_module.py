@@ -245,7 +245,7 @@ class SplunkModule(Module):
         link = self._make_link(base, spl, earliest, latest)
 
         # Distribuer par IOC
-        result_label = f""splunk:"{idx_name}"
+        result_label = f"splunk:{idx_name}"
         matched_map: Dict[str, List[Dict]] = {}
         for row in rows:
             key = str(row.get(match_alias, "")).lower()
