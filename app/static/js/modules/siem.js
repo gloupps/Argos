@@ -56,6 +56,7 @@ window.SIEMModule = {
         const siemOptions = [
             { key: "splunk",  label: "SPLUNK",  soon: false  },
             { key: "qradar",  label: "QRADAR",  soon: false },
+            { key: "elasticsearch",  label: "ELASTIC", soon: false },
         ];
 
         const typePickerHtml = `
