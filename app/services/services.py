@@ -548,7 +548,20 @@ class Services:
             if key not in modules:  # ne pas écraser un module déjà présent
                 modules[key] = ExternalMISPModule(self.requester, iid, label)
 
+        from app.modules.elasticsearch_module import EsInstanceModule
+
+        es_instances = extra_config.get("es_instances") or []
+        for inst in es_instances:
+            iid   = str(inst.get("id",    "")).strip()
+            label = str(inst.get("label", "")).strip()
+            if not iid or not label:
+                continue
+            key = f"es_inst_{iid}"
+            if key not in modules:
+                modules[key] = EsInstanceModule(self.requester, iid, label)
+
         return modules
+    
 
     async def _handle_fetch_internal_source(self, job_id, data):
         case_id      = data.get("case_id")
@@ -860,6 +873,23 @@ class Services:
                 self.job_manager.add_log(job_id, "Splunk module not registered", "failed")
                 return
             self.job_manager.add_log(job_id, f"Running SPL searches ({date_start} → {date_end})…")
+            results = await mod.investigate(dict_indicators, context)
+            
+        elif siem_type == "elasticsearch":
+            context = {
+                "api_key":                extra.get("elasticsearch", ""),
+                "elasticsearch_url":      extra.get("elasticsearch_url", ""),
+                "elasticsearch_indexes":  extra.get("elasticsearch_indexes", []),
+                "elasticsearch_user":     extra.get("elasticsearch_user", ""),
+                "elasticsearch_pass":     extra.get("elasticsearch_pass", ""),
+                "date_start": date_start,
+                "date_end":   date_end,
+            }
+            mod = self.modules.get("elasticsearch")
+            if not mod:
+                self.job_manager.add_log(job_id, "Elasticsearch module not registered", "failed")
+                return
+            self.job_manager.add_log(job_id, f"Running ES queries ({date_start} → {date_end})…")
             results = await mod.investigate(dict_indicators, context)
             
         else:  # qradar (défaut)
