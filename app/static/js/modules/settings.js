@@ -28,6 +28,7 @@ window.Settings = {
         colInternal.innerHTML = `
             <p class="text-[11px] text-slate-500 uppercase tracking-wider mb-3 font-semibold flex items-center gap-1.5">
                 <i data-lucide="server" class="w-3.5 h-3.5 text-teal-400"></i> Internal
+                <div id="es-instances-container" class="mt-4"></div>
             </p>`;
         const keysInternal = document.createElement("div");
         keysInternal.id = "settings-keys-internal";
@@ -121,6 +122,13 @@ window.Settings = {
         // MISP
         document.getElementById("misp-instances-section")?.remove();
         MISPInstances?.render?.(colMisp);
+        
+        // ES instances — dans la colonne internal
+        const colEsInstances = document.getElementById("es-instances-container");
+        if (colEsInstances) {
+            document.getElementById("es-instances-section")?.remove();
+            EsInstances?.render?.(colEsInstances);
+        }
 
         // Sources SIEM — render dans les conteneurs déjà dans le DOM
         document.getElementById(`siem-sources-section-qradar`)?.remove();
@@ -146,7 +154,7 @@ window.Settings = {
             SecretStore.set(`extra_${input.dataset.extraKey}`, val);
         });
         MISPInstances?.collect?.();
-
+        EsInstances?.collect?.();
         SIEMInstances?.collect?.("qradar");
         SIEMInstances?.collect?.("splunk");
         
