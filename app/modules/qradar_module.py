@@ -5,13 +5,20 @@ QRadar SIEM module — PivotLens.
 Credentials / extra_config keys :
   api_key              → API token (SEC header)
   qradar_url           → Console base URL  (ex. https://qradar.corp)
-  qradar_logsources    → list of dicts [{id, name, ioc_type, output_fields}, ...]
+  qradar_logsources    → list of dicts [{id, name, ioc_type, search_field, output_fields}, ...]
                          stored in SecretStore as "siem_logsources_qradar"
   date_start           → ISO datetime string (ex. "2026-05-01T00:00")
   date_end             → ISO datetime string (ex. "2026-05-31T23:59")
 
 IOC type values (ioc_type field) :
   "IP" | "Domain" | "URL" | "Hash-MD5" | "Hash-SHA1" | "Hash-SHA256"
+
+search_field (optional) :
+  Champ AQL exact dans lequel rechercher la valeur de l'IOC.
+  Si vide, les champs candidats hardcodés (_IOC_AQL_MAP) sont utilisés.
+  Ex : "sourceIP", "DNS Query", "SHA256 Hash", "username"
+  Pour les IP, un seul champ peut être fourni (ex: "sourceIP") — la requête
+  ciblera uniquement ce champ au lieu du couple sourceIP/destinationIP.
 
 Each logsource entry generates one AQL query scoped to:
   - LOGSOURCENAME(logSourceId) ILIKE '<name>%'
@@ -103,19 +110,19 @@ def _time_clause(date_start: str, date_end: str) -> str:
 
 
 # ─────────────────────────────────────────────────────────────
-# IOC type → AQL search fields + table alias
+# IOC type → AQL search fields + match alias (fallback)
 # ─────────────────────────────────────────────────────────────
 
 # Maps internal IOC key → (search_fields_tuple, match_alias)
-#   search_fields_tuple : champs AQL utilisés dans le WHERE
+#   search_fields_tuple : champs AQL utilisés dans le WHERE (fallback si search_field vide)
 #   match_alias         : alias utilisé pour retrouver la valeur dans chaque row
 _IOC_AQL_MAP: Dict[str, Tuple[Tuple[str, ...], str]] = {
-    "IPv4-Addr":      (("sourceIP", "destinationIP"), "sourceIP"),
-    "Domain-Name":    (("DNS Query",),                "DNS Query"),
-    "Url":            (("Filename",),                 "Filename"),
-    "StixFile-MD5":   (("MD5 Hash",),                 "MD5 Hash"),
-    "StixFile-SHA1":  (("SHA1 Hash",),                "SHA1 Hash"),
-    "StixFile-SHA256":(("SHA256 Hash",),              "SHA256 Hash"),
+    "IPv4-Addr":       (("sourceIP", "destinationIP"), "sourceIP"),
+    "Domain-Name":     (("DNS Query",),                "DNS Query"),
+    "Url":             (("Filename",),                 "Filename"),
+    "StixFile-MD5":    (("MD5 Hash",),                 "MD5 Hash"),
+    "StixFile-SHA1":   (("SHA1 Hash",),                "SHA1 Hash"),
+    "StixFile-SHA256": (("SHA256 Hash",),              "SHA256 Hash"),
 }
 
 # Front-end label → internal IOC key
@@ -141,7 +148,7 @@ class QRadarModule(Module):
     icon        = "database"
     supported_types = ["ip", "domain", "hash", "url"]
 
-    # Champs simples affichés dans Settings (URL + result key uniquement).
+    # Champs simples affichés dans Settings (URL uniquement).
     # Les LogSources sont gérés par SIEMInstances (siem_instances.js).
     settings_fields = [
         {
@@ -179,8 +186,8 @@ class QRadarModule(Module):
         if not base or not token:
             return {}
 
-        logsources  = context.get("qradar_logsources") or []   # list[dict]
-        tc          = _time_clause(
+        logsources = context.get("qradar_logsources") or []  # list[dict]
+        tc = _time_clause(
             context.get("date_start", ""),
             context.get("date_end",   ""),
         )
@@ -201,12 +208,13 @@ class QRadarModule(Module):
         for src in logsources:
             src_name      = (src.get("name") or "").strip()
             ioc_type_raw  = src.get("ioc_type") or ""
+            search_field  = (src.get("search_field") or "").strip()
             output_fields = [
                 f.strip()
                 for f in (src.get("output_fields") or "").split(",")
                 if f.strip()
             ]
-            ioc_key   = _IOC_FRONT_MAP.get(ioc_type_raw)
+            ioc_key    = _IOC_FRONT_MAP.get(ioc_type_raw)
             ioc_values = dict_indicators.get(ioc_key, []) if ioc_key else []
 
             if not src_name or not ioc_key or not ioc_values:
@@ -218,16 +226,17 @@ class QRadarModule(Module):
                     src_name, ioc_key, ioc_values,
                     output_fields, tc,
                     results,
+                    search_field=search_field,
                 )
             )
-            
+
         # ── Flows : toujours exécuté pour les IPs
         ip_values = dict_indicators.get("IPv4-Addr", [])
         if ip_values:
             tasks.append(
                 self._query_flows(base, token, ip_values, tc, results)
             )
-            
+
         # ── DNS : toujours exécuté pour les domaines
         domain_values = dict_indicators.get("Domain-Name", [])
         if domain_values:
@@ -239,6 +248,100 @@ class QRadarModule(Module):
             await asyncio.gather(*tasks, return_exceptions=True)
 
         return clean_results(results)
+
+    # ─────────────────────────────────────────────────────
+    # Core query — 1 AQL per (logsource × ioc_type)
+    # ─────────────────────────────────────────────────────
+
+    async def _query_logsource(
+        self,
+        base: str,
+        token: str,
+        src_name: str,
+        ioc_key: str,
+        values: List[str],
+        output_fields: List[str],
+        tc: str,
+        results: Dict,
+        search_field: str = "",
+    ) -> None:
+        aql_meta = _IOC_AQL_MAP.get(ioc_key)
+        if not aql_meta:
+            return
+
+        default_fields, default_alias = aql_meta
+
+        # Résolution des champs de recherche :
+        # - search_field non vide → champ unique explicite configuré par l'utilisateur
+        # - sinon → tuple de champs candidats hardcodés (fallback)
+        if search_field:
+            search_fields = (search_field,)
+            match_alias   = search_field
+        else:
+            search_fields = default_fields
+            match_alias   = default_alias
+
+        # ── SELECT columns ─────────────────────────────
+        always = [
+            "LOGSOURCENAME(logSourceId) as 'LogSource'",
+            "DATEFORMAT(startTime,'YYYY-MM-dd HH:mm') as 'startTime'",
+        ]
+        # Inclure les champs de recherche dans le SELECT pour pouvoir matcher
+        base_fields = [f'"{f}"' for f in search_fields]
+        # Champs output supplémentaires (éviter les doublons avec always + search_fields)
+        reserved = {"LogSource", "startTime"} | set(search_fields)
+        extra = [
+            f'"{f}"' for f in output_fields
+            if f not in reserved
+        ]
+        select_parts = always + base_fields + extra
+        select_clause = ", ".join(select_parts)
+
+        # ── WHERE IOC ──────────────────────────────────
+        fmt_vals = _fmt(values)
+        if len(search_fields) == 2:
+            # Cas IP par défaut : source OU destination
+            where_ioc = (
+                f'("{search_fields[0]}" IN ({fmt_vals}) '
+                f'OR "{search_fields[1]}" IN ({fmt_vals}))'
+            )
+        else:
+            where_ioc = f'"{search_fields[0]}" IN ({fmt_vals})'
+
+        # ── WHERE LogSource ────────────────────────────
+        safe_name = src_name.replace("'", "\\'")
+        where_src = f"LOGSOURCENAME(logSourceId) ILIKE '{safe_name}%'"
+
+        aql = (
+            f"SELECT {select_clause} "
+            f"FROM events "
+            f"WHERE {where_src} "
+            f"  AND {where_ioc} "
+            f"ORDER BY startTime DESC "
+            f"{tc}"
+        )
+
+        rows = await self._run_aql(base, token, aql) or []
+
+        # ── Distribuer par IOC ─────────────────────────
+        result_label = f"qradar:{src_name}"
+        for val in values:
+            if len(search_fields) == 2:
+                # IP : peut apparaître dans src ou dst
+                val_rows = [
+                    r for r in rows
+                    if r.get(search_fields[0]) == val or r.get(search_fields[1]) == val
+                ]
+            else:
+                val_rows = [
+                    r for r in rows
+                    if str(r.get(match_alias, "")).lower() == val.lower()
+                ]
+            results.setdefault(val, {})[result_label] = {
+                "events": len(val_rows),
+                "rows":   val_rows[:200],
+                "link":   self._event_link(base, aql),
+            }
 
     # ─────────────────────────────────────────────────────
     # DNS — toujours exécuté pour Domain-Name
@@ -279,7 +382,7 @@ class QRadarModule(Module):
                 "events": len(val_rows),
                 "rows":   val_rows,
             }
-            
+
     # ─────────────────────────────────────────────────────
     # Flows — toujours exécuté pour IPv4
     # ─────────────────────────────────────────────────────
@@ -317,87 +420,6 @@ class QRadarModule(Module):
             results.setdefault(val, {})["qradar:flows"] = {
                 "events": len(val_rows),
                 "rows":   val_rows,
-            }
-    
-    # ─────────────────────────────────────────────────────
-    # Core query — 1 AQL per (logsource × ioc_type)
-    # ─────────────────────────────────────────────────────
-
-    async def _query_logsource(
-        self,
-        base: str,
-        token: str,
-        src_name: str,
-        ioc_key: str,
-        values: List[str],
-        output_fields: List[str],
-        tc: str,
-        results: Dict,
-    ) -> None:
-        aql_meta = _IOC_AQL_MAP.get(ioc_key)
-        if not aql_meta:
-            return
-
-        search_fields, match_alias = aql_meta
-
-        # ── SELECT columns ─────────────────────────────
-        always = [
-            "LOGSOURCENAME(logSourceId) as 'LogSource'",
-            "DATEFORMAT(startTime,'YYYY-MM-dd HH:mm') as 'startTime'",
-        ]
-        # Ajouter les search_fields s'ils ne sont pas déjà dans output_fields
-        base_fields = list(search_fields)
-        extra = [
-            f'"{f}"' for f in output_fields
-            if f not in ("LogSource", "startTime") + search_fields
-        ]
-        select_parts = always + [f'"{f}"' for f in base_fields] + extra
-        select_clause = ", ".join(select_parts)
-
-        # ── WHERE IOC ──────────────────────────────────
-        fmt_vals = _fmt(values)
-        if len(search_fields) == 2:
-            # IP : source OU destination
-            where_ioc = (
-                f'("{search_fields[0]}" IN ({fmt_vals}) '
-                f'OR "{search_fields[1]}" IN ({fmt_vals}))'
-            )
-        else:
-            where_ioc = f'"{search_fields[0]}" IN ({fmt_vals})'
-
-        # ── WHERE LogSource ────────────────────────────
-        safe_name = src_name.replace("'", "\\'")
-        where_src = f"LOGSOURCENAME(logSourceId) ILIKE '{safe_name}%'"
-
-        aql = (
-            f"SELECT {select_clause} "
-            f"FROM events "
-            f"WHERE {where_src} "
-            f"  AND {where_ioc} "
-            f"ORDER BY startTime DESC "
-            f"{tc}"
-        )
-
-        rows = await self._run_aql(base, token, aql) or []
-
-        # ── Distribuer par IOC ────────────────────────
-        result_label = f"qradar:{src_name}"
-        for val in values:
-            if ioc_key == "IPv4-Addr":
-                # IP peut apparaître dans src ou dst
-                val_rows = [
-                    r for r in rows
-                    if r.get("sourceIP") == val or r.get("destinationIP") == val
-                ]
-            else:
-                val_rows = [
-                    r for r in rows
-                    if str(r.get(match_alias, "")).lower() == val.lower()
-                ]
-            results.setdefault(val, {})[result_label] = {
-                "events": len(val_rows),
-                "rows":   val_rows[:200],
-                "link":   self._event_link(base, aql),
             }
 
     # ─────────────────────────────────────────────────────
