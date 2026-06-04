@@ -1,14 +1,25 @@
-/* ═══════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════════════════
    ARGOS — Design System
-   Palette from logo: deep purple-navy + gold + teal
-   ═══════════════════════════════════════════════════════ */
+   Palette: deep purple-navy + gold + teal
+   Structure:
+     1. Fonts
+     2. CSS Variables — Dark (default) + Light
+     3. Base Reset
+     4. Component Library (theme-agnostic)
+     5. Light Mode Overrides
+   ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ── Fonts ── */
+/* ─────────────────────────────────────────────────────────────────────────────
+   1. FONTS
+   ───────────────────────────────────────────────────────────────────────────── */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono&family=Cinzel:wght@400;700&display=swap');
 
-/* ══════════════════════════════════════════════════════
-   DARK THEME (default)
-   ══════════════════════════════════════════════════════ */
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   2. CSS VARIABLES
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* ── Dark theme (default) ── */
 :root,
 [data-theme="dark"] {
   /* Backgrounds */
@@ -42,11 +53,6 @@
   --text-muted:     #5a5040;
   --text-inverse:   #0f0d1a;
 
-  /* Status colors */
-  --status-red:     #ef4444;
-  --status-amber:   #f59e0b;
-  --status-green:   #22c55e;
-
   /* Glass */
   --glass-bg:       rgba(15, 13, 26, 0.85);
   --glass-border:   rgba(212, 175, 55, 0.12);
@@ -55,41 +61,39 @@
   --sidebar-width:  260px;
 
   /* Scrollbar */
-  --scrollbar-track:  #0f0d1a;
-  --scrollbar-thumb:  #2a2040;
-  --scrollbar-hover:  #d4af37;
+  --scrollbar-track: #0f0d1a;
+  --scrollbar-thumb: #2a2040;
+  --scrollbar-hover: #d4af37;
 }
 
-/* ══════════════════════════════════════════════════════
-   LIGHT THEME — revised for legibility
-   ══════════════════════════════════════════════════════ */
+/* ── Light theme ── */
 [data-theme="light"] {
-  /* Backgrounds — beige chaud tiré de la palette logo */
+  /* Backgrounds — warm beige from logo palette */
   --bg-base:        #f2ece0;
   --bg-surface:     #ece4d4;
   --bg-elevated:    #e4dac8;
   --bg-overlay:     #d8ccb8;
   --bg-hover:       #c8bea4;
 
-  /* Borders — bien visibles */
+  /* Borders */
   --border-subtle:  rgba(90, 72, 30, 0.14);
   --border-default: rgba(90, 72, 30, 0.28);
   --border-accent:  rgba(139, 96, 16, 0.55);
 
-  /* Gold — assombri pour contraste sur fond clair */
+  /* Gold — darkened for contrast on light bg */
   --gold-bright:    #5c3d08;
   --gold-main:      #7a5210;
   --gold-muted:     #9a6e20;
   --gold-dim:       #b89040;
   --gold-glow:      rgba(122, 82, 16, 0.14);
 
-  /* Teal — assombri pour lisibilité */
+  /* Teal — darkened for legibility */
   --teal-bright:    #0e3c3c;
   --teal-main:      #1a5252;
   --teal-muted:     #2a7070;
   --teal-dim:       #3a8888;
 
-  /* Text — fort contraste */
+  /* Text */
   --text-primary:   #1a1208;
   --text-secondary: #3d2e0e;
   --text-muted:     #7a6640;
@@ -105,438 +109,10 @@
   --scrollbar-hover: #7a5210;
 }
 
-/* ── Light mode : override global Tailwind colors ── */
-[data-theme="light"] body,
-[data-theme="light"] .argos-body {
-  background-color: var(--bg-base);
-  color: var(--text-primary);
-}
 
-/* Surfaces sombres → surfaces claires */
-[data-theme="light"] .bg-slate-950,
-[data-theme="light"] .bg-slate-900\/50 {
-  background-color: var(--bg-base) !important;
-}
-[data-theme="light"] .bg-slate-900 {
-  background-color: var(--bg-elevated) !important;
-}
-[data-theme="light"] .bg-slate-800 {
-  background-color: var(--bg-overlay) !important;
-}
-[data-theme="light"] .bg-slate-700 {
-  background-color: var(--bg-hover) !important;
-}
-
-/* Borders */
-[data-theme="light"] .border-slate-800,
-[data-theme="light"] .border-slate-700 {
-  border-color: var(--border-default) !important;
-}
-
-/* Textes clairs → textes sombres */
-[data-theme="light"] .text-white,
-[data-theme="light"] .text-slate-200,
-[data-theme="light"] .text-slate-100 {
-  color: var(--text-primary) !important;
-}
-[data-theme="light"] .text-slate-300 {
-  color: var(--text-secondary) !important;
-}
-[data-theme="light"] .text-slate-400,
-[data-theme="light"] .text-slate-500 {
-  color: var(--text-muted) !important;
-}
-[data-theme="light"] .text-slate-600 {
-  color: #9a8060 !important;
-}
-
-/* Hover states sur les items sidebar/menus */
-[data-theme="light"] .hover\:bg-slate-800:hover,
-[data-theme="light"] .hover\:bg-slate-700:hover {
-  background-color: var(--bg-hover) !important;
-}
-
-/* Glass panels */
-[data-theme="light"] .glass,
-[data-theme="light"] .argos-glass {
-  background: var(--glass-bg) !important;
-  border-color: var(--glass-border) !important;
-}
-
-/* ── Light mode : sidebar items — texte et icônes lisibles ── */
-[data-theme="light"] #modules-internal .flex,
-[data-theme="light"] #modules-external .flex {
-  color: var(--text-secondary);
-}
-
-[data-theme="light"] #modules-internal i[data-lucide],
-[data-theme="light"] #modules-external i[data-lucide] {
-  color: var(--gold-main) !important;
-  opacity: 1 !important;
-}
-
-/* Items de la sidebar : texte du nom du module */
-[data-theme="light"] #modules-internal span.text-sm,
-[data-theme="light"] #modules-external span.text-sm {
-  color: var(--text-secondary) !important;
-}
-
-/* Icônes globales Lucide en light mode */
-[data-theme="light"] [data-lucide] {
-  color: var(--text-secondary);
-}
-
-/* ── Light mode : correlation & pivot toggle tracks ── */
-
-/* Track OFF — remplacement du bg-slate-700 invisible */
-[data-theme="light"] #pivot-container .w-8.h-4,
-[data-theme="light"] #correlation-container .w-8.h-4 {
-  background-color: #c8bca0 !important;
-  border: 1px solid var(--border-default);
-}
-
-/* Track ON pivot (amber) */
-[data-theme="light"] #pivot-container label:has(input:checked) .w-8.h-4 {
-  background-color: #b45309 !important; /* amber-700 lisible sur fond clair */
-}
-
-/* Track ON correlation (violet) */
-[data-theme="light"] #correlation-container label:has(input:checked) .w-8.h-4 {
-  background-color: #6d28d9 !important; /* violet-700 */
-}
-
-/* Thumb reste blanc dans les deux cas */
-[data-theme="light"] #pivot-container .w-3.h-3,
-[data-theme="light"] #correlation-container .w-3.h-3 {
-  background-color: #ffffff !important;
-}
-/* ── Light mode : input[type=range] couleurs par conteneur ── */
-
-/* Pivot (amber) */
-[data-theme="light"] #pivot-container input[type="range"] {
-  accent-color: #b45309 !important; /* amber-700 */
-}
-[data-theme="light"] #pivot-container input[type="checkbox"] {
-  accent-color: #b45309 !important; /* amber-700 */
-}
-
-/* Correlation (violet) */
-[data-theme="light"] #correlation-container input[type="range"] {
-  accent-color: #6d28d9 !important; /* violet-700 */
-}
-/* Correlation (violet) */
-[data-theme="light"] #correlation-container input[type="checkbox"] {
-  accent-color: #6d28d9 !important; /* violet-700 */
-}
-/* ── Light mode : settings — bouton Add instance MISP ── */
-[data-theme="light"] #misp-add-btn {
-  background-color: rgba(194, 120, 30, 0.15) !important;
-  color: #92400e !important;
-  border-color: rgba(146, 64, 14, 0.4) !important;
-}
-[data-theme="light"] #misp-add-btn:hover {
-  background-color: rgba(194, 120, 30, 0.3) !important;
-}
-
-/* ── Light mode : settings — carte quota ── */
-
-/* Conteneur principal de la quota zone */
-[data-theme="light"] #settings-keys .rounded-md.border,
-[data-theme="light"] #settings-keys-internal .rounded-md.border,
-[data-theme="light"] #settings-keys-external .rounded-md.border {
-  background-color: var(--bg-elevated) !important;
-  border-color: var(--border-default) !important;
-}
-
-/* Barre de fond de la progress bar */
-[data-theme="light"] #settings-keys .bg-slate-800.rounded-full,
-[data-theme="light"] #settings-keys-internal .bg-slate-800.rounded-full,
-[data-theme="light"] #settings-keys-external .bg-slate-800.rounded-full {
-  background-color: var(--bg-hover) !important;
-}
-
-/* Textes dans la quota zone */
-[data-theme="light"] #settings-keys .text-slate-300,
-[data-theme="light"] #settings-keys-internal .text-slate-300,
-[data-theme="light"] #settings-keys-external .text-slate-300 {
-  color: var(--text-primary) !important;
-}
-[data-theme="light"] #settings-keys .text-slate-600,
-[data-theme="light"] #settings-keys-internal .text-slate-600,
-[data-theme="light"] #settings-keys-external .text-slate-600 {
-  color: var(--text-muted) !important;
-}
-[data-theme="light"] #settings-keys .text-slate-400,
-[data-theme="light"] #settings-keys-internal .text-slate-400,
-[data-theme="light"] #settings-keys-external .text-slate-400 {
-  color: var(--text-secondary) !important;
-}
-[data-theme="light"] #settings-keys .text-slate-500,
-[data-theme="light"] #settings-keys-internal .text-slate-500,
-[data-theme="light"] #settings-keys-external .text-slate-500 {
-  color: var(--text-muted) !important;
-}
-
-/* Badge plan "free" (fond slate sombre) */
-[data-theme="light"] #settings-keys .bg-slate-700\/40,
-[data-theme="light"] #settings-keys-internal .bg-slate-700\/40,
-[data-theme="light"] #settings-keys-external .bg-slate-700\/40 {
-  background-color: var(--bg-overlay) !important;
-  border-color: var(--border-default) !important;
-  color: var(--text-secondary) !important;
-}
-
-/* Quota "public / no tracking" row */
-[data-theme="light"] #settings-keys .bg-slate-800\/60,
-[data-theme="light"] #settings-keys-internal .bg-slate-800\/60,
-[data-theme="light"] #settings-keys-external .bg-slate-800\/60 {
-  background-color: var(--bg-elevated) !important;
-  border-color: var(--border-default) !important;
-}
-
-/* Bouton refresh quota */
-[data-theme="light"] #settings-keys .text-slate-600.hover\:text-blue-400,
-[data-theme="light"] #settings-keys-internal .text-slate-600.hover\:text-blue-400,
-[data-theme="light"] #settings-keys-external .text-slate-600.hover\:text-blue-400 {
-  color: var(--text-muted) !important;
-}
-
-/* Badge SET/MISSING — SET */
-[data-theme="light"] #settings-keys .bg-green-500\/15,
-[data-theme="light"] #settings-keys-internal .bg-green-500\/15,
-[data-theme="light"] #settings-keys-external .bg-green-500\/15 {
-  background-color: rgba(22, 101, 52, 0.12) !important;
-  border-color: rgba(22, 101, 52, 0.3) !important;
-}
-
-/* Badge MISSING */
-[data-theme="light"] #settings-keys .bg-red-500\/15,
-[data-theme="light"] #settings-keys-internal .bg-red-500\/15,
-[data-theme="light"] #settings-keys-external .bg-red-500\/15 {
-  background-color: rgba(155, 28, 28, 0.12) !important;
-  border-color: rgba(155, 28, 28, 0.3) !important;
-}
-/* Icônes de couleur spécifique : on les laisse avec leur couleur */
-[data-theme="light"] .text-blue-400   { color: #1d6fa8 !important; }
-[data-theme="light"] .text-cyan-400   { color: #0e7490 !important; }
-[data-theme="light"] .text-green-400  { color: #166534 !important; }
-[data-theme="light"] .text-red-400    { color: #9b1c1c !important; }
-[data-theme="light"] .text-amber-400,
-[data-theme="light"] .text-amber-500  { color: #92400e !important; }
-[data-theme="light"] .text-violet-400 { color: #5b21b6 !important; }
-[data-theme="light"] .text-sky-400    { color: #0369a1 !important; }
-[data-theme="light"] .text-orange-400 { color: #9a3412 !important; }
-
-/* ── Light mode : enrich boxes ── */
-[data-theme="light"] .rounded-lg.border {
-  background-color: var(--bg-elevated) !important;
-  border-color: var(--border-default) !important;
-}
-
-[data-theme="light"] .rounded-lg.border button:hover,
-[data-theme="light"] .rounded-lg.border button:focus {
-  background-color: var(--bg-hover) !important;
-}
-
-/* Texte dans les enrich boxes */
-[data-theme="light"] #enrich-grid {
-  color: var(--text-primary);
-}
-
-[data-theme="light"] #enrich-grid .text-slate-400,
-[data-theme="light"] #enrich-grid .text-slate-500,
-[data-theme="light"] #enrich-grid .text-slate-600 {
-  color: var(--text-muted) !important;
-}
-
-/* KV rows */
-[data-theme="light"] .bg-slate-800\/50,
-[data-theme="light"] .bg-slate-900\/60,
-[data-theme="light"] .bg-slate-900\/30 {
-  background-color: rgba(200, 190, 164, 0.4) !important;
-}
-
-/* Tags */
-[data-theme="light"] .bg-slate-800.border-slate-700\/50 {
-  background-color: var(--bg-overlay) !important;
-  border-color: var(--border-default) !important;
-  color: var(--text-secondary) !important;
-}
-
-/* Mono pre blocks */
-[data-theme="light"] pre.text-slate-400 {
-  background-color: var(--bg-overlay) !important;
-  color: var(--text-secondary) !important;
-}
-
-/* ── Light mode : tabs ── */
-[data-theme="light"] .argos-tabs-bar,
-[data-theme="light"] #tabs {
-  background-color: var(--bg-surface) !important;
-  border-color: var(--border-default) !important;
-}
-
-[data-theme="light"] #tabs button,
-[data-theme="light"] .argos-tab {
-  color: var(--text-secondary) !important;
-}
-[data-theme="light"] #tabs button:hover {
-  background-color: var(--bg-hover) !important;
-  color: var(--text-primary) !important;
-}
-[data-theme="light"] #tabs button.bg-slate-700 {
-  background-color: var(--bg-hover) !important;
-  color: var(--gold-main) !important;
-  border-color: var(--border-accent) !important;
-}
-
-/* ── Light mode : settings modal ── */
-[data-theme="light"] #settings-modal > div {
-  background-color: var(--bg-elevated) !important;
-  border-color: var(--border-accent) !important;
-}
-[data-theme="light"] #settings-keys input,
-[data-theme="light"] #settings-keys-internal input,
-[data-theme="light"] #settings-keys-external input,
-[data-theme="light"] .argos-input,
-[data-theme="light"] input.w-full,
-[data-theme="light"] textarea,
-[data-theme="light"] select {
-  background-color: var(--bg-overlay) !important;
-  border-color: var(--border-default) !important;
-  color: var(--text-primary) !important;
-}
-
-[data-theme="light"] input::placeholder,
-[data-theme="light"] textarea::placeholder {
-  color: var(--text-muted) !important;
-}
-
-/* ── Light mode : form case ── */
-[data-theme="light"] [data-case-form] .glass {
-  background: var(--glass-bg) !important;
-  border-color: var(--border-default) !important;
-}
-
-/* ── Light mode : buttons ── */
-[data-theme="light"] .hover\:bg-slate-700:hover {
-  background-color: var(--bg-hover) !important;
-}
-[data-theme="light"] .bg-blue-600 {
-  background-color: #1d6fa8 !important;
-  color: #ffffff !important;
-}
-[data-theme="light"] .bg-blue-600:hover,
-[data-theme="light"] .hover\:bg-blue-500:hover {
-  background-color: #1558a0 !important;
-}
-[data-theme="light"] .argos-btn-primary {
-  color: #ffffff !important;
-  background: linear-gradient(135deg, #7a5210, #9a6e20) !important;
-}
-
-/* ── Light mode : case cards ── */
-[data-theme="light"] .border-l-4.border-blue-500 {
-  border-left-color: var(--gold-main) !important;
-}
-
-/* ── Light mode : right navbar section titles ── */
-[data-theme="light"] .argos-panel-title.teal  { color: var(--teal-main) !important; }
-[data-theme="light"] .argos-panel-title.gold  { color: var(--gold-main) !important; }
-[data-theme="light"] .argos-panel-title.violet { color: #5b21b6 !important; }
-[data-theme="light"] .argos-panel-title.amber  { color: #92400e !important; }
-
-/* ── Light mode : job log ── */
-[data-theme="light"] #job-log {
-  background-color: var(--bg-elevated) !important;
-  border-color: var(--border-accent) !important;
-  color: var(--text-primary) !important;
-}
-
-/* ── Light mode : cytoscape graph background ── */
-[data-theme="light"] #cy {
-  background: var(--bg-elevated) !important;
-  border-color: var(--border-default) !important;
-}
-
-/* ── Light mode : context menu / popover ── */
-[data-theme="light"] [id^="ctx-menu"],
-[data-theme="light"] .fixed.bg-slate-900 {
-  background-color: var(--bg-elevated) !important;
-  border-color: var(--border-default) !important;
-  color: var(--text-primary) !important;
-}
-
-/* ── Light mode : service detail modal ── */
-[data-theme="light"] #service-detail-modal > div {
-  background-color: var(--bg-elevated) !important;
-  border-color: var(--border-default) !important;
-}
-
-/* ── Light mode : correlation/pivot blocks ── */
-[data-theme="light"] .bg-slate-900\/30 {
-  background-color: rgba(200, 190, 164, 0.25) !important;
-}
-
-/* input range accent */
-[data-theme="light"] input[type="range"] {
-  accent-color: var(--gold-main);
-}
-[data-theme="light"] input[type="checkbox"] {
-  accent-color: var(--gold-main);
-}
-
-/* ── Light mode : scrollbar ── */
-[data-theme="light"] ::-webkit-scrollbar-track { background: var(--scrollbar-track); }
-[data-theme="light"] ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); }
-[data-theme="light"] ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-hover); }
-
-/* ── Light mode : toggle pill ── */
-[data-theme="light"] .argos-theme-toggle {
-  background: var(--bg-elevated);
-  border-color: var(--border-default);
-  color: var(--text-secondary);
-}
-[data-theme="light"] .argos-theme-toggle .toggle-track {
-  background: var(--bg-hover);
-}
-/* ── Light mode : module toggle switches (bg-slate-700 → visible) ── */
-[data-theme="light"] #modules-internal .w-9.h-5,
-[data-theme="light"] #modules-external .w-9.h-5,
-[data-theme="light"] #modules-internal div.w-9,
-[data-theme="light"] #modules-external div.w-9 {
-  background-color: #c8bca0 !important; /* track OFF : beige moyen lisible */
-  border: 1px solid var(--border-default);
-}
-
-/* Track activé (peer-checked) : on réutilise l'accent bleu adapté au light */
-[data-theme="light"] #modules-internal input:checked ~ div.w-9,
-[data-theme="light"] #modules-external input:checked ~ div.w-9 {
-  background-color: #1d6fa8 !important;
-}
-
-/* Thumb du toggle : reste blanc, ok */
-
-/* ── Light mode : logo SVG lisible ── */
-[data-theme="light"] .argos-logo-img {
-  filter: brightness(0) saturate(100%)
-          invert(22%) sepia(60%) saturate(800%) hue-rotate(25deg) brightness(60%);
-}
-
-/* ── Light mode : bouton expand/fullscreen du graph ── */
-[data-theme="light"] #graph-expand-btn {
-  background-color: var(--bg-elevated) !important;
-  border-color: var(--border-default) !important;
-  color: var(--text-secondary) !important;
-}
-[data-theme="light"] #graph-expand-btn:hover {
-  color: #1d6fa8 !important;
-  border-color: #1d6fa8 !important;
-  background-color: var(--bg-hover) !important;
-}
-/* ══════════════════════════════════════════════════════
-   BASE RESET
-   ══════════════════════════════════════════════════════ */
+/* ─────────────────────────────────────────────────────────────────────────────
+   3. BASE RESET
+   ───────────────────────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }
 
 html { height: 100%; }
@@ -550,18 +126,20 @@ body.argos-body {
   transition: background-color 0.25s ease, color 0.25s ease;
 }
 
+.mono, .argos-mono { font-family: 'JetBrains Mono', monospace; }
+
 /* ── Scrollbars ── */
 ::-webkit-scrollbar              { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track        { background: var(--scrollbar-track); }
 ::-webkit-scrollbar-thumb        { background: var(--scrollbar-thumb); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover  { background: var(--scrollbar-hover); }
 
-/* ── Mono font ── */
-.mono, .argos-mono { font-family: 'JetBrains Mono', monospace; }
 
-/* ══════════════════════════════════════════════════════
-   GLASS PANELS
-   ══════════════════════════════════════════════════════ */
+/* ─────────────────────────────────────────────────────────────────────────────
+   4. COMPONENT LIBRARY
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* ══ Glass panels ══ */
 .glass,
 .argos-glass {
   background: var(--glass-bg);
@@ -570,11 +148,7 @@ body.argos-body {
   border: 1px solid var(--glass-border);
 }
 
-/* ══════════════════════════════════════════════════════
-   LAYOUT — SIDEBARS
-   ══════════════════════════════════════════════════════ */
-
-/* Left navbar */
+/* ══ Layout — sidebars ══ */
 aside.argos-left {
   width: var(--sidebar-width);
   background: var(--bg-surface);
@@ -585,7 +159,6 @@ aside.argos-left {
   transition: background 0.25s;
 }
 
-/* Right navbar */
 aside.argos-right {
   width: 320px;
   background: var(--bg-surface);
@@ -595,15 +168,12 @@ aside.argos-right {
   transition: background 0.25s;
 }
 
-/* Main */
 .argos-main {
   background: var(--bg-base);
   transition: background 0.25s;
 }
 
-/* ══════════════════════════════════════════════════════
-   LOGO ZONE
-   ══════════════════════════════════════════════════════ */
+/* ══ Logo zone ══ */
 .argos-logo-zone {
   padding: 0.6rem 0;
   display: flex;
@@ -645,9 +215,7 @@ aside.argos-right {
   padding-bottom: 0.4rem;
 }
 
-/* ══════════════════════════════════════════════════════
-   TABS BAR
-   ══════════════════════════════════════════════════════ */
+/* ══ Tabs bar ══ */
 .argos-tabs-bar {
   height: 40px;
   display: flex;
@@ -685,9 +253,7 @@ aside.argos-right {
   border-color: var(--border-accent);
 }
 
-/* ══════════════════════════════════════════════════════
-   SIDEBAR SECTION HEADERS
-   ══════════════════════════════════════════════════════ */
+/* ══ Section headers ══ */
 .argos-section-header {
   font-size: 10px;
   font-weight: 600;
@@ -697,9 +263,24 @@ aside.argos-right {
   padding: 0.6rem 1rem 0.3rem;
 }
 
-/* ══════════════════════════════════════════════════════
-   MODULE ITEMS (sidebar)
-   ══════════════════════════════════════════════════════ */
+/* ══ Panel titles (right navbar) ══ */
+.argos-panel-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.argos-panel-title.gold   { color: var(--gold-main); }
+.argos-panel-title.teal   { color: var(--teal-bright); }
+.argos-panel-title.amber  { color: #f59e0b; }
+.argos-panel-title.violet { color: #a78bfa; }
+
+/* ══ Module items (sidebar) ══ */
 .argos-module-item {
   display: flex;
   align-items: center;
@@ -725,9 +306,7 @@ aside.argos-right {
   border-color: var(--border-accent);
 }
 
-/* ══════════════════════════════════════════════════════
-   BUTTONS
-   ══════════════════════════════════════════════════════ */
+/* ══ Buttons ══ */
 .argos-btn {
   display: inline-flex;
   align-items: center;
@@ -767,11 +346,8 @@ aside.argos-right {
   color: #ef4444;
   border-color: rgba(239, 68, 68, 0.25);
 }
-.argos-btn-danger:hover {
-  background: rgba(239, 68, 68, 0.2);
-}
+.argos-btn-danger:hover { background: rgba(239, 68, 68, 0.2); }
 
-/* Icon-only button */
 .argos-btn-icon {
   padding: 0.35rem;
   border-radius: 6px;
@@ -787,9 +363,7 @@ aside.argos-right {
   border-color: var(--border-subtle);
 }
 
-/* ══════════════════════════════════════════════════════
-   DARK / LIGHT TOGGLE
-   ══════════════════════════════════════════════════════ */
+/* ══ Dark/light toggle pill ══ */
 .argos-theme-toggle {
   display: flex;
   align-items: center;
@@ -833,9 +407,7 @@ aside.argos-right {
   box-shadow: 0 0 4px var(--gold-glow);
 }
 
-/* ══════════════════════════════════════════════════════
-   CARDS / GLASS PANELS
-   ══════════════════════════════════════════════════════ */
+/* ══ Cards ══ */
 .argos-card {
   background: var(--bg-elevated);
   border: 1px solid var(--border-default);
@@ -843,18 +415,10 @@ aside.argos-right {
   padding: 1.25rem;
   transition: background 0.25s, border-color 0.25s;
 }
+.argos-card:hover       { border-color: var(--border-accent); }
+.argos-card-accent      { border-left: 3px solid var(--gold-main); }
 
-.argos-card:hover {
-  border-color: var(--border-accent);
-}
-
-.argos-card-accent {
-  border-left: 3px solid var(--gold-main);
-}
-
-/* ══════════════════════════════════════════════════════
-   FORM INPUTS
-   ══════════════════════════════════════════════════════ */
+/* ══ Form inputs ══ */
 .argos-input {
   width: 100%;
   padding: 0.45rem 0.75rem;
@@ -866,23 +430,16 @@ aside.argos-right {
   transition: border-color 0.15s, box-shadow 0.15s;
   outline: none;
 }
-
 .argos-input:focus {
   border-color: var(--gold-muted);
   box-shadow: 0 0 0 2px var(--gold-glow);
 }
-
-.argos-input::placeholder {
-  color: var(--text-muted);
-}
-
-textarea.argos-input { resize: vertical; }
+.argos-input::placeholder { color: var(--text-muted); }
+textarea.argos-input      { resize: vertical; }
 
 input[type="datetime-local"]::-webkit-calendar-picker-indicator { filter: invert(1); }
 
-/* ══════════════════════════════════════════════════════
-   CYTOSCAPE GRAPH
-   ══════════════════════════════════════════════════════ */
+/* ══ Cytoscape graph ══ */
 #cy {
   width: 100%;
   height: 500px;
@@ -891,37 +448,14 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { filter: invert
   border: 1px solid var(--border-default);
 }
 
-/* ══════════════════════════════════════════════════════
-   SECTION HEADERS (right panel)
-   ══════════════════════════════════════════════════════ */
-.argos-panel-title {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 0.75rem;
-}
-
-.argos-panel-title.gold  { color: var(--gold-main); }
-.argos-panel-title.teal  { color: var(--teal-bright); }
-.argos-panel-title.amber { color: #f59e0b; }
-.argos-panel-title.violet { color: #a78bfa; }
-
-/* ══════════════════════════════════════════════════════
-   DIVIDERS
-   ══════════════════════════════════════════════════════ */
+/* ══ Divider ══ */
 .argos-divider {
   height: 1px;
   background: linear-gradient(90deg, transparent, var(--border-default), transparent);
   margin: 0.75rem 0;
 }
 
-/* ══════════════════════════════════════════════════════
-   SETTINGS MODAL
-   ══════════════════════════════════════════════════════ */
+/* ══ Modal ══ */
 .argos-modal-overlay {
   background: rgba(0, 0, 0, 0.7);
   backdrop-filter: blur(6px);
@@ -934,9 +468,7 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { filter: invert
   box-shadow: 0 24px 60px rgba(0,0,0,0.5), 0 0 0 1px var(--border-subtle);
 }
 
-/* ══════════════════════════════════════════════════════
-   ENRICH BOXES
-   ══════════════════════════════════════════════════════ */
+/* ══ Enrich boxes ══ */
 .argos-enrich-box {
   background: var(--bg-elevated);
   border: 1px solid var(--border-default);
@@ -944,361 +476,513 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { filter: invert
   overflow: hidden;
   transition: border-color 0.15s;
 }
+.argos-enrich-box:hover { border-color: var(--border-accent); }
 
-.argos-enrich-box:hover {
-  border-color: var(--border-accent);
-}
-
-/* ══════════════════════════════════════════════════════
-   MISC UTILITIES
-   ══════════════════════════════════════════════════════ */
-
-/* Gold text */
+/* ══ Utilities ══ */
 .text-gold        { color: var(--gold-main); }
 .text-gold-bright { color: var(--gold-bright); }
 .text-gold-muted  { color: var(--gold-muted); }
 .text-teal        { color: var(--teal-bright); }
 
-/* Animated gold shimmer on borders */
 @keyframes gold-pulse {
   0%, 100% { opacity: 0.4; }
   50%       { opacity: 1; }
 }
 .argos-pulse { animation: gold-pulse 2.5s ease-in-out infinite; }
 
-/* Job log */
+/* Job log base style */
 #job-log {
   background: var(--bg-elevated) !important;
   border-color: var(--border-accent) !important;
 }
 
-/* Enrich panel background */
-#enrich-grid {
+#enrich-grid { color: var(--text-primary); }
+
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   5. LIGHT MODE OVERRIDES
+   Sections:
+     5.1  Global Tailwind token remaps
+     5.2  Typography & color tokens
+     5.3  Structural components (sidebar, tabs, toggles, logo)
+     5.4  Graph & contextual UI
+     5.5  Settings modal — API keys & quota cards
+     5.6  Settings modal — MISP instances
+     5.7  Settings modal — Elasticsearch instances
+     5.8  Settings modal — SIEM (QRadar / Splunk / Elasticsearch)
+     5.9  Enrich grid & enrichment boxes
+     5.10 Enrichment modals (service-detail, text-content, compare, screenshot)
+     5.11 SIEM investigation panel (right navbar)
+     5.12 Correlation / pivot panels
+     5.13 Miscellaneous
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* ══════════════════════════════════════════════════════
+   5.1  Global Tailwind token remaps
+   ══════════════════════════════════════════════════════ */
+[data-theme="light"] body,
+[data-theme="light"] .argos-body {
+  background-color: var(--bg-base);
   color: var(--text-primary);
 }
 
-/* ════════════════════════════════════════════════════════════════════════════
-   LIGHT MODE — SIEM Investigation (right_navbar #siem-container)
-   ════════════════════════════════════════════════════════════════════════════ */
+/* Background surfaces */
+[data-theme="light"] .bg-slate-950,
+[data-theme="light"] .bg-slate-900\/50 { background-color: var(--bg-base) !important; }
+[data-theme="light"] .bg-slate-900     { background-color: var(--bg-elevated) !important; }
+[data-theme="light"] .bg-slate-800     { background-color: var(--bg-overlay) !important; }
+[data-theme="light"] .bg-slate-700     { background-color: var(--bg-hover) !important; }
 
-/* Conteneur principal du panel SIEM */
-[data-theme="light"] #siem-container > div {
-  background-color: var(--bg-elevated) !important;
-  border-color: var(--border-default) !important;
-}
+/* KV / block rows */
+[data-theme="light"] .bg-slate-800\/50,
+[data-theme="light"] .bg-slate-900\/60,
+[data-theme="light"] .bg-slate-900\/30 { background-color: rgba(200, 190, 164, 0.4) !important; }
 
-/* ── Type picker (SPLUNK / QRADAR pill bar) ── */
-[data-theme="light"] #siem-container .flex.p-1.bg-slate-900.rounded-md {
-  background-color: var(--bg-overlay) !important;
-  border-color: var(--border-default) !important;
-}
+/* Borders */
+[data-theme="light"] .border-slate-800,
+[data-theme="light"] .border-slate-700 { border-color: var(--border-default) !important; }
 
-/* Label inactif dans le type picker */
-[data-theme="light"] #siem-container label.text-slate-400 {
-  color: var(--text-muted) !important;
-}
-[data-theme="light"] #siem-container label.hover\:text-slate-200:hover {
-  color: var(--text-primary) !important;
-}
+/* Hover states */
+[data-theme="light"] .hover\:bg-slate-800:hover,
+[data-theme="light"] .hover\:bg-slate-700:hover { background-color: var(--bg-hover) !important; }
 
-/* Badge "soon" dans le type picker */
-[data-theme="light"] #siem-container .bg-slate-700.text-slate-400 {
-  background-color: var(--bg-hover) !important;
-  color: var(--text-muted) !important;
-}
-
-/* ── Bandeau warning "token missing" ── */
-[data-theme="light"] #siem-container .bg-amber-500\/10 {
-  background-color: rgba(180, 83, 9, 0.10) !important;
-  border-color: rgba(180, 83, 9, 0.30) !important;
-  color: #92400e !important;
-}
-
-/* ── Labels "START DATE / END DATE" ── */
-[data-theme="light"] #siem-container .text-slate-500 {
-  color: var(--text-muted) !important;
-}
-
-/* ── Inputs datetime-local ── */
-[data-theme="light"] #siem-container input[type="datetime-local"] {
-  background-color: var(--bg-overlay) !important;
-  border-color: var(--border-default) !important;
-  color: var(--text-primary) !important;
-  color-scheme: light !important;  /* force le picker natif en clair */
-}
-[data-theme="light"] #siem-container input[type="datetime-local"]:focus {
-  border-color: var(--teal-main) !important;
-  box-shadow: 0 0 0 2px rgba(58, 136, 136, 0.20) !important;
-}
-
-/* ── Scope toggle (ROOT IOC / ALL IOC) ── */
-[data-theme="light"] #siem-container .flex.p-1.bg-slate-900.rounded-md.border {
-  background-color: var(--bg-overlay) !important;
-  border-color: var(--border-default) !important;
-}
-
-/* Label scope inactif */
-[data-theme="light"] #siem-container label.text-slate-400.hover\:text-slate-200 {
-  color: var(--text-muted) !important;
-}
-
-/* ── IOC type filter pills (IPv4, Domain, URL, Hash) ── */
-/* Pill OFF */
-[data-theme="light"] #siem-container label.bg-slate-800.border-slate-700 {
-  background-color: var(--bg-overlay) !important;
-  border-color: var(--border-default) !important;
-  color: var(--text-muted) !important;
-}
-
-/* Pill ON (teal) — on garde la couleur teal mais on l'adapte au fond clair */
-[data-theme="light"] #siem-container label.bg-teal-600\/20 {
-  background-color: rgba(58, 136, 136, 0.15) !important;
-  border-color: rgba(58, 136, 136, 0.45) !important;
-  color: #0d6b6b !important;
-}
-
-/* accent checkbox (IOC pills) */
-[data-theme="light"] #siem-container input[type="checkbox"] {
-  accent-color: var(--teal-main) !important;
-}
-
-/* ── Bouton Run Investigation ── */
-[data-theme="light"] #siem-container button.bg-slate-800 {
-  background-color: var(--bg-overlay) !important;
-  border-color: var(--border-default) !important;
-  color: var(--teal-main) !important;
-}
-[data-theme="light"] #siem-container button.bg-slate-800:hover:not(:disabled) {
-  background-color: rgba(58, 136, 136, 0.12) !important;
-  border-color: rgba(58, 136, 136, 0.45) !important;
-}
-[data-theme="light"] #siem-container button.text-teal-300 {
-  color: var(--teal-main) !important;
-}
-
-/* ── SIEM row (main panel — ongoing_case) ── */
-[data-theme="light"] #siem-row {
+/* Glass panels */
+[data-theme="light"] .glass,
+[data-theme="light"] .argos-glass {
   background: var(--glass-bg) !important;
   border-color: var(--glass-border) !important;
 }
-[data-theme="light"] #siem-row h3 {
-  color: var(--text-primary) !important;
-}
-[data-theme="light"] #siem-row .text-slate-600,
-[data-theme="light"] #siem-results-panel {
-  color: var(--text-muted) !important;
-}
-[data-theme="light"] #siem-row button.text-slate-600 {
-  color: var(--text-muted) !important;
-}
-[data-theme="light"] #siem-row button.hover\:text-teal-400:hover {
-  color: var(--teal-main) !important;
+
+/* Tags (bg-slate-800 border-slate-700/50) */
+[data-theme="light"] .bg-slate-800.border-slate-700\/50 {
+  background-color: var(--bg-overlay) !important;
+  border-color: var(--border-default) !important;
+  color: var(--text-secondary) !important;
 }
 
-/* ── SIEM result cards injected by _onResult() ── */
-[data-theme="light"] #siem-results-panel .bg-slate-900,
-[data-theme="light"] #siem-results-panel .bg-slate-800 {
-  background-color: var(--bg-elevated) !important;
-  border-color: var(--border-default) !important;
-}
-[data-theme="light"] #siem-results-panel .text-slate-300,
-[data-theme="light"] #siem-results-panel .text-slate-200 {
-  color: var(--text-primary) !important;
-}
-[data-theme="light"] #siem-results-panel .text-slate-400,
-[data-theme="light"] #siem-results-panel .text-slate-500,
-[data-theme="light"] #siem-results-panel .text-slate-600 {
-  color: var(--text-muted) !important;
-}
-[data-theme="light"] #siem-results-panel .border-slate-700,
-[data-theme="light"] #siem-results-panel .border-slate-800 {
-  border-color: var(--border-default) !important;
-}
-[data-theme="light"] #siem-results-panel pre {
+/* Mono pre blocks */
+[data-theme="light"] pre.text-slate-400 {
   background-color: var(--bg-overlay) !important;
   color: var(--text-secondary) !important;
 }
 
-
-/* ════════════════════════════════════════════════════════════════════════════
-   LIGHT MODE — Modals enrichment (service-detail, text-content, compare-*, screenshot)
-   ════════════════════════════════════════════════════════════════════════════ */
-
-/* ── Fond partagé overlay ── */
-[data-theme="light"] #service-detail-modal,
-[data-theme="light"] #text-content-modal,
-[data-theme="light"] #compare-picker-modal,
-[data-theme="light"] #compare-result-modal,
-[data-theme="light"] #screenshot-modal {
-  /* backdrop reste sombre pour le focus, on ne touche pas bg-black/80 */
+/* Buttons */
+[data-theme="light"] .bg-blue-600 { background-color: #1d6fa8 !important; color: #ffffff !important; }
+[data-theme="light"] .bg-blue-600:hover,
+[data-theme="light"] .hover\:bg-blue-500:hover { background-color: #1558a0 !important; }
+[data-theme="light"] .argos-btn-primary {
+  color: #ffffff !important;
+  background: linear-gradient(135deg, #7a5210, #9a6e20) !important;
 }
 
-/* ── Boîte intérieure de tous les modals ── */
-[data-theme="light"] #service-detail-modal > div,
-[data-theme="light"] #text-content-modal > div,
-[data-theme="light"] #compare-picker-modal > div,
-[data-theme="light"] #compare-result-modal > div {
-  background-color: var(--bg-elevated) !important;
-  border-color: var(--border-default) !important;
-  color: var(--text-primary) !important;
-}
+/* Case card accent */
+[data-theme="light"] .border-l-4.border-blue-500 { border-left-color: var(--gold-main) !important; }
 
-/* ── Header des modals (barre titre) ── */
-[data-theme="light"] #service-detail-modal .border-b,
-[data-theme="light"] #text-content-modal .border-b,
-[data-theme="light"] #compare-picker-modal .border-b,
-[data-theme="light"] #compare-result-modal .border-b {
-  border-color: var(--border-default) !important;
-  background-color: var(--bg-surface, var(--bg-elevated)) !important;
-}
-
-/* Titres dans les headers */
-[data-theme="light"] #service-detail-modal .text-slate-200,
-[data-theme="light"] #text-content-modal .text-slate-200,
-[data-theme="light"] #compare-picker-modal .text-slate-200,
-[data-theme="light"] #compare-result-modal .text-slate-200,
-[data-theme="light"] #service-detail-modal .text-white,
-[data-theme="light"] #text-content-modal .text-white {
-  color: var(--text-primary) !important;
-}
-
-/* Textes secondaires / muted dans les modals */
-[data-theme="light"] #service-detail-modal .text-slate-400,
-[data-theme="light"] #service-detail-modal .text-slate-500,
-[data-theme="light"] #service-detail-modal .text-slate-600,
-[data-theme="light"] #text-content-modal .text-slate-400,
-[data-theme="light"] #text-content-modal .text-slate-500,
-[data-theme="light"] #compare-picker-modal .text-slate-400,
-[data-theme="light"] #compare-picker-modal .text-slate-500,
-[data-theme="light"] #compare-result-modal .text-slate-400,
-[data-theme="light"] #compare-result-modal .text-slate-500,
-[data-theme="light"] #compare-result-modal .text-slate-600 {
-  color: var(--text-muted) !important;
-}
-
-/* Bouton close (×) dans les modals */
-[data-theme="light"] #service-detail-modal button.text-slate-500,
-[data-theme="light"] #text-content-modal button.text-slate-500,
-[data-theme="light"] #compare-picker-modal button.text-slate-500,
-[data-theme="light"] #compare-result-modal button.text-slate-500 {
-  color: var(--text-muted) !important;
-}
-[data-theme="light"] #service-detail-modal button.hover\:text-white:hover,
-[data-theme="light"] #text-content-modal button.hover\:text-white:hover,
-[data-theme="light"] #compare-picker-modal button.hover\:text-white:hover,
-[data-theme="light"] #compare-result-modal button.hover\:text-white:hover {
-  color: var(--text-primary) !important;
-}
-
-/* ── Sections internes (service-detail : General, TLS, SSH, HTTP, Vulns, Banner) ── */
-[data-theme="light"] #service-detail-modal .bg-slate-900\/40,
-[data-theme="light"] #service-detail-modal .bg-slate-900\/60,
-[data-theme="light"] #service-detail-modal .bg-slate-900 {
-  background-color: var(--bg-overlay) !important;
-}
-[data-theme="light"] #service-detail-modal .border-slate-700,
-[data-theme="light"] #service-detail-modal .border-slate-800 {
+/* Form case */
+[data-theme="light"] [data-case-form] .glass {
+  background: var(--glass-bg) !important;
   border-color: var(--border-default) !important;
 }
 
-/* Headers de section (General, TLS…) */
-[data-theme="light"] #service-detail-modal .text-teal-400 {
-  color: var(--teal-main) !important;
+
+/* ══════════════════════════════════════════════════════
+   5.2  Typography & color tokens
+   ══════════════════════════════════════════════════════ */
+[data-theme="light"] .text-white,
+[data-theme="light"] .text-slate-200,
+[data-theme="light"] .text-slate-100 { color: var(--text-primary) !important; }
+[data-theme="light"] .text-slate-300  { color: var(--text-secondary) !important; }
+[data-theme="light"] .text-slate-400,
+[data-theme="light"] .text-slate-500  { color: var(--text-muted) !important; }
+[data-theme="light"] .text-slate-600  { color: #9a8060 !important; }
+[data-theme="light"] .text-slate-700  { color: var(--text-muted) !important; }
+
+/* Specific accent colors — darkened for contrast */
+[data-theme="light"] .text-blue-400   { color: #1d6fa8 !important; }
+[data-theme="light"] .text-cyan-400   { color: #0e7490 !important; }
+[data-theme="light"] .text-cyan-600   { color: #0e7490 !important; }
+[data-theme="light"] .text-green-400  { color: #166534 !important; }
+[data-theme="light"] .text-red-400    { color: #9b1c1c !important; }
+[data-theme="light"] .text-amber-400,
+[data-theme="light"] .text-amber-500  { color: #92400e !important; }
+[data-theme="light"] .text-violet-400 { color: #5b21b6 !important; }
+[data-theme="light"] .text-sky-400    { color: #0369a1 !important; }
+[data-theme="light"] .text-orange-400 { color: #9a3412 !important; }
+
+
+/* ══════════════════════════════════════════════════════
+   5.3  Structural components
+   ══════════════════════════════════════════════════════ */
+
+/* Scrollbar */
+[data-theme="light"] ::-webkit-scrollbar-track { background: var(--scrollbar-track); }
+[data-theme="light"] ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); }
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-hover); }
+
+/* Toggle pill */
+[data-theme="light"] .argos-theme-toggle {
+  background: var(--bg-elevated);
+  border-color: var(--border-default);
+  color: var(--text-secondary);
+}
+[data-theme="light"] .argos-theme-toggle .toggle-track { background: var(--bg-hover); }
+
+/* Logo */
+[data-theme="light"] .argos-logo-img {
+  filter: brightness(0) saturate(100%) invert(22%) sepia(60%) saturate(800%) hue-rotate(25deg) brightness(60%);
 }
 
-/* KV rows dans les sections */
-[data-theme="light"] #service-detail-modal .bg-slate-900\/30 {
-  background-color: rgba(200, 190, 164, 0.30) !important;
-}
+/* Sidebar module items */
+[data-theme="light"] #modules-internal .flex,
+[data-theme="light"] #modules-external .flex { color: var(--text-secondary); }
 
-/* Badges CVE (vulns) */
-[data-theme="light"] #service-detail-modal .bg-red-500\/10 {
-  background-color: rgba(155, 28, 28, 0.10) !important;
-}
-[data-theme="light"] #service-detail-modal .border-red-500\/30 {
-  border-color: rgba(155, 28, 28, 0.30) !important;
-}
+[data-theme="light"] #modules-internal i[data-lucide],
+[data-theme="light"] #modules-external i[data-lucide] { color: var(--gold-main) !important; opacity: 1 !important; }
 
-/* Pre banner */
-[data-theme="light"] #service-detail-modal pre {
-  background-color: var(--bg-overlay) !important;
-  color: var(--text-secondary) !important;
+[data-theme="light"] #modules-internal span.text-sm,
+[data-theme="light"] #modules-external span.text-sm { color: var(--text-secondary) !important; }
+
+/* Module toggle switches */
+[data-theme="light"] #modules-internal .w-9.h-5,
+[data-theme="light"] #modules-external .w-9.h-5,
+[data-theme="light"] #modules-internal div.w-9,
+[data-theme="light"] #modules-external div.w-9 {
+  background-color: #c8bca0 !important;
+  border: 1px solid var(--border-default);
+}
+[data-theme="light"] #modules-internal input:checked ~ div.w-9,
+[data-theme="light"] #modules-external input:checked ~ div.w-9 { background-color: #1d6fa8 !important; }
+
+/* Lucide icons (global fallback) */
+[data-theme="light"] [data-lucide] { color: var(--text-secondary); }
+
+/* Tabs */
+[data-theme="light"] .argos-tabs-bar,
+[data-theme="light"] #tabs {
+  background-color: var(--bg-surface) !important;
   border-color: var(--border-default) !important;
 }
-
-/* ── text-content-modal (DOM / text viewer) ── */
-[data-theme="light"] #text-content-modal pre,
-[data-theme="light"] #text-modal-content {
-  background-color: var(--bg-overlay) !important;
-  color: var(--text-primary) !important;
-}
-[data-theme="light"] #text-content-modal .text-blue-400 {
-  color: #1d6fa8 !important;
-}
-
-/* ── compare-picker-modal (liste des IOCs à comparer) ── */
-[data-theme="light"] #compare-picker-modal button {
-  color: var(--text-secondary) !important;
-  border-color: var(--border-default) !important;
-}
-[data-theme="light"] #compare-picker-modal button:hover {
+[data-theme="light"] #tabs button,
+[data-theme="light"] .argos-tab { color: var(--text-secondary) !important; }
+[data-theme="light"] #tabs button:hover {
   background-color: var(--bg-hover) !important;
+  color: var(--text-primary) !important;
+}
+[data-theme="light"] #tabs button.bg-slate-700 {
+  background-color: var(--bg-hover) !important;
+  color: var(--gold-main) !important;
+  border-color: var(--border-accent) !important;
+}
+
+/* Panel titles */
+[data-theme="light"] .argos-panel-title.teal   { color: var(--teal-main) !important; }
+[data-theme="light"] .argos-panel-title.gold   { color: var(--gold-main) !important; }
+[data-theme="light"] .argos-panel-title.violet { color: #5b21b6 !important; }
+[data-theme="light"] .argos-panel-title.amber  { color: #92400e !important; }
+
+
+/* ══════════════════════════════════════════════════════
+   5.4  Graph & contextual UI
+   ══════════════════════════════════════════════════════ */
+[data-theme="light"] #cy {
+  background: var(--bg-elevated) !important;
+  border-color: var(--border-default) !important;
+}
+
+[data-theme="light"] #graph-expand-btn {
+  background-color: var(--bg-elevated) !important;
+  border-color: var(--border-default) !important;
+  color: var(--text-secondary) !important;
+}
+[data-theme="light"] #graph-expand-btn:hover {
+  color: #1d6fa8 !important;
+  border-color: #1d6fa8 !important;
+  background-color: var(--bg-hover) !important;
+}
+
+/* Context menu / popovers */
+[data-theme="light"] [id^="ctx-menu"],
+[data-theme="light"] .fixed.bg-slate-900 {
+  background-color: var(--bg-elevated) !important;
+  border-color: var(--border-default) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Job log */
+[data-theme="light"] #job-log {
+  background-color: var(--bg-elevated) !important;
   border-color: var(--border-accent) !important;
   color: var(--text-primary) !important;
 }
-/* badge "enriched" */
-[data-theme="light"] #compare-picker-modal .bg-green-500\/10 {
-  background-color: rgba(22, 101, 52, 0.10) !important;
-  border-color: rgba(22, 101, 52, 0.30) !important;
-  color: #166534 !important;
-}
-/* badge "no data" */
-[data-theme="light"] #compare-picker-modal .border-slate-700 {
-  border-color: var(--border-default) !important;
-  color: var(--text-muted) !important;
+
+
+/* ══════════════════════════════════════════════════════
+   5.5  Settings modal — API keys & quota cards
+   ══════════════════════════════════════════════════════ */
+[data-theme="light"] #settings-modal > div {
+  background-color: var(--bg-elevated) !important;
+  border-color: var(--border-accent) !important;
 }
 
-/* ── compare-result-modal (tableau same/diff/src-only/tgt-only) ── */
-/* Rows same (vert) */
-[data-theme="light"] #compare-result-modal .border-green-500\/20 {
-  background-color: rgba(22, 101, 52, 0.06) !important;
-  border-color: rgba(22, 101, 52, 0.25) !important;
+/* All inputs / textarea / select inside the modal */
+[data-theme="light"] #settings-modal input,
+[data-theme="light"] #settings-modal textarea,
+[data-theme="light"] #settings-modal select,
+[data-theme="light"] .argos-input {
+  background-color: var(--bg-overlay) !important;
+  border-color: var(--border-default) !important;
+  color: var(--text-primary) !important;
 }
-/* Rows diff (amber) */
-[data-theme="light"] #compare-result-modal .border-amber-500\/20 {
-  background-color: rgba(146, 64, 14, 0.06) !important;
-  border-color: rgba(146, 64, 14, 0.25) !important;
+[data-theme="light"] #settings-modal input::placeholder,
+[data-theme="light"] #settings-modal textarea::placeholder { color: var(--text-muted) !important; }
+
+/* Quota card containers */
+[data-theme="light"] #settings-keys .rounded-md.border,
+[data-theme="light"] #settings-keys-internal .rounded-md.border,
+[data-theme="light"] #settings-keys-external .rounded-md.border {
+  background-color: var(--bg-elevated) !important;
+  border-color: var(--border-default) !important;
 }
-/* Rows src-only (bleu) */
-[data-theme="light"] #compare-result-modal .border-blue-500\/20 {
-  background-color: rgba(29, 111, 168, 0.06) !important;
-  border-color: rgba(29, 111, 168, 0.25) !important;
-}
-/* Rows tgt-only (violet) */
-[data-theme="light"] #compare-result-modal .border-violet-500\/20 {
-  background-color: rgba(91, 33, 182, 0.06) !important;
-  border-color: rgba(91, 33, 182, 0.25) !important;
-}
-/* Valeurs mono dans les compare rows */
-[data-theme="light"] #compare-result-modal .text-slate-300 {
+
+/* Progress bar track */
+[data-theme="light"] #settings-keys .bg-slate-800.rounded-full,
+[data-theme="light"] #settings-keys-internal .bg-slate-800.rounded-full,
+[data-theme="light"] #settings-keys-external .bg-slate-800.rounded-full { background-color: var(--bg-hover) !important; }
+
+/* Quota row texts */
+[data-theme="light"] #settings-keys .text-slate-300,
+[data-theme="light"] #settings-keys-internal .text-slate-300,
+[data-theme="light"] #settings-keys-external .text-slate-300 { color: var(--text-primary) !important; }
+
+[data-theme="light"] #settings-keys .text-slate-400,
+[data-theme="light"] #settings-keys-internal .text-slate-400,
+[data-theme="light"] #settings-keys-external .text-slate-400 { color: var(--text-secondary) !important; }
+
+[data-theme="light"] #settings-keys .text-slate-500,
+[data-theme="light"] #settings-keys-internal .text-slate-500,
+[data-theme="light"] #settings-keys-external .text-slate-500,
+[data-theme="light"] #settings-keys .text-slate-600,
+[data-theme="light"] #settings-keys-internal .text-slate-600,
+[data-theme="light"] #settings-keys-external .text-slate-600 { color: var(--text-muted) !important; }
+
+/* Plan badge */
+[data-theme="light"] #settings-keys .bg-slate-700\/40,
+[data-theme="light"] #settings-keys-internal .bg-slate-700\/40,
+[data-theme="light"] #settings-keys-external .bg-slate-700\/40 {
+  background-color: var(--bg-overlay) !important;
+  border-color: var(--border-default) !important;
   color: var(--text-secondary) !important;
 }
-[data-theme="light"] #compare-result-modal .text-slate-700 {
-  color: var(--text-muted) !important;
+
+/* "public / no tracking" row */
+[data-theme="light"] #settings-keys .bg-slate-800\/60,
+[data-theme="light"] #settings-keys-internal .bg-slate-800\/60,
+[data-theme="light"] #settings-keys-external .bg-slate-800\/60 {
+  background-color: var(--bg-elevated) !important;
+  border-color: var(--border-default) !important;
 }
 
-/* Section headers dans compare-result (Same / Different / …) */
-[data-theme="light"] #compare-result-modal .text-green-400 { color: #166534 !important; }
-[data-theme="light"] #compare-result-modal .text-amber-400 { color: #92400e !important; }
-[data-theme="light"] #compare-result-modal .text-blue-400  { color: #1d6fa8 !important; }
-[data-theme="light"] #compare-result-modal .text-violet-400 { color: #5b21b6 !important; }
+/* Badge SET */
+[data-theme="light"] #settings-keys .bg-green-500\/15,
+[data-theme="light"] #settings-keys-internal .bg-green-500\/15,
+[data-theme="light"] #settings-keys-external .bg-green-500\/15 {
+  background-color: rgba(22, 101, 52, 0.12) !important;
+  border-color: rgba(22, 101, 52, 0.3) !important;
+}
+
+/* Badge MISSING */
+[data-theme="light"] #settings-keys .bg-red-500\/15,
+[data-theme="light"] #settings-keys-internal .bg-red-500\/15,
+[data-theme="light"] #settings-keys-external .bg-red-500\/15 {
+  background-color: rgba(155, 28, 28, 0.12) !important;
+  border-color: rgba(155, 28, 28, 0.3) !important;
+}
 
 
-/* ════════════════════════════════════════════════════════════════════════════
-   LIGHT MODE — Boutons "Services" dans #enrich-grid (Shodan / Censys)
-   ════════════════════════════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════
+   5.6  Settings modal — MISP instances
+   ══════════════════════════════════════════════════════ */
 
-/* Bouton service (port/proto + product) */
+/* Add instance button */
+[data-theme="light"] #misp-add-btn {
+  background-color: rgba(194, 120, 30, 0.15) !important;
+  color: #92400e !important;
+  border-color: rgba(146, 64, 14, 0.4) !important;
+}
+[data-theme="light"] #misp-add-btn:hover { background-color: rgba(194, 120, 30, 0.3) !important; }
+
+/* Instance cards */
+[data-theme="light"] #misp-instances-list [data-idx] {
+  background-color: var(--bg-elevated) !important;
+  border-color: var(--border-default) !important;
+}
+
+/* Label field (transparent bg, bottom border only) */
+[data-theme="light"] #misp-instances-list .misp-inst-label {
+  border-bottom-color: var(--border-default) !important;
+  color: var(--text-primary) !important;
+}
+[data-theme="light"] #misp-instances-list .misp-inst-label::placeholder { color: var(--text-muted) !important; }
+
+/* URL and API key inputs */
+[data-theme="light"] #misp-instances-list input.misp-inst-url,
+[data-theme="light"] #misp-instances-list input.misp-inst-key {
+  background-color: var(--bg-overlay) !important;
+  border-color: var(--border-default) !important;
+  color: var(--text-primary) !important;
+}
+[data-theme="light"] #misp-instances-list input.misp-inst-url::placeholder,
+[data-theme="light"] #misp-instances-list input.misp-inst-key::placeholder { color: var(--text-muted) !important; }
+
+/* Internal labels ("URL", "Key") */
+[data-theme="light"] #misp-instances-list .text-slate-500 { color: var(--text-muted) !important; }
+
+/* Delete button */
+[data-theme="light"] #misp-instances-list .misp-del-btn { color: var(--text-muted) !important; }
+[data-theme="light"] #misp-instances-list .misp-del-btn:hover { color: #9b1c1c !important; }
+
+/* Eye (show/hide) button */
+[data-theme="light"] #misp-instances-list .misp-eye-btn { color: var(--text-muted) !important; }
+[data-theme="light"] #misp-instances-list .misp-eye-btn:hover { color: var(--text-secondary) !important; }
+
+/* Explanatory footer text */
+[data-theme="light"] #misp-instances-section p.text-slate-600 { color: var(--text-muted) !important; }
+[data-theme="light"] #misp-instances-section strong.text-slate-500 { color: var(--text-secondary) !important; }
+[data-theme="light"] #misp-instances-section h3 { color: var(--text-muted) !important; }
+
+
+/* ══════════════════════════════════════════════════════
+   5.7  Settings modal — Elasticsearch instances
+   ══════════════════════════════════════════════════════ */
+
+/* Add instance button */
+[data-theme="light"] #es-add-btn {
+  background-color: rgba(14, 116, 144, 0.15) !important;
+  color: #0e5a72 !important;
+  border-color: rgba(14, 116, 144, 0.4) !important;
+}
+[data-theme="light"] #es-add-btn:hover { background-color: rgba(14, 116, 144, 0.28) !important; }
+
+/* Add index button */
+[data-theme="light"] #es-instances-list .es-idx-add-btn { color: #0e7490 !important; }
+[data-theme="light"] #es-instances-list .es-idx-add-btn:hover { color: #0e5a72 !important; }
+
+/* Instance cards */
+[data-theme="light"] #es-instances-list [data-idx] {
+  background-color: var(--bg-elevated) !important;
+  border-color: var(--border-default) !important;
+}
+
+/* Sub-cards (indexes) */
+[data-theme="light"] #es-instances-list .es-idx-list [data-idx] {
+  background-color: var(--bg-overlay) !important;
+  border-color: var(--border-default) !important;
+}
+
+/* All inputs and selects */
+[data-theme="light"] #es-instances-list input,
+[data-theme="light"] #es-instances-list select {
+  background-color: var(--bg-overlay) !important;
+  border-color: var(--border-default) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Separator inside index cards */
+[data-theme="light"] #es-instances-list .border-t { border-color: var(--border-default) !important; }
+
+/* Section texts */
+[data-theme="light"] #es-instances-section .text-slate-400 { color: var(--text-secondary) !important; }
+[data-theme="light"] #es-instances-section .text-slate-500,
+[data-theme="light"] #es-instances-section .text-slate-600 { color: var(--text-muted) !important; }
+[data-theme="light"] #es-instances-section h3 { color: var(--text-muted) !important; }
+
+
+/* ══════════════════════════════════════════════════════
+   5.8  Settings modal — SIEM (QRadar / Splunk / Elasticsearch)
+   ══════════════════════════════════════════════════════ */
+
+/* Shared: Add source/index buttons */
+[data-theme="light"] #siem-add-btn-qradar,
+[data-theme="light"] #siem-add-btn-splunk,
+[data-theme="light"] #siem-add-btn-elasticsearch {
+  background-color: rgba(42, 112, 112, 0.15) !important;
+  color: var(--teal-main) !important;
+  border-color: rgba(42, 112, 112, 0.4) !important;
+}
+[data-theme="light"] #siem-add-btn-qradar:hover,
+[data-theme="light"] #siem-add-btn-splunk:hover,
+[data-theme="light"] #siem-add-btn-elasticsearch:hover { background-color: rgba(42, 112, 112, 0.28) !important; }
+
+/* Shared: source/index cards */
+[data-theme="light"] #siem-sources-list-qradar [data-idx],
+[data-theme="light"] #siem-sources-list-splunk [data-idx],
+[data-theme="light"] #siem-sources-list-elasticsearch [data-idx] {
+  background-color: var(--bg-elevated) !important;
+  border-color: var(--border-default) !important;
+}
+
+/* Shared: name field (transparent bg + bottom border) */
+[data-theme="light"] #siem-sources-list-qradar .siem-src-name,
+[data-theme="light"] #siem-sources-list-splunk .siem-src-name,
+[data-theme="light"] #siem-sources-list-elasticsearch .siem-src-name {
+  border-bottom-color: var(--border-default) !important;
+  color: var(--text-primary) !important;
+}
+[data-theme="light"] #siem-sources-list-qradar .siem-src-name::placeholder,
+[data-theme="light"] #siem-sources-list-splunk .siem-src-name::placeholder,
+[data-theme="light"] #siem-sources-list-elasticsearch .siem-src-name::placeholder { color: var(--text-muted) !important; }
+
+/* Shared: all other inputs and selects */
+[data-theme="light"] #siem-sources-list-qradar input,
+[data-theme="light"] #siem-sources-list-qradar select,
+[data-theme="light"] #siem-sources-list-splunk input,
+[data-theme="light"] #siem-sources-list-splunk select,
+[data-theme="light"] #siem-sources-list-elasticsearch input,
+[data-theme="light"] #siem-sources-list-elasticsearch select {
+  background-color: var(--bg-overlay) !important;
+  border-color: var(--border-default) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Shared: internal labels, section titles */
+[data-theme="light"] #siem-sources-list-qradar .text-slate-500,
+[data-theme="light"] #siem-sources-list-qradar .text-slate-600,
+[data-theme="light"] #siem-sources-list-splunk .text-slate-500,
+[data-theme="light"] #siem-sources-list-splunk .text-slate-600,
+[data-theme="light"] #siem-sources-list-elasticsearch .text-slate-500,
+[data-theme="light"] #siem-sources-list-elasticsearch .text-slate-600 { color: var(--text-muted) !important; }
+
+[data-theme="light"] #siem-sources-section-qradar h3,
+[data-theme="light"] #siem-sources-section-qradar .text-slate-600,
+[data-theme="light"] #siem-sources-section-splunk h3,
+[data-theme="light"] #siem-sources-section-splunk .text-slate-600,
+[data-theme="light"] #siem-sources-section-elasticsearch h3 { color: var(--text-muted) !important; }
+
+/* Shared: delete buttons */
+[data-theme="light"] #siem-sources-list-qradar .siem-del-btn,
+[data-theme="light"] #siem-sources-list-splunk .siem-del-btn,
+[data-theme="light"] #siem-sources-list-elasticsearch .siem-del-btn { color: var(--text-muted) !important; }
+[data-theme="light"] #siem-sources-list-qradar .siem-del-btn:hover,
+[data-theme="light"] #siem-sources-list-splunk .siem-del-btn:hover,
+[data-theme="light"] #siem-sources-list-elasticsearch .siem-del-btn:hover { color: #9b1c1c !important; }
+
+
+/* ══════════════════════════════════════════════════════
+   5.9  Enrich grid & enrichment boxes
+   ══════════════════════════════════════════════════════ */
+[data-theme="light"] .rounded-lg.border {
+  background-color: var(--bg-elevated) !important;
+  border-color: var(--border-default) !important;
+}
+[data-theme="light"] .rounded-lg.border button:hover,
+[data-theme="light"] .rounded-lg.border button:focus { background-color: var(--bg-hover) !important; }
+
+[data-theme="light"] #enrich-grid { color: var(--text-primary); }
+[data-theme="light"] #enrich-grid .text-slate-400,
+[data-theme="light"] #enrich-grid .text-slate-500,
+[data-theme="light"] #enrich-grid .text-slate-600 { color: var(--text-muted) !important; }
+
+/* Service buttons (Shodan/Censys) */
 [data-theme="light"] #enrich-grid button.bg-slate-900\/40 {
   background-color: var(--bg-elevated) !important;
   border-color: var(--border-default) !important;
@@ -1308,292 +992,205 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { filter: invert
   background-color: var(--bg-hover) !important;
   border-color: var(--border-accent) !important;
 }
+[data-theme="light"] #enrich-grid button .text-slate-400 { color: var(--text-secondary) !important; }
 
-/* Port/proto (text-cyan-400) → bleu foncé lisible */
-[data-theme="light"] #enrich-grid .text-cyan-400 {
-  color: #0e7490 !important;
+/* Specific badges in enrich grid */
+[data-theme="light"] #enrich-grid .text-cyan-400   { color: #0e7490 !important; }
+[data-theme="light"] #enrich-grid .text-amber-500\/70 { color: #92400e !important; opacity: 1 !important; }
+[data-theme="light"] #enrich-grid .text-cyan-500\/70  { color: #0e7490 !important; opacity: 1 !important; }
+[data-theme="light"] #enrich-grid .text-red-400    { color: #9b1c1c !important; }
+[data-theme="light"] #enrich-grid .text-cyan-600   { color: #0e7490 !important; }
+[data-theme="light"] #enrich-grid .text-slate-600  { color: var(--text-muted) !important; }
+
+
+/* ══════════════════════════════════════════════════════
+   5.10 Enrichment modals
+        (service-detail, text-content, compare-picker,
+         compare-result, screenshot)
+   ══════════════════════════════════════════════════════ */
+
+/* Inner box */
+[data-theme="light"] #service-detail-modal > div,
+[data-theme="light"] #text-content-modal > div,
+[data-theme="light"] #compare-picker-modal > div,
+[data-theme="light"] #compare-result-modal > div {
+  background-color: var(--bg-elevated) !important;
+  border-color: var(--border-default) !important;
+  color: var(--text-primary) !important;
 }
 
-/* Nom du product (text-slate-400) */
-[data-theme="light"] #enrich-grid button .text-slate-400 {
+/* Header bar */
+[data-theme="light"] #service-detail-modal .border-b,
+[data-theme="light"] #text-content-modal .border-b,
+[data-theme="light"] #compare-picker-modal .border-b,
+[data-theme="light"] #compare-result-modal .border-b {
+  border-color: var(--border-default) !important;
+  background-color: var(--bg-surface, var(--bg-elevated)) !important;
+}
+
+/* Titles */
+[data-theme="light"] #service-detail-modal .text-slate-200,
+[data-theme="light"] #service-detail-modal .text-white,
+[data-theme="light"] #text-content-modal .text-slate-200,
+[data-theme="light"] #text-content-modal .text-white,
+[data-theme="light"] #compare-picker-modal .text-slate-200,
+[data-theme="light"] #compare-result-modal .text-slate-200 { color: var(--text-primary) !important; }
+
+/* Muted text */
+[data-theme="light"] #service-detail-modal .text-slate-400,
+[data-theme="light"] #service-detail-modal .text-slate-500,
+[data-theme="light"] #service-detail-modal .text-slate-600,
+[data-theme="light"] #text-content-modal .text-slate-400,
+[data-theme="light"] #text-content-modal .text-slate-500,
+[data-theme="light"] #compare-picker-modal .text-slate-400,
+[data-theme="light"] #compare-picker-modal .text-slate-500,
+[data-theme="light"] #compare-result-modal .text-slate-400,
+[data-theme="light"] #compare-result-modal .text-slate-500,
+[data-theme="light"] #compare-result-modal .text-slate-600 { color: var(--text-muted) !important; }
+
+/* Close buttons */
+[data-theme="light"] #service-detail-modal button.text-slate-500,
+[data-theme="light"] #text-content-modal button.text-slate-500,
+[data-theme="light"] #compare-picker-modal button.text-slate-500,
+[data-theme="light"] #compare-result-modal button.text-slate-500 { color: var(--text-muted) !important; }
+[data-theme="light"] #service-detail-modal button.hover\:text-white:hover,
+[data-theme="light"] #text-content-modal button.hover\:text-white:hover,
+[data-theme="light"] #compare-picker-modal button.hover\:text-white:hover,
+[data-theme="light"] #compare-result-modal button.hover\:text-white:hover { color: var(--text-primary) !important; }
+
+/* Internal sections (service-detail) */
+[data-theme="light"] #service-detail-modal .bg-slate-900\/40,
+[data-theme="light"] #service-detail-modal .bg-slate-900\/60,
+[data-theme="light"] #service-detail-modal .bg-slate-900 { background-color: var(--bg-overlay) !important; }
+[data-theme="light"] #service-detail-modal .border-slate-700,
+[data-theme="light"] #service-detail-modal .border-slate-800 { border-color: var(--border-default) !important; }
+[data-theme="light"] #service-detail-modal .text-teal-400 { color: var(--teal-main) !important; }
+[data-theme="light"] #service-detail-modal .bg-slate-900\/30 { background-color: rgba(200, 190, 164, 0.25) !important; }
+
+/* Compare-result section headers */
+[data-theme="light"] #compare-result-modal .text-slate-700 { color: var(--text-muted) !important; }
+[data-theme="light"] #compare-result-modal .text-green-400 { color: #166534 !important; }
+[data-theme="light"] #compare-result-modal .text-amber-400 { color: #92400e !important; }
+[data-theme="light"] #compare-result-modal .text-blue-400  { color: #1d6fa8 !important; }
+[data-theme="light"] #compare-result-modal .text-violet-400 { color: #5b21b6 !important; }
+
+
+/* ══════════════════════════════════════════════════════
+   5.11 SIEM investigation panel (right navbar)
+   ══════════════════════════════════════════════════════ */
+[data-theme="light"] #siem-container > div {
+  background-color: var(--bg-elevated) !important;
+  border-color: var(--border-default) !important;
+}
+
+/* Type picker pill bar */
+[data-theme="light"] #siem-container .flex.p-1.bg-slate-900.rounded-md {
+  background-color: var(--bg-overlay) !important;
+  border-color: var(--border-default) !important;
+}
+[data-theme="light"] #siem-container label.text-slate-400 { color: var(--text-muted) !important; }
+[data-theme="light"] #siem-container label.hover\:text-slate-200:hover { color: var(--text-primary) !important; }
+
+/* "soon" badge */
+[data-theme="light"] #siem-container .bg-slate-700.text-slate-400 {
+  background-color: var(--bg-hover) !important;
+  color: var(--text-muted) !important;
+}
+
+/* Warning banner (token missing) */
+[data-theme="light"] #siem-container .bg-amber-500\/10 {
+  background-color: rgba(146, 64, 14, 0.1) !important;
+  border-color: rgba(146, 64, 14, 0.25) !important;
+}
+[data-theme="light"] #siem-container .text-amber-400\/80 { color: #92400e !important; }
+
+/* Date inputs */
+[data-theme="light"] #siem-container input[type="datetime-local"] {
+  background-color: var(--bg-overlay) !important;
+  border-color: var(--border-default) !important;
+  color: var(--text-primary) !important;
+  color-scheme: light;
+}
+[data-theme="light"] #siem-container input[type="datetime-local"]::-webkit-calendar-picker-indicator { filter: none; }
+
+/* Scope toggle (All IOCs / Current IOC) */
+[data-theme="light"] #siem-container .flex.p-1.bg-slate-900.rounded-md.border {
+  background-color: var(--bg-overlay) !important;
+  border-color: var(--border-default) !important;
+}
+[data-theme="light"] #siem-container .bg-teal-600\/80 {
+  background-color: rgba(26, 82, 82, 0.8) !important;
+}
+
+/* SIEM row */
+[data-theme="light"] #siem-row {
+  background: var(--glass-bg) !important;
+  border-color: var(--glass-border) !important;
+}
+[data-theme="light"] #siem-row h3 { color: var(--text-primary) !important; }
+[data-theme="light"] #siem-row .text-slate-600,
+[data-theme="light"] #siem-results-panel { color: var(--text-muted) !important; }
+[data-theme="light"] #siem-row button.text-slate-600 { color: var(--text-muted) !important; }
+[data-theme="light"] #siem-row button.hover\:text-teal-400:hover { color: var(--teal-main) !important; }
+
+/* Result cards */
+[data-theme="light"] #siem-results-panel .bg-slate-900,
+[data-theme="light"] #siem-results-panel .bg-slate-800 {
+  background-color: var(--bg-elevated) !important;
+  border-color: var(--border-default) !important;
+}
+[data-theme="light"] #siem-results-panel .text-slate-300,
+[data-theme="light"] #siem-results-panel .text-slate-200 { color: var(--text-primary) !important; }
+[data-theme="light"] #siem-results-panel .text-slate-400,
+[data-theme="light"] #siem-results-panel .text-slate-500,
+[data-theme="light"] #siem-results-panel .text-slate-600 { color: var(--text-muted) !important; }
+[data-theme="light"] #siem-results-panel .border-slate-700,
+[data-theme="light"] #siem-results-panel .border-slate-800 { border-color: var(--border-default) !important; }
+[data-theme="light"] #siem-results-panel pre {
+  background-color: var(--bg-overlay) !important;
   color: var(--text-secondary) !important;
 }
 
-/* Badge source SHD (text-amber-500/70) */
-[data-theme="light"] #enrich-grid .text-amber-500\/70 {
-  color: #92400e !important;
-  opacity: 1 !important;
+
+/* ══════════════════════════════════════════════════════
+   5.12 Correlation / pivot panels
+   ══════════════════════════════════════════════════════ */
+
+/* Block backgrounds */
+[data-theme="light"] .bg-slate-900\/30 { background-color: rgba(200, 190, 164, 0.25) !important; }
+
+/* Toggle tracks (OFF state) */
+[data-theme="light"] #pivot-container .w-8.h-4,
+[data-theme="light"] #correlation-container .w-8.h-4 {
+  background-color: #c8bca0 !important;
+  border: 1px solid var(--border-default);
 }
 
-/* Badge source CSY (text-cyan-500/70) */
-[data-theme="light"] #enrich-grid .text-cyan-500\/70 {
-  color: #0e7490 !important;
-  opacity: 1 !important;
-}
+/* Toggle tracks (ON state) */
+[data-theme="light"] #pivot-container label:has(input:checked) .w-8.h-4 { background-color: #b45309 !important; }
+[data-theme="light"] #correlation-container label:has(input:checked) .w-8.h-4 { background-color: #6d28d9 !important; }
 
-/* Badge CVE count (text-red-400) */
-[data-theme="light"] #enrich-grid .text-red-400 {
-  color: #9b1c1c !important;
-}
+/* Toggle thumbs */
+[data-theme="light"] #pivot-container .w-3.h-3,
+[data-theme="light"] #correlation-container .w-3.h-3 { background-color: #ffffff !important; }
 
-/* Badge TLS (text-cyan-600) */
-[data-theme="light"] #enrich-grid .text-cyan-600 {
-  color: #0e7490 !important;
-}
+/* Range / checkbox accent colors */
+[data-theme="light"] input[type="range"]    { accent-color: var(--gold-main); }
+[data-theme="light"] input[type="checkbox"] { accent-color: var(--gold-main); }
 
-/* Overflow "+N more" */
-[data-theme="light"] #enrich-grid .text-slate-600 {
-  color: var(--text-muted) !important;
-}
-
-/* ── Light mode : settings — ES Instances ── */
-
-/* Bouton "Add instance" */
-[data-theme="light"] #es-add-btn {
-  background-color: rgba(14, 116, 144, 0.15) !important;
-  color: #0e5a72 !important;
-  border-color: rgba(14, 116, 144, 0.4) !important;
-}
-[data-theme="light"] #es-add-btn:hover {
-  background-color: rgba(14, 116, 144, 0.28) !important;
-}
-
-/* Boutons "Add index" (inline text-button) */
-[data-theme="light"] #es-instances-list .es-idx-add-btn {
-  color: #0e7490 !important;
-}
-[data-theme="light"] #es-instances-list .es-idx-add-btn:hover {
-  color: #0e5a72 !important;
-}
-
-/* Cartes instance */
-[data-theme="light"] #es-instances-list [data-idx] {
-  background-color: var(--bg-elevated) !important;
-  border-color: var(--border-default) !important;
-}
-
-/* Sous-cartes index */
-[data-theme="light"] #es-instances-list .es-idx-list [data-idx] {
-  background-color: var(--bg-overlay) !important;
-  border-color: var(--border-default) !important;
-}
-
-/* Champs input dans les instances ES (url, key, user, pass, idx-name, output-fields) */
-[data-theme="light"] #es-instances-list input.es-inst-url,
-[data-theme="light"] #es-instances-list input.es-inst-key,
-[data-theme="light"] #es-instances-list input.es-inst-user,
-[data-theme="light"] #es-instances-list input.es-inst-pass,
-[data-theme="light"] #es-instances-list input.es-idx-name,
-[data-theme="light"] #es-instances-list input.es-idx-output-fields {
-  background-color: var(--bg-overlay) !important;
-  border-color: var(--border-default) !important;
-  color: var(--text-primary) !important;
-}
-
-/* Champ search_field — spécifiquement mentionné */
-[data-theme="light"] #es-instances-list input.es-idx-search-field {
-  background-color: var(--bg-overlay) !important;
-  border-color: var(--border-default) !important;
-  color: var(--text-primary) !important;
-}
-
-/* Select IOC Type */
-[data-theme="light"] #es-instances-list select.es-idx-ioc-type {
-  background-color: var(--bg-overlay) !important;
-  border-color: var(--border-default) !important;
-  color: var(--text-primary) !important;
-}
-
-/* Label "Indexes" + sous-section border */
-[data-theme="light"] #es-instances-list .border-t {
-  border-color: var(--border-default) !important;
-}
-
-/* Textes muted dans les cartes ES */
-[data-theme="light"] #es-instances-section .text-slate-500,
-[data-theme="light"] #es-instances-section .text-slate-600 {
-  color: var(--text-muted) !important;
-}
-[data-theme="light"] #es-instances-section .text-slate-400 {
-  color: var(--text-secondary) !important;
-}
-
-/* Titre de section */
-[data-theme="light"] #es-instances-section h3 {
-  color: var(--text-muted) !important;
-}
-
-/* ── Light mode : settings — ES Instances (Internal) ── */
-[data-theme="light"] #es-add-btn {
-  background-color: rgba(14, 116, 144, 0.15) !important;
-  color: #0e5a72 !important;
-  border-color: rgba(14, 116, 144, 0.4) !important;
-}
-[data-theme="light"] #es-add-btn:hover {
-  background-color: rgba(14, 116, 144, 0.28) !important;
-}
-[data-theme="light"] #es-instances-list .es-idx-add-btn {
-  color: #0e7490 !important;
-}
-[data-theme="light"] #es-instances-list .es-idx-add-btn:hover {
-  color: #0e5a72 !important;
-}
-[data-theme="light"] #es-instances-list [data-idx] {
-  background-color: var(--bg-elevated) !important;
-  border-color: var(--border-default) !important;
-}
-[data-theme="light"] #es-instances-list .es-idx-list [data-idx] {
-  background-color: var(--bg-overlay) !important;
-  border-color: var(--border-default) !important;
-}
-[data-theme="light"] #es-instances-list input,
-[data-theme="light"] #es-instances-list select {
-  background-color: var(--bg-overlay) !important;
-  border-color: var(--border-default) !important;
-  color: var(--text-primary) !important;
-}
-[data-theme="light"] #es-instances-list .border-t {
-  border-color: var(--border-default) !important;
-}
-[data-theme="light"] #es-instances-section .text-slate-500,
-[data-theme="light"] #es-instances-section .text-slate-600 {
-  color: var(--text-muted) !important;
-}
-[data-theme="light"] #es-instances-section h3 {
-  color: var(--text-muted) !important;
-}
-
-/* ── Light mode : SIEM block Elasticsearch (col SIEM, Add logsource btn) ── */
-[data-theme="light"] #siem-add-btn-elasticsearch {
-  background-color: rgba(42, 112, 112, 0.15) !important;
-  color: var(--teal-main) !important;
-  border-color: rgba(42, 112, 112, 0.4) !important;
-}
-[data-theme="light"] #siem-add-btn-elasticsearch:hover {
-  background-color: rgba(42, 112, 112, 0.28) !important;
-}
-[data-theme="light"] #siem-sources-list-elasticsearch [data-idx] {
-  background-color: var(--bg-elevated) !important;
-  border-color: var(--border-default) !important;
-}
-[data-theme="light"] #siem-sources-list-elasticsearch input,
-[data-theme="light"] #siem-sources-list-elasticsearch select {
-  background-color: var(--bg-overlay) !important;
-  border-color: var(--border-default) !important;
-  color: var(--text-primary) !important;
-}
-
-/* ── Light mode : SIEM block QRadar (col SIEM — LogSources) ── */
-
-/* Bouton "Add" LogSource */
-[data-theme="light"] #siem-add-btn-qradar {
-  background-color: rgba(42, 112, 112, 0.15) !important;
-  color: var(--teal-main) !important;
-  border-color: rgba(42, 112, 112, 0.4) !important;
-}
-[data-theme="light"] #siem-add-btn-qradar:hover {
-  background-color: rgba(42, 112, 112, 0.28) !important;
-}
-
-/* Cartes de logsource */
-[data-theme="light"] #siem-sources-list-qradar [data-idx] {
-  background-color: var(--bg-elevated) !important;
-  border-color: var(--border-default) !important;
-}
-
-/* Champ nom (bg-transparent border-b border-slate-700) */
-[data-theme="light"] #siem-sources-list-qradar .siem-src-name {
-  border-bottom-color: var(--border-default) !important;
-  color: var(--text-primary) !important;
-}
-[data-theme="light"] #siem-sources-list-qradar .siem-src-name::placeholder {
-  color: var(--text-muted) !important;
-}
-
-/* Tous les inputs texte de la ligne (search_field, output_fields) */
-[data-theme="light"] #siem-sources-list-qradar input,
-[data-theme="light"] #siem-sources-list-qradar select {
-  background-color: var(--bg-overlay) !important;
-  border-color: var(--border-default) !important;
-  color: var(--text-primary) !important;
-}
-
-/* Labels internes */
-[data-theme="light"] #siem-sources-list-qradar .text-slate-500,
-[data-theme="light"] #siem-sources-list-qradar .text-slate-600 {
-  color: var(--text-muted) !important;
-}
-
-/* Bouton suppression logsource */
-[data-theme="light"] #siem-sources-list-qradar .siem-del-btn {
-  color: var(--text-muted) !important;
-}
-[data-theme="light"] #siem-sources-list-qradar .siem-del-btn:hover {
-  color: #9b1c1c !important;
-}
-
-/* Titre section "LogSources" */
-[data-theme="light"] #siem-sources-section-qradar h3 {
-  color: var(--text-muted) !important;
-}
-[data-theme="light"] #siem-sources-section-qradar .text-slate-600 {
-  color: var(--text-muted) !important;
-}
+[data-theme="light"] #pivot-container input[type="range"],
+[data-theme="light"] #pivot-container input[type="checkbox"]       { accent-color: #b45309 !important; }
+[data-theme="light"] #correlation-container input[type="range"],
+[data-theme="light"] #correlation-container input[type="checkbox"] { accent-color: #6d28d9 !important; }
 
 
-/* ── Light mode : SIEM block Splunk (col SIEM — Indexes) ── */
+/* ══════════════════════════════════════════════════════
+   5.13 Miscellaneous
+   ══════════════════════════════════════════════════════ */
 
-/* Bouton "Add" Index */
-[data-theme="light"] #siem-add-btn-splunk {
-  background-color: rgba(42, 112, 112, 0.15) !important;
-  color: var(--teal-main) !important;
-  border-color: rgba(42, 112, 112, 0.4) !important;
-}
-[data-theme="light"] #siem-add-btn-splunk:hover {
-  background-color: rgba(42, 112, 112, 0.28) !important;
-}
+/* Sidebar section headers */
+[data-theme="light"] #modules-internal .flex,
+[data-theme="light"] #modules-external .flex { color: var(--text-secondary); }
 
-/* Cartes d'index */
-[data-theme="light"] #siem-sources-list-splunk [data-idx] {
-  background-color: var(--bg-elevated) !important;
-  border-color: var(--border-default) !important;
-}
-
-/* Champ nom (bg-transparent border-b border-slate-700) */
-[data-theme="light"] #siem-sources-list-splunk .siem-src-name {
-  border-bottom-color: var(--border-default) !important;
-  color: var(--text-primary) !important;
-}
-[data-theme="light"] #siem-sources-list-splunk .siem-src-name::placeholder {
-  color: var(--text-muted) !important;
-}
-
-/* Inputs texte et select (search_field, output_fields, ioc_type) */
-[data-theme="light"] #siem-sources-list-splunk input,
-[data-theme="light"] #siem-sources-list-splunk select {
-  background-color: var(--bg-overlay) !important;
-  border-color: var(--border-default) !important;
-  color: var(--text-primary) !important;
-}
-
-/* Labels internes */
-[data-theme="light"] #siem-sources-list-splunk .text-slate-500,
-[data-theme="light"] #siem-sources-list-splunk .text-slate-600 {
-  color: var(--text-muted) !important;
-}
-
-/* Bouton suppression */
-[data-theme="light"] #siem-sources-list-splunk .siem-del-btn {
-  color: var(--text-muted) !important;
-}
-[data-theme="light"] #siem-sources-list-splunk .siem-del-btn:hover {
-  color: #9b1c1c !important;
-}
-
-/* Titre section "Indexes" */
-[data-theme="light"] #siem-sources-section-splunk h3 {
-  color: var(--text-muted) !important;
-}
-[data-theme="light"] #siem-sources-section-splunk .text-slate-600 {
-  color: var(--text-muted) !important;
-}
+/* Enrich boxes — hover buttons */
+[data-theme="light"] .argos-enrich-box button:hover { background-color: var(--bg-hover) !important; }
