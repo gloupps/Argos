@@ -92,6 +92,15 @@ window.SIEMInstances = {
                         ${typeOptions}
                     </select>
                 </div>
+                <!-- Search field -->
+                <div class="flex items-center gap-2 pl-5">
+                    <label class="text-[10px] text-slate-500 w-16 shrink-0">Search field</label>
+                    <input type="text"
+                           class="siem-src-search-field flex-1 bg-slate-800/60 border border-slate-700 rounded
+                                  px-2 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-teal-500"
+                           placeholder="e.g. src_ip, query, sha256 (blank = auto)"
+                           value="${this._esc(src.search_field || '')}">
+                </div>
                 <!-- Output fields -->
                 <div class="flex items-center gap-2 pl-5">
                     <label class="text-[10px] text-slate-500 w-16 shrink-0">Output fields</label>
@@ -137,6 +146,7 @@ window.SIEMInstances = {
             const id           = row.querySelector(".siem-src-id")?.value.trim();
             const name         = row.querySelector(".siem-src-name")?.value.trim();
             const ioc_type     = row.querySelector(".siem-src-ioc-type")?.value;
+            const search_field = row.querySelector(".siem-src-search-field")?.value.trim() || "",
             const output_fields = row.querySelector(".siem-src-fields")?.value.trim();
             if (!name) return;
             updated.push({ id: id || `src${Date.now()}`, name, ioc_type, output_fields });
