@@ -1422,3 +1422,63 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { filter: invert
 [data-theme="light"] #es-instances-section h3 {
   color: var(--text-muted) !important;
 }
+
+/* ── Light mode : settings — ES Instances (Internal) ── */
+[data-theme="light"] #es-add-btn {
+  background-color: rgba(14, 116, 144, 0.15) !important;
+  color: #0e5a72 !important;
+  border-color: rgba(14, 116, 144, 0.4) !important;
+}
+[data-theme="light"] #es-add-btn:hover {
+  background-color: rgba(14, 116, 144, 0.28) !important;
+}
+[data-theme="light"] #es-instances-list .es-idx-add-btn {
+  color: #0e7490 !important;
+}
+[data-theme="light"] #es-instances-list .es-idx-add-btn:hover {
+  color: #0e5a72 !important;
+}
+[data-theme="light"] #es-instances-list [data-idx] {
+  background-color: var(--bg-elevated) !important;
+  border-color: var(--border-default) !important;
+}
+[data-theme="light"] #es-instances-list .es-idx-list [data-idx] {
+  background-color: var(--bg-overlay) !important;
+  border-color: var(--border-default) !important;
+}
+[data-theme="light"] #es-instances-list input,
+[data-theme="light"] #es-instances-list select {
+  background-color: var(--bg-overlay) !important;
+  border-color: var(--border-default) !important;
+  color: var(--text-primary) !important;
+}
+[data-theme="light"] #es-instances-list .border-t {
+  border-color: var(--border-default) !important;
+}
+[data-theme="light"] #es-instances-section .text-slate-500,
+[data-theme="light"] #es-instances-section .text-slate-600 {
+  color: var(--text-muted) !important;
+}
+[data-theme="light"] #es-instances-section h3 {
+  color: var(--text-muted) !important;
+}
+
+/* ── Light mode : SIEM block Elasticsearch (col SIEM, Add logsource btn) ── */
+[data-theme="light"] #siem-add-btn-elasticsearch {
+  background-color: rgba(42, 112, 112, 0.15) !important;
+  color: var(--teal-main) !important;
+  border-color: rgba(42, 112, 112, 0.4) !important;
+}
+[data-theme="light"] #siem-add-btn-elasticsearch:hover {
+  background-color: rgba(42, 112, 112, 0.28) !important;
+}
+[data-theme="light"] #siem-sources-list-elasticsearch [data-idx] {
+  background-color: var(--bg-elevated) !important;
+  border-color: var(--border-default) !important;
+}
+[data-theme="light"] #siem-sources-list-elasticsearch input,
+[data-theme="light"] #siem-sources-list-elasticsearch select {
+  background-color: var(--bg-overlay) !important;
+  border-color: var(--border-default) !important;
+  color: var(--text-primary) !important;
+}
