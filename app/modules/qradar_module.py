@@ -220,12 +220,60 @@ class QRadarModule(Module):
                     results,
                 )
             )
+            
+        # ── Flows : toujours exécuté pour les IPs
+        ip_values = dict_indicators.get("IPv4-Addr", [])
+        if ip_values:
+            tasks.append(
+                self._query_flows(base, token, ip_values, tc, results)
+            )
+            
 
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 
         return clean_results(results)
 
+    
+    # ─────────────────────────────────────────────────────
+    # Flows — toujours exécuté pour IPv4
+    # ─────────────────────────────────────────────────────
+
+    async def _query_flows(
+        self,
+        base: str,
+        token: str,
+        ip_values: List[str],
+        tc: str,
+        results: Dict,
+    ) -> None:
+        fmt_vals = _fmt(ip_values)
+
+        aql = (
+            f'SELECT '
+            f'  "sourceIP", '
+            f'  "destinationIP", '
+            f'  DATEFORMAT(startTime, \'YYYY-MM-dd HH:mm\') as \'startTime\', '
+            f'  "flowInterface" AS \'Interface\', '
+            f'  QIDNAME(qid) as \'EventName\' '
+            f'FROM flows '
+            f'WHERE ("sourceIP" IN ({fmt_vals}) OR "destinationIP" IN ({fmt_vals})) '
+            f'ORDER BY startTime DESC '
+            f'{tc}'
+        )
+
+        rows = await self._run_aql(base, token, aql) or []
+
+        for val in ip_values:
+            val_rows = [
+                r for r in rows
+                if r.get("sourceIP") == val or r.get("destinationIP") == val
+            ]
+            results.setdefault(val, {})["qradar:flows"] = {
+                "events": len(val_rows),
+                "rows":   val_rows,
+            }
+    
     # ─────────────────────────────────────────────────────
     # Core query — 1 AQL per (logsource × ioc_type)
     # ─────────────────────────────────────────────────────
