@@ -95,29 +95,34 @@ window.Settings = {
         // Internal + External via renderSettingsKeys (inchangé)
         Modules?.renderSettingsKeys?.();
 
-        const qradarMod = Object.values(Modules?.registry || {}).find(m => m.key === "qradar");
-        const splunkMod = Object.values(Modules?.registry || {}).find(m => m.key === "splunk");
-
         const qradarBlockEl = document.getElementById("siem-block-qradar");
         const splunkBlockEl = document.getElementById("siem-block-splunk");
 
-        if (qradarMod && qradarBlockEl) {
-            qradarBlockEl.appendChild(Modules._buildSettingsCard(qradarMod, true));
+        const qradarMod = Object.values(Modules?.registry || {}).find(m => m.key === "qradar");
+        if (qradarMod) {
+            const card = Modules._buildSettingsCard(qradarMod, true);
             siemSourcesQradar.className = "mt-3";
-            qradarBlockEl.appendChild(siemSourcesQradar);
+            card.appendChild(siemSourcesQradar);
+            qradarBlockEl?.appendChild(card);
+        } else {
+            qradarBlockEl?.appendChild(siemSourcesQradar);
         }
 
-        if (splunkMod && splunkBlockEl) {
-            splunkBlockEl.appendChild(Modules._buildSettingsCard(splunkMod, true));
+        const splunkMod = Object.values(Modules?.registry || {}).find(m => m.key === "splunk");
+        if (splunkMod) {
+            const card = Modules._buildSettingsCard(splunkMod, true);
             siemSourcesSplunk.className = "mt-3";
-            splunkBlockEl.appendChild(siemSourcesSplunk);
+            card.appendChild(siemSourcesSplunk);
+            splunkBlockEl?.appendChild(card);
+        } else {
+            splunkBlockEl?.appendChild(siemSourcesSplunk);
         }
 
         // MISP
         document.getElementById("misp-instances-section")?.remove();
         MISPInstances?.render?.(colMisp);
 
-        // Sources SIEM
+        // Sources SIEM — render dans les conteneurs déjà dans le DOM
         document.getElementById(`siem-sources-section-qradar`)?.remove();
         document.getElementById(`siem-sources-section-splunk`)?.remove();
         SIEMInstances?.render?.(siemSourcesQradar, "qradar");
