@@ -21,7 +21,7 @@ window.EnrichPanel = {
         return { virustotal:"shield", shodan:"radar", abuseipdb:"ban",
             urlscan:"scan-eye", viewdns:"globe", opencti:"database", misp:"share-2",
             threatfox:"bug", elasticsearch:"database", censys:"scan-line",
-            hurricane_electric:"network", phishtank:"fish", anyrun:"flask-conical" }[k] || "box";
+            hurricane_electric:"network"}[k] || "box";
     },
 
     _isEmpty(v) {
@@ -427,28 +427,6 @@ window.EnrichPanel = {
         "MX Records":           "dns",
         "Resolved IPs":         "dns",
 
-        // ── PhishTank ────────────────────────────────────
-        "In PhishTank DB":      "threat",
-        "Verified Phish":       "threat",
-        "Still Online":         "threat",
-        "PhishTank ID":         "threat",
-        "Phishing Target":      "threat",
-        "Submitted":            "host",
-        "Verified At":          "host",
-
-        // ── ANY.RUN ──────────────────────────────────────
-        "Total Analyses":       "threat",
-        "Malicious Reports":    "threat",
-        "Suspicious Reports":   "threat",
-        "Latest Verdict":       "threat",
-        "Latest Analysis":      "host",
-        "Threat Score":         "threat",
-        "MITRE ATT&CK":         "threat",
-        "Sandbox OS":           "host",
-        "AR Contacted IPs":        "vt_refs",
-        "AR Contacted Domains":    "vt_refs",
-        "AR Dropped Files":        "vt_refs",
-        "Full Report":          "host",
     },
     _getTheme(name) { return this._THEME_MAP[name] || "other"; },
 
@@ -663,12 +641,9 @@ window.EnrichPanel = {
                         "Malicious", "Suspicious",
                         "Malicious Reports", "Suspicious Reports",
                     ].includes(field.name);
-                    const isYesDanger = [
-                        "In PhishTank DB", "Verified Phish", "Still Online",
-                    ].includes(field.name) && String(field.value) === "Yes";
                     const isAmber = [
                         "Threat Actors", "MITRE ATT&CK", "Malware Family",
-                        "Latest Verdict", "Phishing Target",
+                        "Latest Verdict",
                     ].includes(field.name);
                     const cls = (isThreatCount && !isNaN(num) && num > 0) || isYesDanger
                         ? "text-red-400 font-bold"
@@ -1464,8 +1439,7 @@ window.EnrichPanel = {
     _COMPARE_SKIP: new Set([
         "malicious", "suspicious", "reputation", "misp_link", "link", "Labels", "Domain Count", "In OpenCTI", "Last Seen", "Detection",
         "MISP Link", "Malicious", "Suspicious", "Reputation", "Censys Host", "Tags", "Last Scanned", "OpenCTI Link", "Last Resolved",
-        "Detection Score", "detection_score", "scan_count", "Scan Count", "In MISP", "Matching Events", "Report Count", "Comments", "In PhishTank DB", "PhishTank ID",
-        "Verified At", "Submitted", "Latest Analysis", "Full Report", "Sandbox OS", "Total Analyses",
+        "Detection Score", "detection_score", "scan_count", "Scan Count", "In MISP", "Matching Events", "Report Count", "Comments",
     ]),
 
     _startCompare() {

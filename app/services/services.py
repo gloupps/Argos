@@ -37,9 +37,6 @@ class Services:
         from app.modules.qradar_module import QRadarModule
         from app.modules.splunk_module import SplunkModule
         from app.modules.hurricane_electric_module import HurricaneElectricModule
-        from app.modules.phishtank_module import PhishTankModule
-        from app.modules.anyrun_module import AnyRunModule
-
 
         self.modules = {
             "shodan": ShodanModule(self.requester),
@@ -54,9 +51,6 @@ class Services:
             "qradar": QRadarModule(self.requester),
             "splunk": SplunkModule(self.requester),
             "hurricane_electric": HurricaneElectricModule(self.requester),
-            "phishtank": PhishTankModule(self.requester),
-            "anyrun": AnyRunModule(self.requester),
-
         }
 
     # ── Public ────────────────────────────────────────────
@@ -560,7 +554,7 @@ class Services:
 
         es_instances = extra_config.get("es_instances") or []
         for inst in es_instances:
-            iid   = str(inst.get("id",    "")).strip()
+            iid = str(inst.get("id", "")).strip()
             label = str(inst.get("label", "")).strip()
             if not iid or not label:
                 continue
@@ -569,16 +563,17 @@ class Services:
                 modules[key] = EsInstanceModule(self.requester, iid, label)
 
         return modules
-    
 
     async def _handle_fetch_internal_source(self, job_id, data):
-        case_id      = data.get("case_id")
-        source_url   = (data.get("internal_source_url") or "").strip()
-        source_type  = data.get("internal_source_type", "opencti")
-        api_keys     = data.get("api_keys", {})
+        case_id = data.get("case_id")
+        source_url = (data.get("internal_source_url") or "").strip()
+        source_type = data.get("internal_source_type", "opencti")
+        api_keys = data.get("api_keys", {})
         extra_config = data.get("extra_config", {})
 
-        self.job_manager.add_log(job_id, f"🌐 Fetching from {source_type}: {source_url}")
+        self.job_manager.add_log(
+            job_id, f"🌐 Fetching from {source_type}: {source_url}"
+        )
 
         if not source_url:
             self.job_manager.add_log(job_id, "❌ No source URL provided")
@@ -589,10 +584,14 @@ class Services:
             if source_type == "opencti":
                 iocs = await self._fetch_iocs_from_opencti(job_id, source_url, api_keys)
             elif source_type == "misp":
-                iocs = await self._fetch_iocs_from_misp(job_id, source_url, api_keys, extra_config)
+                iocs = await self._fetch_iocs_from_misp(
+                    job_id, source_url, api_keys, extra_config
+                )
         except Exception as e:
             self.job_manager.add_log(job_id, f"❌ Fetch error: {e}")
-            import traceback; traceback.print_exc()
+            import traceback
+
+            traceback.print_exc()
 
         self.job_manager.add_log(job_id, f"✓ {len(iocs)} IOC(s) extracted")
 
@@ -615,24 +614,29 @@ class Services:
 
         # Chaîner enrich / correlate si demandé
         if data.get("chain_enrich"):
-            self.start_job({
-                "action":      "enrich",
-                "case_id":     case_id,
-                "api_keys":    api_keys,
-                "extra_config": extra_config,
-            })
+            self.start_job(
+                {
+                    "action": "enrich",
+                    "case_id": case_id,
+                    "api_keys": api_keys,
+                    "extra_config": extra_config,
+                }
+            )
         if data.get("chain_correlate"):
-            self.start_job({
-                "action":             "correlate",
-                "case_id":            case_id,
-                "api_keys":           api_keys,
-                "correlation_config": data.get("correlation_config", {}),
-                "extra_config":       extra_config,
-            })
+            self.start_job(
+                {
+                    "action": "correlate",
+                    "case_id": case_id,
+                    "api_keys": api_keys,
+                    "correlation_config": data.get("correlation_config", {}),
+                    "extra_config": extra_config,
+                }
+            )
 
     async def _fetch_iocs_from_opencti(self, job_id, source_url: str, api_keys: dict):
         import re as _re
-        api_key  = api_keys.get("opencti", "")
+
+        api_key = api_keys.get("opencti", "")
         if not api_key:
             self.job_manager.add_log(job_id, "❌ No OpenCTI API key in settings")
             return []
@@ -645,13 +649,19 @@ class Services:
                 base_url = base_url[:idx]
 
         gql_url = f"{base_url}/graphql"
-        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
 
         self.job_manager.add_log(job_id, f"  → GraphQL endpoint: {gql_url}")
 
         # Détecter si c'est un report (UUID dans l'URL)
         report_id = None
-        m = _re.search(r'([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})', source_url)
+        m = _re.search(
+            r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})",
+            source_url,
+        )
         if m:
             report_id = m.group(1)
             self.job_manager.add_log(job_id, f"  → Report ID detected: {report_id}")
@@ -660,9 +670,13 @@ class Services:
         seen = set()
 
         _ENTITY_TO_TYPE = {
-            "IPv4-Addr": "ip", "IPv6-Addr": "ip",
-            "Domain-Name": "domain", "Hostname": "domain",
-            "Url": "url", "StixFile": "hash", "File": "hash",
+            "IPv4-Addr": "ip",
+            "IPv6-Addr": "ip",
+            "Domain-Name": "domain",
+            "Hostname": "domain",
+            "Url": "url",
+            "StixFile": "hash",
+            "File": "hash",
         }
 
         async def _gql(query, variables):
@@ -687,7 +701,12 @@ class Services:
                   }
                 }"""
             resp = await _gql(_Q, {"id": report_id})
-            edges = (resp.get("data") or resp).get("report", {}).get("objects", {}).get("edges", [])
+            edges = (
+                (resp.get("data") or resp)
+                .get("report", {})
+                .get("objects", {})
+                .get("edges", [])
+            )
             self.job_manager.add_log(job_id, f"  → {len(edges)} objects in report")
             for edge in edges:
                 node = edge.get("node") or {}
@@ -696,7 +715,8 @@ class Services:
                 if val and val not in seen:
                     etype = node.get("entity_type", "")
                     ioc_type = _ENTITY_TO_TYPE.get(etype) or _guess_type(val)
-                    seen.add(val); iocs.append((val, ioc_type))
+                    seen.add(val)
+                    iocs.append((val, ioc_type))
                 # Indicator (pattern)
                 name = node.get("name")
                 if name and name not in seen:
@@ -704,7 +724,8 @@ class Services:
                     m2 = _re.search(r"=\s*['\"]([^'\"]+)['\"]", pat)
                     val2 = m2.group(1) if m2 else name
                     if val2 not in seen:
-                        seen.add(val2); iocs.append((val2, _guess_type(val2)))
+                        seen.add(val2)
+                        iocs.append((val2, _guess_type(val2)))
         else:
             # Liste globale des indicateurs
             _Q = """
@@ -715,37 +736,46 @@ class Services:
                 }"""
             resp = await _gql(_Q, {"first": 200})
             edges = (resp.get("data") or resp).get("indicators", {}).get("edges", [])
-            self.job_manager.add_log(job_id, f"  → {len(edges)} indicators from instance")
+            self.job_manager.add_log(
+                job_id, f"  → {len(edges)} indicators from instance"
+            )
             for edge in edges:
                 node = edge.get("node") or {}
-                pat  = node.get("pattern", "")
-                m2   = _re.search(r"=\s*['\"]([^'\"]+)['\"]", pat)
-                val  = m2.group(1) if m2 else (node.get("name") or "")
+                pat = node.get("pattern", "")
+                m2 = _re.search(r"=\s*['\"]([^'\"]+)['\"]", pat)
+                val = m2.group(1) if m2 else (node.get("name") or "")
                 if val and val not in seen:
-                    seen.add(val); iocs.append((val, _guess_type(val)))
+                    seen.add(val)
+                    iocs.append((val, _guess_type(val)))
 
         return iocs
 
-    async def _fetch_iocs_from_misp(self, job_id, source_url: str, api_keys: dict, extra_config: dict):
+    async def _fetch_iocs_from_misp(
+        self, job_id, source_url: str, api_keys: dict, extra_config: dict
+    ):
         import re as _re
+
         api_key = api_keys.get("misp", "")
         if not api_key:
             self.job_manager.add_log(job_id, "❌ No MISP API key in settings")
             return []
 
-        base_url  = source_url.rstrip("/")
-        event_id  = None
-        m = _re.search(r'/events/(?:view/)?(\d+)', source_url)
+        base_url = source_url.rstrip("/")
+        event_id = None
+        m = _re.search(r"/events/(?:view/)?(\d+)", source_url)
         if m:
             event_id = m.group(1)
-            base_url = source_url[:m.start()]
+            base_url = source_url[: m.start()]
         else:
             # Retirer tout path après le domaine
             from urllib.parse import urlparse
+
             p = urlparse(source_url)
             base_url = f"{p.scheme}://{p.netloc}"
 
-        self.job_manager.add_log(job_id, f"  → MISP base: {base_url}, event: {event_id}")
+        self.job_manager.add_log(
+            job_id, f"  → MISP base: {base_url}, event: {event_id}"
+        )
 
         headers = {
             "Authorization": api_key,
@@ -754,27 +784,41 @@ class Services:
         }
 
         _MISP_IOC_TYPES = {
-            "ip-src": "ip", "ip-dst": "ip", "ip-src|port": "ip", "ip-dst|port": "ip",
-            "domain": "domain", "hostname": "domain", "domain|ip": "domain",
-            "url": "url", "uri": "url",
-            "md5": "hash", "sha1": "hash", "sha256": "hash",
-            "filename|md5": "hash", "filename|sha1": "hash", "filename|sha256": "hash",
+            "ip-src": "ip",
+            "ip-dst": "ip",
+            "ip-src|port": "ip",
+            "ip-dst|port": "ip",
+            "domain": "domain",
+            "hostname": "domain",
+            "domain|ip": "domain",
+            "url": "url",
+            "uri": "url",
+            "md5": "hash",
+            "sha1": "hash",
+            "sha256": "hash",
+            "filename|md5": "hash",
+            "filename|sha1": "hash",
+            "filename|sha256": "hash",
         }
 
         iocs = []
         seen = set()
 
         if event_id:
-            url  = f"{base_url}/events/{event_id}.json"
+            url = f"{base_url}/events/{event_id}.json"
             data = await self.requester.get(url, headers=headers)
             if not data:
-                self.job_manager.add_log(job_id, f"❌ MISP event {event_id} not found or empty")
+                self.job_manager.add_log(
+                    job_id, f"❌ MISP event {event_id} not found or empty"
+                )
                 return []
             attributes = (data.get("Event") or data).get("Attribute", [])
-            self.job_manager.add_log(job_id, f"  → {len(attributes)} attributes in event")
+            self.job_manager.add_log(
+                job_id, f"  → {len(attributes)} attributes in event"
+            )
         else:
             # Recherche des attributs récents
-            url  = f"{base_url}/attributes/restSearch"
+            url = f"{base_url}/attributes/restSearch"
             data = await self.requester.post(
                 url,
                 json={"limit": 200, "to_ids": True},
@@ -784,11 +828,13 @@ class Services:
                 self.job_manager.add_log(job_id, "❌ MISP restSearch returned nothing")
                 return []
             attributes = (data.get("response") or {}).get("Attribute", [])
-            self.job_manager.add_log(job_id, f"  → {len(attributes)} attributes from search")
+            self.job_manager.add_log(
+                job_id, f"  → {len(attributes)} attributes from search"
+            )
 
         for attr in attributes:
             atype = attr.get("type", "")
-            val   = (attr.get("value") or "").strip()
+            val = (attr.get("value") or "").strip()
             if not val or atype not in _MISP_IOC_TYPES:
                 continue
             # Types composites : prendre la 2e partie (ex: filename|sha256 → sha256 value)
@@ -799,7 +845,7 @@ class Services:
                 iocs.append((val, _MISP_IOC_TYPES[atype]))
 
         return iocs
-    
+
     async def _run_siem(self, job_id: str, data: dict):
         """
         SIEM investigation — IOCs lus depuis le graph du case.
@@ -815,11 +861,11 @@ class Services:
         """
         from app.modules.qradar_module import classify_indicators, clean_results
 
-        case_id            = data.get("case_id")
+        case_id = data.get("case_id")
         include_correlated = data.get("include_correlated", False)
-        date_start         = data.get("date_start") or ""
-        date_end           = data.get("date_end")   or ""
-        extra              = data.get("extra_config", {})
+        date_start = data.get("date_start") or ""
+        date_end = data.get("date_end") or ""
+        extra = data.get("extra_config", {})
 
         if not case_id:
             self.job_manager.add_log(job_id, "Missing case_id", "failed")
@@ -837,11 +883,16 @@ class Services:
         if include_correlated:
             selected = [n["value"] for n in nodes if n.get("value")]
         else:
-            selected = [n["value"] for n in nodes
-                        if n.get("value") and n.get("node_type") == "root"]
+            selected = [
+                n["value"]
+                for n in nodes
+                if n.get("value") and n.get("node_type") == "root"
+            ]
 
         if not selected:
-            self.job_manager.add_log(job_id, "No IOCs match the selected scope", "failed")
+            self.job_manager.add_log(
+                job_id, "No IOCs match the selected scope", "failed"
+            )
             return
 
         scope_label = "root + correlated" if include_correlated else "root only"
@@ -861,7 +912,9 @@ class Services:
             dict_indicators.pop("StixFile", None)
 
         if not dict_indicators:
-            self.job_manager.add_log(job_id, "No indicators left after filtering", "failed")
+            self.job_manager.add_log(
+                job_id, "No indicators left after filtering", "failed"
+            )
             return
 
         # ── 4. Dispatch selon siem_type ───────────────────
@@ -869,61 +922,75 @@ class Services:
 
         if siem_type == "splunk":
             context = {
-                "api_key":         extra.get("splunk", ""),
-                "splunk_url":      extra.get("splunk_url", ""),
-                "splunk_indexes":  extra.get("splunk_indexes", []),   # ← nouveau
+                "api_key": extra.get("splunk", ""),
+                "splunk_url": extra.get("splunk_url", ""),
+                "splunk_indexes": extra.get("splunk_indexes", []),  # ← nouveau
                 "splunk_result_key": extra.get("splunk_result_key", "splunk"),
                 "date_start": date_start,
-                "date_end":   date_end,
+                "date_end": date_end,
             }
             mod = self.modules.get("splunk")
             if not mod:
-                self.job_manager.add_log(job_id, "Splunk module not registered", "failed")
+                self.job_manager.add_log(
+                    job_id, "Splunk module not registered", "failed"
+                )
                 return
-            self.job_manager.add_log(job_id, f"Running SPL searches ({date_start} → {date_end})…")
+            self.job_manager.add_log(
+                job_id, f"Running SPL searches ({date_start} → {date_end})…"
+            )
             results = await mod.investigate(dict_indicators, context)
-            
+
         elif siem_type == "elasticsearch":
             context = {
-                "api_key":                extra.get("elasticsearch", ""),
-                "elasticsearch_url":      extra.get("elasticsearch_url", ""),
-                "elasticsearch_indexes":  extra.get("elasticsearch_indexes", []),
-                "elasticsearch_user":     extra.get("elasticsearch_user", ""),
-                "elasticsearch_pass":     extra.get("elasticsearch_pass", ""),
+                "api_key": extra.get("elasticsearch", ""),
+                "elasticsearch_url": extra.get("elasticsearch_url", ""),
+                "elasticsearch_indexes": extra.get("elasticsearch_indexes", []),
+                "elasticsearch_user": extra.get("elasticsearch_user", ""),
+                "elasticsearch_pass": extra.get("elasticsearch_pass", ""),
                 "date_start": date_start,
-                "date_end":   date_end,
+                "date_end": date_end,
             }
             mod = self.modules.get("elasticsearch")
             if not mod:
-                self.job_manager.add_log(job_id, "Elasticsearch module not registered", "failed")
+                self.job_manager.add_log(
+                    job_id, "Elasticsearch module not registered", "failed"
+                )
                 return
-            self.job_manager.add_log(job_id, f"Running ES queries ({date_start} → {date_end})…")
+            self.job_manager.add_log(
+                job_id, f"Running ES queries ({date_start} → {date_end})…"
+            )
             results = await mod.investigate(dict_indicators, context)
-            
+
         else:  # qradar (défaut)
             context = {
-                "api_key":            extra.get("qradar", ""),
-                "qradar_url":         extra.get("qradar_url", ""),
-                "qradar_logsources":  extra.get("qradar_logsources", []),   # ← nouveau
-                "qradar_result_key":  extra.get("qradar_result_key", "qradar"),
-                "qradar_anonymize":   extra.get("qradar_anonymize", "false"),
+                "api_key": extra.get("qradar", ""),
+                "qradar_url": extra.get("qradar_url", ""),
+                "qradar_logsources": extra.get("qradar_logsources", []),  # ← nouveau
+                "qradar_result_key": extra.get("qradar_result_key", "qradar"),
+                "qradar_anonymize": extra.get("qradar_anonymize", "false"),
                 "date_start": date_start,
-                "date_end":   date_end,
+                "date_end": date_end,
             }
             mod = self.modules.get("qradar")
             if not mod:
-                self.job_manager.add_log(job_id, "QRadar module not registered", "failed")
+                self.job_manager.add_log(
+                    job_id, "QRadar module not registered", "failed"
+                )
                 return
-            self.job_manager.add_log(job_id, f"Running AQL queries ({date_start} → {date_end})…")
+            self.job_manager.add_log(
+                job_id, f"Running AQL queries ({date_start} → {date_end})…"
+            )
             results = await mod.investigate(dict_indicators, context)
 
         # ── 5. Emit ────────────────────────────────────────
-        self.socketio.emit("siem_result", {
-            "job_id":   job_id,
-            "case_id":  case_id,
-            "siem_type": siem_type,   # ← ajout
-            "results":  results,
-        })
+        self.socketio.emit(
+            "siem_result",
+            {
+                "job_id": job_id,
+                "case_id": case_id,
+                "siem_type": siem_type,  # ← ajout
+                "results": results,
+            },
+        )
         self.job_manager.add_log(job_id, "SIEM investigation done")
         return results
-
