@@ -39,24 +39,28 @@ The goal is to replace the tab-juggling of manual IOC investigations with a sing
 
 ```
 Flask app (main.py)
-├── ___init___.py  
+├── ___init___.py
+│
 ├── services/
 │   ├── __init__.py
-│   ├── routes.py           — HTTP endpoints + SocketIO events
-│   ├── database.py         — SQLite layer (aiosqlite)
+│   ├── routes.py                  — HTTP endpoints + SocketIO events
+│   ├── database.py                — SQLite layer (aiosqlite)
 │   ├── job_manager.py
-│   └── services.py         — Single dispatcher: routes all actions to the right module
+│   └── services.py                — Single dispatcher: routes all actions to the right module
+│
 ├── modules/
-│   ├── __init__.py         — One Python class per enrichment / SIEM source
-│   └── module.py           — Base class (get_info, get_correlation, get_quotas, get_fields, settings_fields)
+│   ├── __init__.py                — One Python class per enrichment / SIEM source
+│   ├── module.py                  — Base class (get_info, get_correlation, get_quotas, get_fields, settings_fields)
+│   └── ***_module.py
+│
 ├── static/
 │   ├── css/
-│       └── argos-theme.css — Full dark + light mode theme (CSS vars, data-theme scoping)
-│   ├── images/
+│       └── argos-theme.css        — Full dark + light mode theme (CSS vars, data-theme scoping)
+│   ├── images/                    — Logo images
 │   └── js/
 │       ├── app.js
 │       ├── module.js
-│       └── modules/        — Sidebar + settings rendering; auto-discovers registered modules
+│       └── modules/               — Sidebar + settings rendering; auto-discovers registered modules
 │           ├── modules.js         
 │           ├── qualif.js          — Enrichment panel rendering, field coloring, _THEME_MAP
 │           ├── graph.js           — Cytoscape.js graph
@@ -64,6 +68,7 @@ Flask app (main.py)
 │           ├── siem_instances.js  — QRadar / Splunk / ES log source / index config UI
 │           ├── es_instances.js    — Elasticsearch enrichment instances UI
 │           └── case.js / case_actions.js / …
+│
 └── templates/         — Jinja2 HTML
 ```
 
