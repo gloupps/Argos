@@ -126,6 +126,16 @@ class Services:
                 self.job_manager.add_log(job_id, "⚠ No indicators found")
                 return
 
+            # ── Limite globale ───────────────────────────────────────
+            global_cfg = cfg.get("_global", {}) if isinstance(cfg, dict) else {}
+            max_entities = int(global_cfg.get("max_entities", 0)) if global_cfg else 0
+            if max_entities and max_entities < len(indicators):
+                self.job_manager.add_log(
+                    job_id,
+                    f"⚠ Limiting correlation to {max_entities}/{len(indicators)} indicators (most recent first)",
+                )
+                indicators = indicators[:max_entities]
+
             job_db_id = str(uuid.uuid4())
             await db.execute(
                 "INSERT INTO jobs (id, tasks) VALUES (?,?)", (job_db_id, "enrich")

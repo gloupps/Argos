@@ -304,6 +304,27 @@ window.Modules = {
         if (pivotEl) pivotEl.innerHTML = "";
         if (corrEl)  corrEl.innerHTML  = "";
 
+        // ── Global limit ──────────────────────────────────────────
+        const limitVal = this._correlationState?._global?.max_entities ?? 50;
+        const limitWrap = document.createElement("div");
+        limitWrap.className = "px-1 pb-2";
+        limitWrap.innerHTML = `
+            <div class="flex justify-between text-[11px] mb-1">
+                <span class="text-slate-500">Max entities to correlate</span>
+                <span class="text-violet-400 font-semibold" id="corr_global_max_val">${limitVal}</span>
+            </div>
+            <input type="range" id="corr_global_max"
+                min="1" max="200" value="${limitVal}"
+                class="w-full h-1 accent-violet-500">
+        `;
+        limitWrap.querySelector("input[type=range]").addEventListener("input", e => {
+            document.getElementById("corr_global_max_val").textContent = e.target.value;
+            if (!this._correlationState._global) this._correlationState._global = {};
+            this._correlationState._global.max_entities = +e.target.value;
+            localStorage.setItem("pivotlens_correlation", JSON.stringify(this._correlationState));
+        });
+        if (corrEl) corrEl.prepend(limitWrap);
+
         const entries = Object.entries(schema);
         if (!entries.length) {
             if (corrEl) corrEl.innerHTML = `<p class="text-slate-600 text-xs italic">No correlation modules.</p>`;
