@@ -352,9 +352,6 @@ window.EnrichPanel = {
         "ThreatFox Entry":      "threat",
         "Verdict":              "threat",
         "HA Tags":              "tags",
-        "Sandbox Environments": "other",
-        "File Type":            "other",
-        "SHA256":               "other",
 
         // ── HOST ──
         "Organization":         "host",
@@ -368,6 +365,16 @@ window.EnrichPanel = {
         "Hostnames":            "host",
         "Domains":              "host",
         "Tags":                 "tags",
+
+        // ── HASH / FILE (VT + HA) ──
+        "MD5":                  "host",
+        "SHA1":                 "host",
+        "SHA256":               "host",
+        "Size":                 "host",
+        "File Type":            "host",
+        "File Names":           "host",
+        "Last Analysis":        "host",
+        "Sandbox Environments": "host",
 
         // ── SERVICES ──
         "Services":             "shodan_services",
@@ -638,6 +645,7 @@ window.EnrichPanel = {
                         "Threat Actors", "MITRE ATT&CK", "Malware Family",
                         "Latest Verdict",
                     ].includes(field.name);
+                    const isYesDanger = ["Verdict"].includes(field.name) && ["malicious","malware"].includes(v.toLowerCase());
                     const cls = (isThreatCount && !isNaN(num) && num > 0) || isYesDanger
                         ? "text-red-400 font-bold"
                         : isAmber
