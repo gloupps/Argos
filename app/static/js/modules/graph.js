@@ -25,6 +25,11 @@ window.GraphModule = {
         if (inst?.cy) setTimeout(() => inst.cy.fit(undefined, 60), 50);
     },
 
+    fitGraph(tabId) {
+        const inst = this.instances[tabId];
+        if (inst?.cy) inst.cy.animate({ fit: { eles: inst.cy.elements(), padding: 60 } }, { duration: 400, easing: "ease-out-cubic" });
+    },
+
     create(tabId, caseId) {
         const container = document.getElementById("cy");
         if (!container) { console.warn("[Graph] #cy not found"); return; }
@@ -114,6 +119,8 @@ window.GraphModule = {
         container.addEventListener("contextmenu", e => {
             if (LinkDrag.isActive()) { e.preventDefault(); LinkDrag.cancel(); }
         });
+
+        this._initSearch(tabId);
     },
 
     async loadCase(tabId, caseId) {
@@ -290,6 +297,7 @@ window.GraphModule = {
         const { elements } = this._buildElements(data, null);
         if (elements.length === 0) return;
         cy.add(elements);
+        this._updateNodeSizes(cy);
         this._runLayout(cy, elements.length);
     },
 
@@ -305,7 +313,7 @@ window.GraphModule = {
         const { elements } = this._buildElements(data, savedPos);
         if (elements.length === 0) return;
         cy.add(elements);
-
+        this._updateNodeSizes(cy);
         const unsettled = cy.nodes().filter(n => !savedPos[n.id()]);
         if (unsettled.length === 0) return;
 
@@ -472,6 +480,110 @@ window.GraphModule = {
         layout.run();
     },
 
+    // ── Taille dynamique des nœuds selon leur degré ───────
+    _updateNodeSizes(cy) {
+        if (!cy) return;
+        cy.nodes().forEach(n => {
+            const deg = n.degree(false); // nb d'arêtes
+            let base;
+            if (n.hasClass("pivot")) {
+                // Pivots : 34–72px selon leurs connexions
+                base = Math.min(72, Math.max(34, 34 + deg * 4));
+            } else if (n.hasClass("root")) {
+                // Roots : 44–68px
+                base = Math.min(68, Math.max(44, 44 + deg * 3));
+            } else {
+                // IOCs ordinaires : 28–52px
+                base = Math.min(52, Math.max(28, 28 + deg * 2.5));
+            }
+            n.data("weight", base);
+        });
+    },
+
+    // ── Recherche de nœuds ───────────────────────────────
+    _initSearch(tabId) {
+        // Keyboard shortcut Ctrl+F / Cmd+F
+        document.addEventListener("keydown", e => {
+            const inst = this.instances[tabId];
+            if (!inst) return;
+            if ((e.ctrlKey || e.metaKey) && e.key === "f") {
+                const wrapper = document.getElementById("cy")?.closest(".glass");
+                if (!wrapper) return;
+                e.preventDefault();
+                const bar = document.getElementById("graph-search-bar");
+                if (bar) { bar.classList.toggle("hidden"); bar.querySelector("input")?.focus(); }
+            }
+        });
+    },
+
+    searchNodes(tabId, query) {
+        const inst = this.instances[tabId];
+        if (!inst) return;
+        const { cy } = inst;
+        cy.elements().removeClass("search-match search-dim");
+        if (!query.trim()) return;
+        const q = query.toLowerCase();
+        const matches = cy.nodes().filter(n => {
+            const lbl = (n.data("label") || "").toLowerCase();
+            const full = (n.data("fullLabel") || "").toLowerCase();
+            return lbl.includes(q) || full.includes(q);
+        });
+        if (matches.length === 0) return;
+        cy.nodes().not(matches).addClass("search-dim");
+        matches.addClass("search-match");
+        cy.animate({ fit: { eles: matches, padding: 80 } }, { duration: 400, easing: "ease-out-cubic" });
+    },
+
+    clearSearch(tabId) {
+        const inst = this.instances[tabId];
+        if (!inst) return;
+        inst.cy.elements().removeClass("search-match search-dim");
+    },
+
+    // ── Toolbar de mise en forme ─────────────────────────
+    applyLayout(tabId, mode) {
+        const inst = this.instances[tabId];
+        if (!inst) return;
+        const { cy } = inst;
+        if (cy.nodes().length === 0) return;
+
+        const common = { animate: true, animationDuration: 600, animationEasing: "ease-out-cubic", fit: true, padding: 60 };
+
+        if (mode === "force") {
+            // Re-appliquer les forces (cose)
+            this._updateNodeSizes(cy);
+            this._runLayout(cy, cy.elements().length);
+            return;
+        }
+
+        if (mode === "tree") {
+            // Arbre horizontal (breadthfirst)
+            cy.layout({ ...common, name: "breadthfirst", directed: false, spacingFactor: 1.4 }).run();
+            return;
+        }
+
+        if (mode === "dag") {
+            // Arbre généalogique top-down
+            // Racine = nœuds root ou, à défaut, nœud de plus haut degré
+            const roots = cy.nodes(".root").length > 0
+                ? cy.nodes(".root")
+                : cy.nodes().max(n => n.degree(false)).ele;
+            cy.layout({
+                ...common,
+                name: "breadthfirst",
+                directed: true,
+                roots,
+                spacingFactor: 1.5,
+                maximal: true,
+            }).run();
+            return;
+        }
+
+        if (mode === "circle") {
+            cy.layout({ ...common, name: "circle", spacingFactor: 1.2 }).run();
+        }
+    },
+
     _styles() {
         return [
             { selector: "node", style: {
@@ -486,7 +598,7 @@ window.GraphModule = {
                 "text-background-padding": "2px",
                 "text-background-shape":   "roundrectangle",
                 "background-color":  "#3b82f6",
-                "width":  36, "height": 36,
+                "width":  "data(weight)", "height": "data(weight)",
                 "border-width": 2, "border-color": "#1e40af",
                 "transition-property": "background-color, border-color, width, height",
                 "transition-duration": "0.25s",
@@ -494,14 +606,12 @@ window.GraphModule = {
             { selector: "node.root", style: {
                 "background-color": "#ef4444",
                 "border-color":     "#7f1d1d",
-                "width": 48, "height": 48,
                 "font-size": 10, "font-weight": "bold",
             }},
             { selector: "node.pivot", style: {
                 "background-color": "#06b6d4",   // cyan-500 — distinct des IOCs
                 "border-color":     "#164e63",
                 "shape":            "diamond",
-                "width": 34, "height": 34,
                 "font-size": 8,
             }},
             { selector: "node.pivot-ioc", style: {
@@ -549,6 +659,18 @@ window.GraphModule = {
                 "target-arrow-color": "#3b82f6",
                 "line-style":         "dashed",
                 "opacity":            0.9,
+            }},
+            { selector: "node.search-match", style: {
+                "border-width":    3,
+                "border-color":    "#facc15",
+                "overlay-color":   "#facc15",
+                "overlay-opacity": 0.22,
+            }},
+            { selector: "node.search-dim", style: {
+                "opacity": 0.25,
+            }},
+            { selector: "edge.search-dim", style: {
+                "opacity": 0.08,
             }},
         ];
     },
