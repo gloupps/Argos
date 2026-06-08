@@ -180,6 +180,16 @@ class ThreatFoxModule(Module):
                 self._f(indicator, "Open Ports", "list", [str(p) for p in ports])
             )
 
+        is_compromised = any(i.get("is_compromised") for i in iocs)
+        res.append(
+            self._f(
+                indicator,
+                "Compromised",
+                "label-capsule",
+                "Yes" if is_compromised else "No",
+            )
+        )
+
         if malware_printable:
             res.append(
                 self._f(indicator, "Malware Family", "list", malware_printable[:10])
@@ -208,6 +218,25 @@ class ThreatFoxModule(Module):
         if tags:
             res.append(self._f(indicator, "Tags", "list", tags[:15]))
 
+        # Reference (première non-vide trouvée)
+        reference = next(
+            (i.get("reference") for i in iocs if i.get("reference")),
+            None,
+        )
+        if reference:
+            res.append(
+                {
+                    "indicator": indicator,
+                    "indicator_type": "ioc",
+                    "field_name": "Reference",
+                    "field_type": "link",
+                    "value": reference,
+                    "icon": "external-link",
+                    "link": reference,
+                    "max": None,
+                }
+            )
+
         # Lien vers la fiche du premier IOC
         first = iocs[0]
         ioc_id = first.get("id")
@@ -217,7 +246,7 @@ class ThreatFoxModule(Module):
                     "indicator": indicator,
                     "indicator_type": "ioc",
                     "field_name": "ThreatFox Entry",
-                    "field_type": "label-capsule",
+                    "field_type": "link",
                     "value": "View on ThreatFox",
                     "icon": "external-link",
                     "link": f"https://threatfox.abuse.ch/ioc/{ioc_id}/",

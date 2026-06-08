@@ -342,15 +342,15 @@ window.EnrichPanel = {
         "Malicious":            "threat",
         "Suspicious":           "threat",
         "Reputation":           "threat",
-        "Scan Count":           "threat",
         "Threat Actors":        "threat",
         "Malware Family":       "threat",
         "Malware Description":  "threat",
         "Threat Type":          "threat",
         "Avg Confidence":       "threat",
-        "IOC Count":            "threat",
         "ThreatFox Entry":      "threat",
         "Verdict":              "threat",
+        "Compromised":          "threat",
+        "Reference":            "threat",
         "HA Tags":              "tags",
 
         // ── HOST ──
@@ -645,23 +645,13 @@ window.EnrichPanel = {
                         "Threat Actors", "MITRE ATT&CK", "Malware Family",
                         "Latest Verdict",
                     ].includes(field.name);
-                    const isYesDanger = ["Verdict"].includes(field.name) && ["malicious","malware"].includes(v.toLowerCase());
+                    const isYesDanger = (["Verdict"].includes(field.name) && ["malicious","malware"].includes(v.toLowerCase()))
+                        || (field.name === "Compromised" && v === "Yes");
                     const cls = (isThreatCount && !isNaN(num) && num > 0) || isYesDanger
                         ? "text-red-400 font-bold"
                         : isAmber
                             ? "text-amber-400"
                             : Array.isArray(field.value) ? "text-amber-400" : "text-slate-300";
-
-                    // Champ texte long (ex: Malware Description)
-                    if (field.type === "text") {
-                        return `
-                            <tr>
-                                <td colspan="2" class="py-1">
-                                    <div class="text-[15px] text-slate-500 mb-0.5">${field.name}</div>
-                                    <div class="text-[15px] text-slate-300 italic leading-relaxed">${v}</div>
-                                </td>
-                            </tr>`;
-                    }
 
                     const isTrunc = !Array.isArray(field.value) && v.length > 26;
                     const display = Array.isArray(field.value)
@@ -1462,8 +1452,8 @@ window.EnrichPanel = {
     // Fields that are not meaningful to compare across IOCs
     _COMPARE_SKIP: new Set([
         "malicious", "suspicious", "reputation", "misp_link", "link", "Labels", "Domain Count", "In OpenCTI", "Last Seen", "Detection",
-        "MISP Link", "Malicious", "Suspicious", "Reputation", "Censys Host", "Tags", "Last Scanned", "OpenCTI Link", "Last Resolved",
-        "Detection Score", "detection_score", "scan_count", "Scan Count", "In MISP", "Matching Events", "Report Count", "Comments",
+        "MISP Link", "Malicious", "Suspicious", "Reputation", "Censys Host", "Tags", "Last Scanned", "OpenCTI Link",
+        "Detection Score", "detection_score", "scan_count", "Scan Count", "In MISP", "Matching Events", "Report Count", "Comments", "IOC Count",
     ]),
 
     _startCompare() {
