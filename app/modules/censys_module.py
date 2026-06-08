@@ -362,11 +362,11 @@ class CensysModule(Module):
                 entry["http_server"] = server[0]
             # Extraire headers HTTP utiles supplémentaires
             interesting_headers = {
-                "Content-Type":              "http_content_type",
-                "X-Powered-By":              "http_powered_by",
-                "Location":                  "http_location",
-                "WWW-Authenticate":          "http_auth",
-                "X-Frame-Options":           "http_x_frame",
+                "Content-Type": "http_content_type",
+                "X-Powered-By": "http_powered_by",
+                "Location": "http_location",
+                "WWW-Authenticate": "http_auth",
+                "X-Frame-Options": "http_x_frame",
                 "Strict-Transport-Security": "http_hsts",
             }
             for hname, hkey in interesting_headers.items():
@@ -635,14 +635,34 @@ class CensysModule(Module):
     # get_quotas
     # ─────────────────────────────────────────────────────
     async def get_quotas(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        headers = self._headers(context)
-        if not headers:
+        api_id = (context.get("api_key") or "").strip()
+        api_secret = (context.get("censys_api_secret") or "").strip()
+        if not api_id or not api_secret:
             return {}
+
         data = await self.requester.get(
-            f"{self.base_url}/v3/global/asset/host/1.1.1.1",
-            headers=headers,
+            "https://search.censys.io/api/v1/account",
+            auth=(api_id, api_secret),
         )
-        return {"plan_type": "platform", "reachable": data is not None}
+        if not data or not isinstance(data, dict):
+            return {}
+
+        quota = data.get("quota") or {}
+        try:
+            used = int(quota.get("used", 0))
+            allowance = int(quota.get("allowance", 0))
+        except (ValueError, TypeError):
+            used, allowance = 0, 0
+
+        remaining = max(0, allowance - used)
+        plan_type = "free" if allowance <= 250 else "pro"
+
+        return {
+            "used": used,
+            "limit": allowance,
+            "remaining": remaining,
+            "plan_type": plan_type,
+        }
 
     # ─────────────────────────────────────────────────────
     # Helpers

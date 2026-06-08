@@ -15,12 +15,14 @@ class HybridAnalysisModule(Module):
     Auth : header "api-key: <key>" + "User-Agent: Falcon Sandbox"
     """
 
-    name            = "Hybrid Analysis"
-    description     = "Sandbox search — threat scores, malware families, tags (no submission)"
-    src_type        = "external"
+    name = "Hybrid Analysis"
+    description = (
+        "Sandbox search — threat scores, malware families, tags (no submission)"
+    )
+    src_type = "external"
     supported_types = ["hash", "domain", "ip", "url"]
-    icon            = "flask-conical"
-    url             = "https://www.hybrid-analysis.com/api/v2"
+    icon = "flask-conical"
+    url = "https://www.hybrid-analysis.com/api/v2"
 
     def __init__(self, requester):
         self.requester = requester
@@ -31,7 +33,7 @@ class HybridAnalysisModule(Module):
 
     def _headers(self, context: Dict) -> Dict:
         return {
-            "api-key":    context.get("api_key", ""),
+            "api-key": context.get("api_key", ""),
             "User-Agent": "Falcon Sandbox",
             "Content-Type": "application/x-www-form-urlencoded",
         }
@@ -39,14 +41,14 @@ class HybridAnalysisModule(Module):
     @staticmethod
     def _f(indicator, name, field_type, value, max_=None) -> Dict:
         return {
-            "indicator":      indicator,
+            "indicator": indicator,
             "indicator_type": "ioc",
-            "field_name":     name,
-            "field_type":     field_type,
-            "value":          value,
-            "icon":           None,
-            "link":           None,
-            "max":            max_,
+            "field_name": name,
+            "field_type": field_type,
+            "value": value,
+            "icon": None,
+            "link": None,
+            "max": max_,
         }
 
     # ─────────────────────────────────────────────────────
@@ -56,12 +58,12 @@ class HybridAnalysisModule(Module):
     async def get_info(
         self, indicator: str, context: Dict[str, Any]
     ) -> List[Dict[str, Any]]:
-        api_key  = context.get("api_key", "")
+        api_key = context.get("api_key", "")
         if not api_key:
             return []
 
         ioc_type = context.get("ioc_type", "hash")
-        headers  = self._headers(context)
+        headers = self._headers(context)
 
         if ioc_type == "hash":
             data = await self.requester.post(
@@ -97,20 +99,20 @@ class HybridAnalysisModule(Module):
 
         # Agréger les verdicts pour un score global
         threat_scores = [
-            r.get("threat_score")
-            for r in results
-            if r.get("threat_score") is not None
+            r.get("threat_score") for r in results if r.get("threat_score") is not None
         ]
         if threat_scores:
             max_score = max(threat_scores)
             out.append(self._f(indicator, "Detection Score", "score", max_score))
 
         # Verdict global (consolidated)
-        verdicts = list({
-            r.get("verdict")
-            for r in results
-            if r.get("verdict") and r["verdict"] != "no verdict"
-        })
+        verdicts = list(
+            {
+                r.get("verdict")
+                for r in results
+                if r.get("verdict") and r["verdict"] != "no verdict"
+            }
+        )
         if verdicts:
             out.append(self._f(indicator, "Verdict", "label-capsule", verdicts[0]))
 
@@ -149,7 +151,11 @@ class HybridAnalysisModule(Module):
 
         # Nombre de soumissions
         if len(results) > 1:
-            out.append(self._f(indicator, "Submission Count", "label-capsule", str(len(results))))
+            out.append(
+                self._f(
+                    indicator, "Submission Count", "label-capsule", str(len(results))
+                )
+            )
 
         # SHA256 du premier résultat (pour les recherches domain/ip/url)
         sha256 = next((r.get("sha256") for r in results if r.get("sha256")), None)
@@ -180,5 +186,39 @@ class HybridAnalysisModule(Module):
         api_key = context.get("api_key", "")
         if not api_key:
             return {}
-        # L'API HA ne fournit pas d'endpoint quota public standard
-        return {"plan_type": "api", "remaining": None, "limit": None}
+
+        headers = {
+            "api-key": api_key,
+            "User-Agent": "Falcon Sandbox",
+            "Accept": "application/json",
+        }
+
+        data = await self.requester.get(
+            f"{self.url}/key/current",
+            headers=headers,
+        )
+        if not data or not isinstance(data, dict):
+            return {}
+
+        limits = (data.get("limits") or {}).get("default") or {}
+
+        try:
+            daily_limit = int(limits.get("daily_limit", 0))
+            daily_reset = int(
+                limits.get("daily_limit_reset", 0)
+            )  # secondes avant reset
+        except (ValueError, TypeError):
+            daily_limit, daily_reset = 0, 0
+
+        # HA ne retourne pas le "used", seulement la limite et le temps avant reset
+        # On infère "remaining" depuis daily_limit_reset : si reset == 0, quota plein
+        # Si reset > 0, le quota a été consommé en partie mais HA ne donne pas le détail
+        plan_type = "free" if daily_limit <= 200 else "pro"
+
+        return {
+            "plan_type": plan_type,
+            "limit": daily_limit if daily_limit else None,
+            "remaining": None,  # non fourni par l'API
+            "used": None,
+            "reachable": True,
+        }
