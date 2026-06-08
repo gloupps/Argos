@@ -36,7 +36,6 @@ class Services:
         from app.modules.censys_module import CensysModule
         from app.modules.qradar_module import QRadarModule
         from app.modules.splunk_module import SplunkModule
-        from app.modules.hurricane_electric_module import HurricaneElectricModule
 
         self.modules = {
             "shodan": ShodanModule(self.requester),
@@ -50,7 +49,6 @@ class Services:
             "censys": CensysModule(self.requester),
             "qradar": QRadarModule(self.requester),
             "splunk": SplunkModule(self.requester),
-            "hurricane_electric": HurricaneElectricModule(self.requester),
         }
 
     # ── Public ────────────────────────────────────────────

@@ -20,8 +20,7 @@ window.EnrichPanel = {
         if (i) return i;
         return { virustotal:"shield", shodan:"radar", abuseipdb:"ban",
             urlscan:"scan-eye", viewdns:"globe", opencti:"database", misp:"share-2",
-            threatfox:"bug", elasticsearch:"database", censys:"scan-line",
-            hurricane_electric:"network"}[k] || "box";
+            threatfox:"bug", elasticsearch:"database", censys:"scan-line"}[k] || "box";
     },
 
     _isEmpty(v) {
@@ -415,17 +414,6 @@ window.EnrichPanel = {
         "NS Records":                "vt_refs",
         "SOA Records":               "vt_refs",
         "SSL Certificates":          "vt_refs",
-        
-        // ── Hurricane Electric ──────────────────────────
-        "HE AS Name":              "host",
-        "BGP Prefix":           "host",
-        "Route Origin":         "host",
-        "Hosting ASN":          "host",
-        "Hosting AS Name":      "host",
-        "BGP Peers":            "relations",
-        "NS Records":           "dns",
-        "MX Records":           "dns",
-        "Resolved IPs":         "dns",
 
     },
     _getTheme(name) { return this._THEME_MAP[name] || "other"; },
