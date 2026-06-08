@@ -1002,6 +1002,16 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { filter: invert
 [data-theme="light"] #enrich-grid .text-cyan-600   { color: #0e7490 !important; }
 [data-theme="light"] #enrich-grid .text-slate-600  { color: var(--text-muted) !important; }
 
+/* DNS record-type labels (A, MX, NS…) */
+[data-theme="light"] #enrich-grid .text-slate-500.uppercase {
+  color: var(--text-secondary) !important;
+}
+/* DNS value tags */
+[data-theme="light"] #enrich-grid .bg-slate-800\/60.border-slate-700\/50 {
+  background-color: var(--bg-elevated) !important;
+  border-color: var(--border-default) !important;
+  color: var(--text-primary) !important;
+}
 
 /* ══════════════════════════════════════════════════════
    5.10 Enrichment modals
@@ -1150,7 +1160,28 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { filter: invert
   background-color: var(--bg-overlay) !important;
   color: var(--text-secondary) !important;
 }
-
+/* IOC type checkboxes — état actif (checked) */
+[data-theme="light"] #siem-container .bg-teal-600\/20 {
+  background-color: rgba(13, 78, 78, 0.15) !important;
+  border-color: rgba(13, 78, 78, 0.5) !important;
+}
+[data-theme="light"] #siem-container .text-teal-300 {
+  color: #0d6666 !important;
+}
+/* IOC type checkboxes — état inactif */
+[data-theme="light"] #siem-container label.bg-slate-800.border-slate-700.text-slate-500 {
+  background-color: var(--bg-overlay) !important;
+  border-color: var(--border-default) !important;
+  color: var(--text-muted) !important;
+}
+/* Bouton Run Investigation */
+[data-theme="light"] #siem-container button.text-teal-300 {
+  color: #0d5f5f !important;
+  border-color: var(--border-default) !important;
+}
+[data-theme="light"] #siem-container button.hover\:border-teal-500\/40:hover {
+  border-color: rgba(13, 110, 110, 0.6) !important;
+}
 
 /* ══════════════════════════════════════════════════════
    5.12 Correlation / pivot panels

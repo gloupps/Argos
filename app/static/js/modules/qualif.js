@@ -780,11 +780,16 @@ window.EnrichPanel = {
             Object.entries(byName).forEach(([name, valSet]) => {
                 const arr = [...valSet];
                 const tags = arr.slice(0, 12).map(v => {
-                    const isTrunc = v.length > 30;
-                    const disp = isTrunc ? v.slice(0, 28) + "…" : v;
-                    return `<span class="text-[15px] px-1.5 py-0.5 rounded border bg-slate-800/60
-                                          border-slate-700/50 text-slate-300 font-mono truncate max-w-full"
-                                   title="${this._esc(v)}">${disp}</span>`;
+                    const esc  = this._esc(v);
+                    const data = this._esc(JSON.stringify(v));
+                    return `<button onclick="EnrichPanel._copyDns(this, ${data})"
+                                    class="inline-flex items-center gap-1.5 text-[15px] px-1.5 py-0.5 rounded border
+                                           bg-slate-800/60 border-slate-700/50 text-slate-300 font-mono break-all text-left
+                                           hover:border-slate-500 hover:bg-slate-700/60 transition cursor-pointer group"
+                                    title="Click to copy">
+                                <span>${esc}</span>
+                                <i data-lucide="clipboard" class="w-3 h-3 shrink-0 text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity"></i>
+                            </button>`;
                 }).join("");
                 const overflow = arr.length > 12 ? this._listExpandBtn(name, arr) : "";
                 sections.push(`
@@ -1406,6 +1411,24 @@ window.EnrichPanel = {
     },
 
     // ── Helpers ───────────────────────────────────────────
+
+    _copyDns(btn, text) {
+        navigator.clipboard.writeText(text).then(() => {
+            const icon = btn.querySelector("[data-lucide]");
+            if (icon) {
+                icon.setAttribute("data-lucide", "check");
+                icon.classList.remove("text-slate-600", "opacity-0");
+                icon.classList.add("text-green-400", "opacity-100");
+                lucide.createIcons({ nodes: [btn] });
+                setTimeout(() => {
+                    icon.setAttribute("data-lucide", "clipboard");
+                    icon.classList.remove("text-green-400", "opacity-100");
+                    icon.classList.add("text-slate-600", "opacity-0");
+                    lucide.createIcons({ nodes: [btn] });
+                }, 1200);
+            }
+        });
+    },
 
     _renderError(msg) {
         const p = document.getElementById("qualif-panel");
