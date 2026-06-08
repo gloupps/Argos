@@ -39,24 +39,32 @@ The goal is to replace the tab-juggling of manual IOC investigations with a sing
 
 ```
 Flask app (main.py)
-├── routes.py          — HTTP endpoints + SocketIO events
+├── ___init___.py  
 ├── services/
-│   └── services.py    — Single dispatcher: routes all actions to the right module
-├── modules/           — One Python class per enrichment / SIEM source
-│   └── module.py      — Base class (get_info, get_correlation, get_quotas, get_fields, settings_fields)
-├── database.py        — SQLite layer (aiosqlite)
-└── templates/         — Jinja2 HTML
-
-Static JS (vanilla modules, no bundler)
+│   ├── __init__.py
+│   ├── routes.py           — HTTP endpoints + SocketIO events
+│   ├── database.py         — SQLite layer (aiosqlite)
+│   ├── job_manager.py
+│   └── services.py         — Single dispatcher: routes all actions to the right module
 ├── modules/
-│   ├── modules.js         — Sidebar + settings rendering; auto-discovers registered modules
-│   ├── qualif.js          — Enrichment panel rendering, field coloring, _THEME_MAP
-│   ├── graph.js           — Cytoscape.js graph
-│   ├── siem.js            — SIEM investigation panel
-│   ├── siem_instances.js  — QRadar / Splunk / ES log source / index config UI
-│   ├── es_instances.js    — Elasticsearch enrichment instances UI
-│   └── case.js / case_actions.js / …
-└── argos-theme.css    — Full dark + light mode theme (CSS vars, data-theme scoping)
+│   ├── __init__.py         — One Python class per enrichment / SIEM source
+│   └── module.py           — Base class (get_info, get_correlation, get_quotas, get_fields, settings_fields)
+├── static/
+│   ├── css/
+│       └── argos-theme.css — Full dark + light mode theme (CSS vars, data-theme scoping)
+│   ├── images/
+│   └── js/
+│       ├── app.js
+│       ├── module.js
+│       └── modules/        — Sidebar + settings rendering; auto-discovers registered modules
+│           ├── modules.js         
+│           ├── qualif.js          — Enrichment panel rendering, field coloring, _THEME_MAP
+│           ├── graph.js           — Cytoscape.js graph
+│           ├── siem.js            — SIEM investigation panel
+│           ├── siem_instances.js  — QRadar / Splunk / ES log source / index config UI
+│           ├── es_instances.js    — Elasticsearch enrichment instances UI
+│           └── case.js / case_actions.js / …
+└── templates/         — Jinja2 HTML
 ```
 
 **Key design rules:**
