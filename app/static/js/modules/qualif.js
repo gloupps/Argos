@@ -20,7 +20,7 @@ window.EnrichPanel = {
         if (i) return i;
         return { virustotal:"shield", shodan:"radar", abuseipdb:"ban",
             urlscan:"scan-eye", viewdns:"globe", opencti:"database", misp:"share-2",
-            threatfox:"bug", elasticsearch:"database", censys:"scan-line"}[k] || "box";
+            threatfox:"bug", elasticsearch:"database", censys:"scan-line",hybrid_analysis:"flask-conical"}[k] || "box";
     },
 
     _isEmpty(v) {
@@ -350,6 +350,11 @@ window.EnrichPanel = {
         "Avg Confidence":       "threat",
         "IOC Count":            "threat",
         "ThreatFox Entry":      "threat",
+        "Verdict":              "threat",
+        "HA Tags":              "tags",
+        "Sandbox Environments": "other",
+        "File Type":            "other",
+        "SHA256":               "other",
 
         // ── HOST ──
         "Organization":         "host",

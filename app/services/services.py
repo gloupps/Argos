@@ -36,6 +36,7 @@ class Services:
         from app.modules.censys_module import CensysModule
         from app.modules.qradar_module import QRadarModule
         from app.modules.splunk_module import SplunkModule
+        from app.modules.hybrid_analysis_module import HybridAnalysisModule
 
         self.modules = {
             "shodan": ShodanModule(self.requester),
@@ -49,6 +50,7 @@ class Services:
             "censys": CensysModule(self.requester),
             "qradar": QRadarModule(self.requester),
             "splunk": SplunkModule(self.requester),
+            "hybrid_analysis": HybridAnalysisModule(self.requester),
         }
 
     # ── Public ────────────────────────────────────────────
