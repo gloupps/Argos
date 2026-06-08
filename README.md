@@ -1,107 +1,169 @@
 # 🔍 Argos
 
-> **⚠️ Actively under development — unstable, incomplete, broken in places.**
+> **⚠️ Actively under development — unstable, incomplete, broken in places.**  
 > Designed to run **locally only**. Do not deploy in production.
 
-> 🤖 This project is built through **Vibecoding** with **Claude (Anthropic)** — the AI writes most of the code, I steer, test, and break things.
+> 🤖 Built through **Vibecoding with Claude (Anthropic)** — the AI writes most of the code, I steer, test, and break things.
 
 ---
 
 ## What is it?
 
-Argos is a local **Cyber Threat Intelligence (CTI)** investigation tool. It lets you analyze indicators of compromise (IOCs — IPs, domains, URLs, hashes), enrich them in parallel across multiple threat intelligence sources, and explore correlations visually as an interactive graph.
+Argos is a local **Cyber Threat Intelligence (CTI)** investigation platform for analysts. It lets you open a case, paste a list of IOCs (IPs, domains, URLs, file hashes), and in one click:
 
-The idea: one place to open a case, paste your IOCs, fire off enrichment across several APIs at once, and pivot visually — without relying on a commercial platform.
+- **Enrich** them in parallel across a dozen external and internal threat intelligence sources
+- **Correlate** them to discover pivot nodes (shared infrastructure, certificates, ASNs, sandbox behavior…)
+- **Investigate** them against your SIEM (QRadar, Splunk, Elasticsearch) over a custom date range
+- **Visualize** the entire graph interactively — right-click any node to enrich on demand
+
+The goal is to replace the tab-juggling of manual IOC investigations with a single local tool, without depending on a commercial platform.
 
 ---
 
 ## How it works
 
-1. **Create a case** — from a raw IOC list, a report URL, a STIX2 file, or an existing case.
-2. **Enrichment** — Argos queries all configured sources in parallel and stores results locally.
-3. **Correlation / Pivot** — the tool finds links between IOCs (IPs sharing a Shodan service hash, communicating files on VT, similar domains on URLScan, etc.).
-4. **Interactive graph** — nodes and pivots rendered with Cytoscape.js. Right-click any node to enrich on demand.
-5. **STIX2 export** — cases can be exported as a STIX2 bundle.
+```
+[Create case] → [Auto-enrich] → [Correlate / pivot] → [SIEM investigation] → [Graph + export]
+```
+
+1. **Create a case** — from a raw IOC list, a public report URL, a STIX2 bundle file, an OpenCTI/MISP report URL, or an existing case.
+2. **Enrichment** — Argos queries all configured sources in parallel (via `asyncio.gather`) and stores results locally in SQLite. Results stream back to the UI in real time over WebSocket.
+3. **Correlation / Pivot** — modules surface links between IOCs: shared Shodan service fingerprints, VirusTotal network communications, common DNS records, MISP event overlap, TLS certificate pivots, etc. Pivot nodes are created automatically and shown on the graph.
+4. **SIEM investigation** — send all (or selected) IOCs to QRadar (AQL), Splunk (SPL), or Elasticsearch (DSL), scoped to a date range, across configured log sources / indexes.
+5. **Interactive graph** — Cytoscape.js renders root IOCs, pivot nodes, and pivoted IOCs. Nodes are color-coded by type. Hold & drag to manually link nodes. Right-click for on-demand enrichment.
+6. **STIX2 export** — export the full case as a STIX2.1 bundle (indicators + relationships).
 
 ---
 
-## Supported sources
+## Architecture
 
-### External (API key required)
-| Module | Supported types |
-|---|---|
-| VirusTotal | IP, domain, URL, hash |
-| Shodan | IP |
-| URLScan | URL, domain |
-| ViewDNS | IP, domain |
-| AbuseIPDB | *(coming soon)* |
+```
+Flask app (main.py)
+├── routes.py          — HTTP endpoints + SocketIO events
+├── services/
+│   └── services.py    — Single dispatcher: routes all actions to the right module
+├── modules/           — One Python class per enrichment / SIEM source
+│   └── module.py      — Base class (get_info, get_correlation, get_quotas, get_fields, settings_fields)
+├── database.py        — SQLite layer (aiosqlite)
+└── templates/         — Jinja2 HTML
 
-### Internal (self-hosted instance)
-| Module | Supported types |
-|---|---|
-| OpenCTI | IP, domain, URL, hash |
-| MISP | IP, domain, URL, hash |
-| MISP (multiple external instances) | IP, domain, URL, hash |
+Static JS (vanilla modules, no bundler)
+├── modules/
+│   ├── modules.js         — Sidebar + settings rendering; auto-discovers registered modules
+│   ├── qualif.js          — Enrichment panel rendering, field coloring, _THEME_MAP
+│   ├── graph.js           — Cytoscape.js graph
+│   ├── siem.js            — SIEM investigation panel
+│   ├── siem_instances.js  — QRadar / Splunk / ES log source / index config UI
+│   ├── es_instances.js    — Elasticsearch enrichment instances UI
+│   └── case.js / case_actions.js / …
+└── argos-theme.css    — Full dark + light mode theme (CSS vars, data-theme scoping)
+```
+
+**Key design rules:**
+- All actions go through a single `/api/run` endpoint, dispatched in `services.py`.
+- Adding a Python module that extends `Module` is enough to auto-register it in the sidebar, settings, and enrichment panel — provided the frontend `_THEME_MAP`, coloring rules, and icon entries in `qualif.js` are also added.
+- All credentials and instance configs are stored in the browser's `localStorage` via `SecretStore`. Nothing sensitive is written to the server.
+
+---
+
+## Modules
+
+### External enrichment (API key required)
+
+| Module | IOC types | Notes |
+|---|---|---|
+| **VirusTotal** | IP, domain, URL, hash | Detection ratios, network comms, sandbox, pivot via graph |
+| **Shodan** | IP | Services, banners, CVEs, ASN, org, geo; TLS/fingerprint pivot |
+| **Censys** | IP, domain | Host scan data, services, certificates, ASN pivot |
+| **URLScan** | URL, domain | Screenshot, page structure, linked domains pivot |
+| **ViewDNS** | IP, domain | Reverse DNS, IP history, domain history |
+| **AbuseIPDB** | IP | Abuse confidence score, reports, ISP, usage type |
+| **ThreatFox** | IP, domain, URL, hash | Malware families, tags, confidence; abuse.ch feed |
+| **Hybrid Analysis** | hash, domain, URL | Sandbox analysis, threat score, network IoCs |
+| **External MISP (multi-instance)** | IP, domain, URL, hash | Configurable N external MISP instances, each with its own URL + API key |
+
+### Internal enrichment (self-hosted instance)
+
+| Module | IOC types | Notes |
+|---|---|---|
+| **OpenCTI** | IP, domain, URL, hash | GraphQL API; extracts reports, labels, relations, scores |
+| **MISP** | IP, domain, URL, hash | REST API; events, tags, threat levels, galaxy clusters |
+| **Elasticsearch (enrichment)** | IP, domain, URL, hash | Configurable ES instances queried as an internal CTI data source |
+
+### SIEM investigation
+
+| Module | Query language | Notes |
+|---|---|---|
+| **QRadar** | AQL | Per log-source config; custom `search_field` per source; always runs events + flows (IPv4) + DNS (domain) in parallel |
+| **Splunk** | SPL | Per-index config with individual auth; grouped SPL queries by IOC type; parallel execution |
+| **Elasticsearch** | ES DSL | Per-index config; timestamp detection; output field selection |
+
+All SIEM modules support a configurable date range (start / end), custom log sources / indexes, and output field selection. Results stream back to the UI in real time.
 
 ---
 
 ## Tech stack
 
-- **Backend**: Python, Flask, Flask-SocketIO, aiosqlite
-- **Frontend**: Vanilla HTML/CSS/JS, Tailwind CSS, Cytoscape.js, Lucide icons
-- **Database**: SQLite (local)
-- **Real-time**: WebSocket (Socket.IO) for live job tracking
+| Layer | Technology |
+|---|---|
+| Backend | Python, Flask, Flask-SocketIO, aiosqlite, aiohttp |
+| Frontend | Vanilla JS (ES modules), Tailwind CSS, Lucide icons |
+| Graph | Cytoscape.js (cose layout) |
+| Database | SQLite (local) |
+| Real-time | WebSocket via Socket.IO |
+| Credentials | Browser `localStorage` (SecretStore) |
 
 ---
 
 ## Installation
 
 ```bash
-# Clone the repo
 git clone https://github.com/gloupps/Argos.git
 cd Argos
 
-# Create a virtual environment
 python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+source venv/bin/activate   # Windows: venv\Scripts\activate
 
-# Install dependencies
 pip install -r requirements.txt
 
-# Start the app
 python main.py
 ```
 
-The interface is available at `http://localhost:5555`.
+Open `http://localhost:5555`.
 
 ---
 
 ## Configuration
 
-API keys are configured directly from the UI (**Settings** panel) — they are stored in the browser's `localStorage`. Nothing is sent to or stored on the server.
+All configuration is done from the **Settings** panel in the UI — no config files to edit.
 
-For internal modules (OpenCTI, MISP), you also need to provide the instance URL in the settings.
+- **External modules** — paste your API key in the corresponding field.
+- **Internal modules** (OpenCTI, MISP, Elasticsearch enrichment) — provide the instance URL + API key.
+- **Multi-instance MISP / ES** — add as many instances as needed; each gets its own name, URL, and key.
+- **SIEM** — configure log sources (QRadar), indexes (Splunk / Elasticsearch), date range, and per-source search fields.
+
+Everything is stored in `localStorage`. Nothing is sent to or stored on the server beyond the current session data.
 
 ---
 
 ## Project status
 
-- [x] Case creation (IOC list, URL, STIX2, existing case)
-- [x] Parallel multi-source enrichment
-- [x] Correlation / pivot (VT, Shodan, URLScan, MISP)
-- [x] Interactive graph with Cytoscape
+- [x] Case creation (IOC list, URL, STIX2 file, OpenCTI/MISP report, existing case)
+- [x] Parallel multi-source enrichment with real-time streaming
+- [x] Correlation / pivot (VirusTotal, Shodan, Censys, URLScan, MISP, ThreatFox…)
+- [x] Interactive Cytoscape graph (right-click enrich, manual edge creation)
 - [x] STIX2 export
-- [x] Multi-instance MISP support
-- [ ] EXTERNAL/INTERNAL modules
-- [ ] SIEM modules
-- [ ] Module documentation
+- [x] Multi-instance MISP and Elasticsearch enrichment
+- [x] SIEM investigation — QRadar (AQL), Splunk (SPL), Elasticsearch (DSL)
+- [x] Dark / light theme
+- [ ] Full module documentation
 - [ ] Plenty of other broken or missing things
 
 ---
 
 ## Warnings
 
-- 🚧 **Work in progress** — internal API, DB schema and UI may change without notice.
+- 🚧 **Work in progress** — internal API, DB schema, and UI may change without notice.
 - 🏠 **Local only** — no authentication, no multi-user support, no endpoint hardening. Do not expose on a public network.
 - 🤖 **Vibecoding** — most of the code is AI-generated by Claude. It works, but don't expect production-grade polish.
 
@@ -109,7 +171,7 @@ For internal modules (OpenCTI, MISP), you also need to provide the instance URL 
 
 ## Contributing
 
-This is a personal / experimental project. PRs are welcome, but no guarantee of a quick review.
+Personal / experimental project.
 
 ---
 
