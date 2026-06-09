@@ -22,6 +22,11 @@ window.EnrichPanel = {
             urlscan:"scan-eye", viewdns:"globe", opencti:"database", misp:"share-2",
             threatfox:"bug", elasticsearch:"database", censys:"scan-line",hybrid_analysis:"flask-conical"}[k] || "box";
     },
+    
+    _modBadge(mod) {
+        if (!mod) return "";
+        return `<span class="inline-flex items-center gap-0.5 ml-1.5 text-[10px] text-slate-600 font-mono select-none" title="${this._esc(this._modLabel(mod))}"><i data-lucide="${this._modIcon(mod)}" class="w-2 h-2 shrink-0"></i>${this._esc(this._modLabel(mod))}</span>`;
+    },
 
     _isEmpty(v) {
         if (v === null || v === undefined || v === "") return true;
@@ -319,10 +324,11 @@ window.EnrichPanel = {
         const el = document.getElementById("header-badges");
         if (!el || verdict === "unknown") return;
         const label = verdict === "malicious" ? "Malicious" : verdict === "suspicious" ? "Suspicious" : "Clean";
-        const cls   = verdict === "malicious" ? "bg-red-500/20 text-red-400 border border-red-500/30"
+        const cls   = verdict === "malicious"  ? "bg-red-500/20 text-red-400 border border-red-500/30"
                     : verdict === "suspicious" ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
                     :                            "bg-green-500/20 text-green-400 border border-green-500/30";
-        const dot   = verdict === "malicious" ? "bg-red-500" : verdict === "suspicious" ? "bg-amber-500" : "bg-green-500";
+        const dot   = verdict === "malicious"  ? "bg-red-500"
+                    : verdict === "suspicious" ? "bg-amber-500" : "bg-green-500";
         const scoreStr = score !== null ? ` · ${score}` : "";
         const b = document.createElement("span");
         b.className = `flex items-center gap-1 text-[15px] font-bold px-1.5 py-0.5 rounded border ${cls}`;
@@ -331,11 +337,29 @@ window.EnrichPanel = {
     },
     
     // ── VERDICT COMPUTATION ───────────────────────────────────────
-    _computeVerdict(info) {
-        const modules = info?.modules || {};
+    _computeVerdict(data) {
+        const modules   = data?.modules || {};
         const allFields = Object.values(modules).flat().filter(Boolean);
 
-        // 1. Score de détection (base VT)
+        const _internalKeys = () => {
+            const reg = window.Modules?.registry || {};
+            const keys = Object.entries(reg)
+                .filter(([k, m]) => m.type === "internal" || k === "misp" || k.startsWith("misp_ext_"))
+                .map(([k]) => k);
+            return keys.length ? keys : ["opencti", "misp"];
+        };
+
+        const _isEmpty = v => {
+            if (v === null || v === undefined || v === "") return true;
+            if (typeof v === "number" && v === 0) return true;
+            if (Array.isArray(v)) {
+                if (v.length === 0) return true;
+                if (v.some(x => x && typeof x === "object")) return false;
+                return v.filter(x => x !== "" && x !== null).length === 0;
+            }
+            return false;
+        };
+
         let maxScore = null;
         allFields.forEach(f => {
             if (f.type === "score") {
@@ -344,94 +368,54 @@ window.EnrichPanel = {
             }
         });
 
-        // 2. Signaux CTI
-        const threatFields = new Set([
-            "Threat Actors", "Related Threat Actors", "Malware Family", "Malware Families",
-            "malware_family", "Threat Type", "Threat Types", "ThreatFox Entry",
-            "Malware Description", "Verdict",
+        const THREAT_FIELDS = new Set([
+            "Threat Actors", "Related Threat Actors",
+            "Malware Family", "Malware Families", "malware_family",
+            "Malware Description", "Threat Type", "Threat Types",
+            "ThreatFox Entry", "Verdict",
         ]);
-        const reportFields  = new Set(["Collections", "Reports", "Malware Refs", "Matching Events", "Events"]);
-        const internalKeys  = this._internalKeys(); // misp, opencti, misp_ext_*
+        const REPORT_FIELDS = new Set([
+            "Collections", "Reports", "Malware Refs",
+            "Matching Events", "Events",
+        ]);
 
-        let hasThreat       = false;
-        let communityMal    = 0;
-        let communitySusp   = 0;
-        let hasCollection   = false;
-        let hasReport       = false;
-        let hasInternalHit  = false;
+        let hasThreat    = false;
+        let communityMal = 0, communitySusp = 0, reportCount = 0;
 
         allFields.forEach(f => {
-            const name = f.name || "";
-            const val  = f.value;
-            const isEmpty = this._isEmpty(val);
-
-            // Threat signals
-            if (threatFields.has(name) && !isEmpty) hasThreat = true;
-            // Compromised flag (ThreatFox)
+            const name = f.name || "", val = f.value;
+            if (THREAT_FIELDS.has(name) && !_isEmpty(val)) hasThreat = true;
             if (name === "Compromised" && String(val).toLowerCase() === "yes") hasThreat = true;
-
-            // Community votes VT
-            if (name === "Malicious"  && !isEmpty) communityMal  = Math.max(communityMal,  Number(val) || 0);
-            if (name === "Suspicious" && !isEmpty) communitySusp = Math.max(communitySusp, Number(val) || 0);
-
-            // Collections / Reports
-            if (name === "Collections" && !isEmpty) hasCollection = true;
-            if (reportFields.has(name) && !isEmpty) hasReport = true;
-        });
-
-        // Modules internes : au moins un champ non vide
-        internalKeys.forEach(k => {
-            if (!modules[k]) return;
-            const fields = modules[k] || [];
-            if (fields.some(f => !this._isEmpty(f.value))) hasInternalHit = true;
-        });
-
-        // 3. Décision
-        const reasons = [];
-
-        // Escalade vers malicious si menace confirmée
-        if (hasThreat) {
-            reasons.push("threat");
-            return { verdict: "malicious", score: maxScore, reasons };
-        }
-
-        // Score de détection élevé
-        if (maxScore !== null && maxScore > 70) {
-            reasons.push("detection");
-            return { verdict: "malicious", score: maxScore, reasons };
-        }
-
-        // Score moyen + context aggravant → malicious
-        if (maxScore !== null && maxScore > 40) {
-            if (communityMal > 0 || hasCollection || hasInternalHit) {
-                reasons.push("detection+context");
-                return { verdict: "malicious", score: maxScore, reasons };
+            if (name === "Malicious"  && !_isEmpty(val)) communityMal  = Math.max(communityMal,  Number(val) || 0);
+            if (name === "Suspicious" && !_isEmpty(val)) communitySusp = Math.max(communitySusp, Number(val) || 0);
+            if (REPORT_FIELDS.has(name) && !_isEmpty(val)) {
+                reportCount += Array.isArray(val) ? val.length : 1;
             }
-            reasons.push("detection");
-            return { verdict: "suspicious", score: maxScore, reasons };
-        }
+        });
 
-        // Pas de score élevé mais community votes
-        if (communityMal > 0) {
-            reasons.push("community");
-            return { verdict: "suspicious", score: maxScore, reasons };
-        }
-        if (communitySusp > 0) {
-            reasons.push("community_susp");
-            return { verdict: "suspicious", score: maxScore, reasons };
-        }
+        let hasInternalHit = false;
+        _internalKeys().forEach(k => {
+            if (!modules[k]) return;
+            if ((modules[k] || []).some(f => !_isEmpty(f.value))) {
+                hasInternalHit = true;
+                reportCount += 1;
+            }
+        });
 
-        // Présence dans rapports/collections/modules internes → suspicious
-        if (hasCollection || hasReport || hasInternalHit) {
-            reasons.push("reports");
-            return { verdict: "suspicious", score: maxScore, reasons };
-        }
+        const highReportCount = reportCount >= 3;
 
-        // Score faible
-        if (maxScore !== null && maxScore <= 40) {
-            return { verdict: "clean", score: maxScore, reasons: ["detection"] };
+        if (hasThreat)                                return { verdict: "malicious",  score: maxScore, reasons: ["threat"] };
+        if (maxScore !== null && maxScore > 70)       return { verdict: "malicious",  score: maxScore, reasons: ["detection"] };
+        if (communityMal > 5)                         return { verdict: "malicious",  score: maxScore, reasons: ["community_votes"] };
+        if (highReportCount)                          return { verdict: "malicious",  score: maxScore, reasons: ["reports"] };
+        if (maxScore !== null && maxScore > 40) {
+            if (communityMal > 0 || hasInternalHit)   return { verdict: "malicious",  score: maxScore, reasons: ["detection+context"] };
+                                                      return { verdict: "suspicious", score: maxScore, reasons: ["detection"] };
         }
-
+        if (communityMal > 0)                         return { verdict: "suspicious", score: maxScore, reasons: ["community"] };
+        if (communitySusp > 0)                        return { verdict: "suspicious", score: maxScore, reasons: ["community_susp"] };
+        if (reportCount > 0 || hasInternalHit)        return { verdict: "suspicious", score: maxScore, reasons: ["reports"] };
+        if (maxScore !== null)                        return { verdict: "clean",      score: maxScore, reasons: ["detection"] };
         return { verdict: "unknown", score: null, reasons: [] };
     },
 
@@ -769,7 +753,7 @@ window.EnrichPanel = {
                     return `
                         <tr>
                             <td class="text-[15px] text-slate-500 pr-3 py-0.5 whitespace-nowrap align-top">${field.name}</td>
-                            <td class="text-[15px] ${cls} font-mono py-0.5" title="${this._esc(v)}">${display}${isTrunc ? this._copyBtn(v) : ""}</td>
+                            <td class="text-[15px] ${cls} font-mono py-0.5" title="${this._esc(v)}">${display}${isTrunc ? this._copyBtn(v) : ""}${this._modBadge(mod)}</td>
                         </tr>`;
                 }).filter(Boolean).join("");
                 if (rows) html += `<table class="w-full">${rows}</table>`;
@@ -801,7 +785,7 @@ window.EnrichPanel = {
                 return `
                     <tr>
                         <td class="text-[15px] text-slate-500 pr-3 py-0.5 whitespace-nowrap">${field.name}</td>
-                        <td class="text-[15px] text-slate-300 font-mono py-0.5" title="${this._esc(v)}">${disp}${isTrunc ? this._copyBtn(v) : ""}</td>
+                        <td class="text-[15px] text-slate-300 font-mono py-0.5" title="${this._esc(v)}">${disp}${isTrunc ? this._copyBtn(v) : ""}${this._modBadge(mod)}</td>
                     </tr>`;
             }).join("");
             return rows ? `<table class="w-full">${rows}</table>` : null;
@@ -1018,7 +1002,7 @@ window.EnrichPanel = {
                             rest = v.slice(4);
                         }
                         const disp = rest.length > 90 ? rest.slice(0, 88) + "…" : rest;
-                        return `<div class="text-[8.5px] font-mono text-slate-400 truncate py-px" title="${this._esc(v)}">${statusBadge}${disp}</div>`;
+                        return `<div class="text-[12.5px] font-mono text-slate-400 truncate py-px" title="${this._esc(v)}">${statusBadge}${disp}</div>`;
                     }).join("");
                     const overflow = allVals.length > max ? `<div class="text-[12px] text-slate-600 mt-0.5">+${allVals.length - max} more</div>` : "";
                     const icon = iconMap[name] || "activity";
@@ -1114,8 +1098,8 @@ window.EnrichPanel = {
 
         // ── OTHER / FALLBACK ──
         const seen = {};
-        items.forEach(({ field }) => { if (!seen[field.name]) seen[field.name] = field; });
-        const rows = Object.values(seen).map(field => {
+        items.forEach(({ mod, field }) => { if (!seen[field.name]) seen[field.name] = { mod, field }; });
+        const rows = Object.values(seen).map(({ mod, field }) => {
             if (Array.isArray(field.value) && field.value.length > 2) {
                 const preview = field.value.slice(0, 3).map(x => String(x)).join(", ");
                 const expandBtn = this._listExpandBtn(field.name, field.value.map(x => String(x)));
@@ -1135,7 +1119,7 @@ window.EnrichPanel = {
             return `
                 <tr>
                     <td class="text-[15px] text-slate-500 pr-3 py-0.5 whitespace-nowrap">${field.name}</td>
-                    <td class="text-[15px] text-slate-300 font-mono py-0.5" title="${this._esc(v)}">${disp}${isTrunc ? this._copyBtn(v) : ""}</td>
+                    <td class="text-[15px] text-slate-300 font-mono py-0.5" title="${this._esc(v)}">${disp}${isTrunc ? this._copyBtn(v) : ""}${this._modBadge(mod)}</td>
                 </tr>`;
         }).filter(Boolean).join("");
         return rows ? `<table class="w-full">${rows}</table>` : null;
