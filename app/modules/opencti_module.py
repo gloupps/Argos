@@ -232,7 +232,7 @@ class OpenCTIModule(Module):
             reports = node.get("reports", {}).get("edges", [])
             report_names = [r["node"]["name"] for r in reports if r.get("node")]
             if report_names:
-                results.append(self._f(indicator, "Reports", "list", report_names[:5]))
+                results.append(self._f(indicator, "Reports", "list", report_names))
             results.append(
                 self._f(indicator, "Report Count", "label-capsule", str(len(reports)))
             )
