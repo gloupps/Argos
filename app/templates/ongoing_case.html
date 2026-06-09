@@ -42,6 +42,11 @@
                            px-3 py-1.5 rounded text-xs font-medium transition text-slate-300">
                 <i data-lucide="download" class="w-3.5 h-3.5"></i> Export STIX
             </button>
+            <button onclick="CaseReport.generate('{{ case_id }}')"
+                    class="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700
+                           px-3 py-1.5 rounded text-xs font-medium transition text-blue-400">
+                <i data-lucide="file-text" class="w-3.5 h-3.5"></i> Export PDF
+            </button>
             <button onclick="CaseActions.deleteCase('{{ case_id }}')"
                     class="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700
                            px-3 py-1.5 rounded text-xs font-medium transition text-red-400 hover:text-white"
