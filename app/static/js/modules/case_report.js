@@ -130,16 +130,94 @@ window.CaseReport = {
         let topPivot = null, maxLinks = 0;
         Object.entries(pivotCounts).forEach(([lbl, cnt]) => { if (cnt > maxLinks) { maxLinks = cnt; topPivot = { label: lbl, links: cnt }; } });
 
-        const families = new Set();
-        iocEntries.forEach(([, data]) => {
-            Object.values(data.modules || {}).forEach(fields => {
+        // ── CTI extraction ───────────────────────────────────────────
+        const families   = new Set();
+        const threatActors = new Set();
+        const mitreTags  = new Set();
+        const allTags    = new Set();
+        const vulns      = new Set();
+        const orgs       = new Set();
+        const asns       = new Set();
+        const countries  = new Set();
+        const mispEvents = new Set();
+        const collections = new Set();
+        // IOC-level abuse scores and org info for top-malicious card
+        const iocMeta = {}; // ioc → { abuseScore, org, asn, country, threatTypes }
+
+        const _grab = (fields, ...names) => {
+            for (const f of (fields || [])) {
+                if (names.includes(f.name)) {
+                    const vals = Array.isArray(f.value) ? f.value : [f.value];
+                    return vals.filter(Boolean).map(String);
+                }
+            }
+            return [];
+        };
+
+        iocEntries.forEach(([ioc, data]) => {
+            const meta = { abuseScore: null, org: null, asn: null, country: null, threatTypes: [] };
+            Object.entries(data.modules || {}).forEach(([mod, fields]) => {
                 (fields || []).forEach(f => {
-                    if (["Malware Family", "malware_family"].includes(f.name)) {
-                        (Array.isArray(f.value) ? f.value : [f.value]).forEach(v => v && families.add(String(v)));
+                    const v = f.value; const n = f.name;
+                    // Families
+                    if (["Malware Family", "Malware Families", "malware_family"].includes(n)) {
+                        (Array.isArray(v)?v:[v]).forEach(x => x && families.add(String(x)));
+                    }
+                    // Threat actors (VT related_threat_actors)
+                    if (["Threat Actors", "Related Threat Actors"].includes(n)) {
+                        (Array.isArray(v)?v:[v]).forEach(x => x && threatActors.add(String(x)));
+                    }
+                    // Tags
+                    if (n === "Tags") {
+                        (Array.isArray(v)?v:[v]).forEach(x => {
+                            if (!x) return;
+                            const s = String(x);
+                            if (s.toLowerCase().includes("mitre") || s.includes("attack.")) mitreTags.add(s);
+                            else allTags.add(s);
+                        });
+                    }
+                    // MITRE / Galaxies (MISP)
+                    if (n === "MITRE / Galaxies") {
+                        (Array.isArray(v)?v:[v]).forEach(x => x && mitreTags.add(String(x)));
+                    }
+                    // Vulns
+                    if (n === "Vulnerabilities") {
+                        (Array.isArray(v)?v:[v]).forEach(x => x && vulns.add(String(x)));
+                    }
+                    // Geo / org
+                    if (n === "Organization" || n === "ISP") { if (v) { orgs.add(String(v)); meta.org = String(v); } }
+                    if (n === "ASN")     { if (v) { asns.add(String(v)); meta.asn = String(v); } }
+                    if (n === "Country" || n === "Country Name") { if (v) { countries.add(String(v)); meta.country = String(v); } }
+                    // Abuse confidence
+                    if (n === "Abuse Confidence" || n === "abuse_confidence") {
+                        const sc = parseInt(v, 10); if (!isNaN(sc)) meta.abuseScore = sc;
+                    }
+                    // Threat types (ThreatFox)
+                    if (n === "Threat Types" || n === "Threat Type") {
+                        (Array.isArray(v)?v:[v]).forEach(x => x && meta.threatTypes.push(String(x)));
+                    }
+                    // MISP events
+                    if (n === "Events") {
+                        (Array.isArray(v)?v:[v]).forEach(x => x && mispEvents.add(String(x)));
+                    }
+                    // VT collections
+                    if (n === "Collections") {
+                        (Array.isArray(v)?v:[v]).forEach(x => x && collections.add(String(x)));
                     }
                 });
             });
+            iocMeta[ioc] = meta;
         });
+
+        // Top SIEM IOC (most hits)
+        const siemByIoc = {};
+        siemRows.forEach(r => { siemByIoc[r.ioc] = (siemByIoc[r.ioc]||0) + r.hits; });
+        const topSiemIoc = Object.entries(siemByIoc).sort((a,b)=>b[1]-a[1])[0] || null;
+
+        // SIEM timeline: first/last across all results
+        const allDates = siemRows.flatMap(r => [r.first, r.last]).filter(d => d && d !== "—").sort();
+        const siemFirst = allDates[0] || null;
+        const siemLast  = allDates[allDates.length-1] || null;
 
         return {
             total: iocEntries.length,
@@ -147,7 +225,19 @@ window.CaseReport = {
             totalSiemHits, severity, siemRows,
             modules: [...modules],
             topMalicious, topPivot,
-            families: [...families].slice(0, 3),
+            families:     [...families].slice(0, 6),
+            threatActors: [...threatActors].slice(0, 5),
+            mitreTags:    [...mitreTags].slice(0, 8),
+            allTags:      [...allTags].slice(0, 10),
+            vulns:        [...vulns].slice(0, 8),
+            orgs:         [...orgs].slice(0, 4),
+            asns:         [...asns].slice(0, 4),
+            countries:    [...countries].slice(0, 6),
+            mispEvents:   [...mispEvents].slice(0, 5),
+            collections:  [...collections].slice(0, 4),
+            iocMeta,
+            topSiemIoc,
+            siemFirst, siemLast,
             nodeCount:  (graphData.nodes  || []).length,
             pivotCount: (graphData.pivots || []).length,
         };
@@ -203,33 +293,10 @@ ${this._css()}
     <div class="stat-box"><div class="stat-val">${summary.totalSiemHits.toLocaleString()}</div><div class="stat-label">SIEM Hits</div></div>
   </div>
 
-  <div class="split">
-    <div class="split-col">
-      <div class="section-title">Key findings</div>
-      ${this._buildFindings(summary, allInfo)}
-    </div>
-    <div class="split-col">
-      <div class="section-title">Recommended actions</div>
-      ${this._buildActions(summary)}
-    </div>
-  </div>
-
-  <div class="section">
-    <div class="section-title">IOC overview</div>
-    ${this._buildIocTable(allInfo)}
-  </div>
-
-  <div class="highlights">
-    ${this._buildHighlights(summary)}
-  </div>
-
-  ${summary.siemRows.length > 0 ? `<div class="section">
-    <div class="section-title">SIEM investigation results</div>
-    ${this._buildSiemTable(summary.siemRows)}
-  </div>` : ""}
+  ${this._buildThreatProfile(summary, allInfo)}
 
   <div class="footer">
-    <span>Argos © 2026 </span><span>Page 1</span>
+    <span>Argos · Confidential</span><span>Page 1</span>
   </div>
 </div>
 
@@ -266,7 +333,7 @@ ${graphPng ? `
   ${this._buildAnnexe(allInfo)}
 
   <div class="footer">
-    <span>Argos © 2026 </span><span>Annexe</span>
+    <span>Argos · Confidential</span><span>Annexe</span>
   </div>
 </div>
 
@@ -274,38 +341,160 @@ ${graphPng ? `
 </html>`;
     },
 
-    // ── Findings ──────────────────────────────────────────────────
+    // ── Threat Profile (page 1) ───────────────────────────────────
 
-    _buildFindings(summary, allInfo) {
-        const items = [];
-        if (summary.malicious > 0) {
-            const top = Object.entries(allInfo)
-                .map(([ioc, d]) => { let ms = -1; Object.values(d.modules||{}).forEach(fs => fs.forEach(f => { if (f.type==="score") { const v=Number(f.value); if(v>ms) ms=v; }})); return {ioc,ms}; })
-                .filter(x => x.ms > 70).sort((a,b) => b.ms-a.ms).slice(0,2)
-                .map(x => `${x.ioc} (${x.ms})`).join(", ");
-            items.push({ cls:"danger", title:`${summary.malicious} malicious IOC${summary.malicious>1?"s":""} confirmed`, desc: top||"Malicious indicators detected." });
-        }
-        if (summary.topPivot)
-            items.push({ cls:"warn", title:"Infrastructure pivot detected", desc:`${summary.topPivot.label} links ${summary.topPivot.links} IOCs in the graph.` });
+    _buildThreatProfile(summary, allInfo) {
+        const e = this._esc.bind(this);
+
+        // ── Malicious IOCs ranked ──────────────────────────────────
+        const rankedMalicious = Object.entries(allInfo)
+            .map(([ioc, data]) => {
+                let maxScore = -1; const srcHit = []; const srcAll = [];
+                Object.entries(data.modules||{}).forEach(([mod, fields]) => {
+                    let ms = -1;
+                    (fields||[]).forEach(f => { if (f.type==="score") { const v=Number(f.value); if(!isNaN(v)&&v>ms) ms=v; if(!isNaN(v)&&(maxScore<0||v>maxScore)) maxScore=v; }});
+                    if (ms > 40) srcHit.push(Modules?.registry?.[mod]?.name||mod);
+                    else srcAll.push(Modules?.registry?.[mod]?.name||mod);
+                });
+                return { ioc, type: data.type||"unknown", score: maxScore, srcHit, meta: summary.iocMeta[ioc]||{} };
+            })
+            .filter(x => x.score > 40)
+            .sort((a,b) => b.score - a.score);
+
+        const maliciousRows = rankedMalicious.slice(0, 8).map(x => {
+            const verdictCls = x.score > 70 ? "malicious" : "suspicious";
+            const shortIoc   = x.ioc.length > 46 ? x.ioc.slice(0,44)+"…" : x.ioc;
+            const meta       = x.meta;
+            const detail     = [meta.org, meta.country, meta.asn].filter(Boolean).join(" · ");
+            const abuse      = meta.abuseScore !== null ? `<span class="badge hits-${meta.abuseScore>70?"many":meta.abuseScore>30?"some":"none"}">Abuse ${meta.abuseScore}%</span>` : "";
+            return `<tr>
+              <td class="mono">${e(shortIoc)}</td>
+              <td><span class="badge type-${x.type}">${x.type}</span></td>
+              <td><span class="badge verdict-${verdictCls}">${x.score}</span></td>
+              <td>${x.srcHit.slice(0,4).map(s=>`<span class="src hit">${e(s)}</span>`).join("")}</td>
+              <td style="font-size:7.5pt;color:#64748b;">${e(detail)}${abuse}</td>
+            </tr>`;
+        }).join("");
+
+        // ── Attribution section ────────────────────────────────────
+        const attrCards = [];
         if (summary.families.length)
-            items.push({ cls:"warn", title:"Malware families identified", desc:`Attributed: ${summary.families.join(", ")}.` });
-        if (summary.totalSiemHits > 0)
-            items.push({ cls:"danger", title:`${summary.totalSiemHits.toLocaleString()} SIEM events matched`, desc:`Across ${[...new Set(summary.siemRows.map(r=>r.source))].length} source(s).` });
-        if (!items.length)
-            items.push({ cls:"info", title:"No critical findings", desc:"No malicious IOCs confirmed." });
-        return items.slice(0,4).map(i =>
-            `<div class="finding ${i.cls}"><div class="finding-title">${this._esc(i.title)}</div><div class="finding-desc">${this._esc(i.desc)}</div></div>`
-        ).join("");
-    },
+            attrCards.push({ icon:"🦠", label:"Malware families", items: summary.families, cls:"red" });
+        if (summary.threatActors.length)
+            attrCards.push({ icon:"👤", label:"Threat actors", items: summary.threatActors, cls:"purple" });
+        if (summary.mitreTags.length)
+            attrCards.push({ icon:"⚔️", label:"MITRE techniques", items: summary.mitreTags.map(t => { const m=t.match(/T\d{4}(\.\d+)?/); return m?m[0]:t.split(":").pop().trim(); }), cls:"amber" });
+        if (summary.vulns.length)
+            attrCards.push({ icon:"🔴", label:"CVEs observed", items: summary.vulns, cls:"red" });
+        if (summary.collections.length)
+            attrCards.push({ icon:"📁", label:"VT Collections", items: summary.collections, cls:"blue" });
+        if (summary.mispEvents.length)
+            attrCards.push({ icon:"📌", label:"MISP events", items: summary.mispEvents, cls:"purple" });
 
-    _buildActions(summary) {
+        const attrHtml = attrCards.slice(0,3).map(c => `
+<div class="tp-card">
+  <div class="tp-card-header">${c.icon} ${e(c.label)}</div>
+  <div class="tp-pills">
+    ${c.items.map(it=>`<span class="tp-pill tp-pill-${c.cls}">${e(it)}</span>`).join("")}
+  </div>
+</div>`).join("");
+
+        // ── Infrastructure ─────────────────────────────────────────
+        const infraItems = [];
+        if (summary.orgs.length)      infraItems.push({ k:"Organizations", v: summary.orgs.join(", ") });
+        if (summary.asns.length)      infraItems.push({ k:"ASNs", v: summary.asns.join(", ") });
+        if (summary.countries.length) infraItems.push({ k:"Countries", v: summary.countries.join(", ") });
+        if (summary.topPivot)         infraItems.push({ k:"Top pivot", v: `${summary.topPivot.label} (${summary.topPivot.links} linked)` });
+        if (summary.allTags.length)   infraItems.push({ k:"Tags", v: summary.allTags.slice(0,6).join(", ") });
+
+        const infraHtml = infraItems.map(i =>
+            `<div class="infra-row"><span class="infra-key">${e(i.k)}</span><span class="infra-val">${e(i.v)}</span></div>`
+        ).join("");
+
+        // ── SIEM exposure ──────────────────────────────────────────
+        const siemSources = [...new Set(summary.siemRows.map(r=>r.source))];
+        const siemByIoc   = {};
+        summary.siemRows.forEach(r => { siemByIoc[r.ioc]=(siemByIoc[r.ioc]||0)+r.hits; });
+        const topSiemRows = Object.entries(siemByIoc).sort((a,b)=>b[1]-a[1]).slice(0,5);
+
+        const siemHtml = summary.totalSiemHits > 0
+            ? `<div class="siem-exposure">
+                <div class="siem-stat-row">
+                  <div class="siem-stat"><div class="siem-val">${summary.totalSiemHits.toLocaleString()}</div><div class="siem-label">Total hits</div></div>
+                  <div class="siem-stat"><div class="siem-val">${siemSources.length}</div><div class="siem-label">SIEM sources</div></div>
+                  <div class="siem-stat"><div class="siem-val">${summary.siemRows.length}</div><div class="siem-label">IOC/index pairs</div></div>
+                  ${summary.siemFirst ? `<div class="siem-stat"><div class="siem-val" style="font-size:9pt">${e(summary.siemFirst)}</div><div class="siem-label">First seen</div></div>` : ""}
+                  ${summary.siemLast  ? `<div class="siem-stat"><div class="siem-val" style="font-size:9pt">${e(summary.siemLast)}</div><div class="siem-label">Last seen</div></div>` : ""}
+                </div>
+                <div style="margin-top:10px;">
+                  ${topSiemRows.map(([ioc,hits]) => {
+                    const pct = Math.round((hits/summary.totalSiemHits)*100);
+                    const short = ioc.length>44?ioc.slice(0,42)+"…":ioc;
+                    const cls = hits>100?"many":hits>10?"some":"none";
+                    return `<div class="siem-bar-row">
+                      <span class="siem-bar-ioc mono">${e(short)}</span>
+                      <div class="siem-bar-track"><div class="siem-bar-fill siem-bar-${cls}" style="width:${pct}%"></div></div>
+                      <span class="siem-bar-count badge hits-${cls}">${hits.toLocaleString()}</span>
+                    </div>`;
+                  }).join("")}
+                </div>
+              </div>`
+            : `<div class="tp-empty">No SIEM results for this case.</div>`;
+
+        // ── Recommended actions ────────────────────────────────────
         const acts = [];
-        if (summary.malicious > 0)      acts.push("Block malicious IPs/domains at perimeter");
-        if (summary.totalSiemHits > 0)  acts.push("Investigate matched hosts in SIEM");
-        if (summary.topPivot)           acts.push(`Expand investigation on pivot: ${summary.topPivot.label}`);
-        if (summary.families.length)    acts.push(`Hunt for ${summary.families[0]} indicators across endpoints`);
-        acts.push("Export STIX2 bundle for partner sharing");
-        return `<ul class="action-list">${acts.slice(0,5).map(a=>`<li>${this._esc(a)}</li>`).join("")}</ul>`;
+        if (summary.malicious > 0)      acts.push("Block malicious IPs/domains at perimeter firewall");
+        if (summary.totalSiemHits > 0)  acts.push(`Investigate ${[...new Set(summary.siemRows.flatMap(r=>[r.first,r.last]).filter(d=>d&&d!=="—"))].length>0?"activity timeline in":"hits across"} SIEM`);
+        if (summary.topPivot)           acts.push(`Pivot on ${summary.topPivot.label} to find related infrastructure`);
+        if (summary.families.length)    acts.push(`Hunt for ${summary.families[0]} IOCs across endpoints`);
+        if (summary.vulns.length)       acts.push(`Patch or mitigate: ${summary.vulns.slice(0,2).join(", ")}`);
+        if (summary.mitreTags.length)   acts.push("Map observed MITRE techniques to detection rules");
+        acts.push("Export STIX2 bundle and share with CERT/partners");
+        const actHtml = `<ul class="action-list">${acts.slice(0,5).map(a=>`<li>${e(a)}</li>`).join("")}</ul>`;
+
+        return `
+<div class="tp-grid">
+
+  <!-- Left column: malicious IOCs + infrastructure + attribution -->
+  <div class="tp-left">
+
+    ${rankedMalicious.length > 0 ? `
+    <div class="tp-section">
+      <div class="section-title">Malicious &amp; suspicious IOCs</div>
+      <table><thead><tr><th>IOC</th><th>Type</th><th>Score</th><th>Flagged by</th><th>Context</th></tr></thead>
+      <tbody>${maliciousRows}</tbody></table>
+    </div>` : `<div class="tp-section"><div class="section-title">IOCs</div>${this._buildIocTable(allInfo)}</div>`}
+
+    ${attrCards.length > 0 ? `
+    <div class="tp-section">
+      <div class="section-title">Threat attribution</div>
+      <div class="tp-cards">${attrHtml}</div>
+    </div>` : ""}
+
+    ${infraItems.length > 0 ? `
+    <div class="tp-section">
+      <div class="section-title">Infrastructure profile</div>
+      <div class="infra-grid">${infraHtml}</div>
+    </div>` : ""}
+
+  </div>
+
+  <!-- Right column: SIEM exposure + actions -->
+  <div class="tp-right">
+
+    <div class="tp-section">
+      <div class="section-title">SIEM exposure</div>
+      ${siemHtml}
+    </div>
+
+    <div class="tp-section">
+      <div class="section-title">Recommended actions</div>
+      ${actHtml}
+    </div>
+
+  </div>
+
+</div>`;
     },
 
     // ── IOC overview table ────────────────────────────────────────
@@ -332,22 +521,7 @@ ${graphPng ? `
         return `<table><thead><tr><th>IOC</th><th>Type</th><th>Verdict</th><th>Sources</th></tr></thead><tbody>${rows}</tbody></table>`;
     },
 
-    // ── Highlights ────────────────────────────────────────────────
 
-    _buildHighlights(summary) {
-        const cards = [];
-        if (summary.topMalicious) {
-            const short = summary.topMalicious.ioc.length > 30 ? summary.topMalicious.ioc.slice(0,28)+"…" : summary.topMalicious.ioc;
-            cards.push(`<div class="hl-card"><div class="hl-label">Top malicious IOC</div><div class="hl-val red">${this._esc(short)}</div><div class="hl-sub">Score: ${summary.topMalicious.score} · ${summary.topMalicious.type||"—"}</div></div>`);
-        }
-        if (summary.topPivot)
-            cards.push(`<div class="hl-card"><div class="hl-label">Key pivot</div><div class="hl-val purple">${this._esc(summary.topPivot.label)}</div><div class="hl-sub">${summary.topPivot.links} linked IOCs</div></div>`);
-        if (summary.families.length)
-            cards.push(`<div class="hl-card"><div class="hl-label">Malware family</div><div class="hl-val amber">${this._esc(summary.families[0])}</div><div class="hl-sub">${summary.families.slice(1).join(", ")||"—"}</div></div>`);
-        while (cards.length < 3)
-            cards.push(`<div class="hl-card"><div class="hl-label">SIEM hits</div><div class="hl-val amber">${summary.totalSiemHits.toLocaleString()}</div><div class="hl-sub">${[...new Set(summary.siemRows.map(r=>r.source))].join(", ")||"—"}</div></div>`);
-        return cards.slice(0,3).join("");
-    },
 
     // ── SIEM table ────────────────────────────────────────────────
 
@@ -382,13 +556,11 @@ ${graphPng ? `
                     })
                     .slice(0, 20)
                     .map(f => {
-                        const val = Array.isArray(f.value)
-                            ? f.value.slice(0,6).join(", ") + (f.value.length>6?` … (+${f.value.length-6})`:"")
-                            : String(f.value);
-                        const scoreClass = f.type==="score"
-                            ? Number(f.value)>70?"score-high":Number(f.value)>40?"score-mid":"score-low"
-                            : "";
-                        return `<div class="field-row"><span class="field-key">${this._esc(f.name)}</span><span class="field-val ${scoreClass}">${this._esc(val)}</span></div>`;
+                        const rendered = this._renderFieldValue(f);
+                        return `<div class="field-row${rendered.block?' field-row-block':''}">`
+                             + `<span class="field-key">${this._esc(f.name)}</span>`
+                             + rendered.html
+                             + `</div>`;
                     }).join("");
                 if (!fieldRows) return "";
                 return `<div class="mod-block"><div class="mod-name">${this._esc(modName)}</div><div class="mod-fields">${fieldRows}</div></div>`;
@@ -411,6 +583,52 @@ ${graphPng ? `
   </div>
 </details>`;
         }).join("");
+    },
+
+    // ── Field value renderer ─────────────────────────────────────
+
+    _renderFieldValue(f) {
+        const val = f.value;
+
+        // Score — colored number
+        if (f.type === "score") {
+            const n = Number(val);
+            const cls = n > 70 ? "score-high" : n > 40 ? "score-mid" : "score-low";
+            return { block: false, html: `<span class="field-val ${cls}">${this._esc(String(val))}</span>` };
+        }
+
+        // Array of objects → inline table (e.g. Shodan services)
+        if (Array.isArray(val) && val.length > 0 && typeof val[0] === "object" && val[0] !== null) {
+            // Collect all keys across items (up to first 8 items for perf)
+            const sample = val.slice(0, 8);
+            const keysSet = new Set();
+            sample.forEach(obj => Object.keys(obj).forEach(k => keysSet.add(k)));
+            const keys = [...keysSet].slice(0, 10); // max 10 columns
+
+            const thead = keys.map(k => `<th>${this._esc(k)}</th>`).join("");
+            const tbody = val.slice(0, 50).map(obj => {
+                const cells = keys.map(k => {
+                    const v = obj[k];
+                    if (v === null || v === undefined) return `<td class="cell-empty">—</td>`;
+                    if (typeof v === "object") return `<td class="mono" style="font-size:6.5pt">${this._esc(JSON.stringify(v).slice(0,60))}</td>`;
+                    return `<td>${this._esc(String(v))}</td>`;
+                }).join("");
+                return `<tr>${cells}</tr>`;
+            }).join("");
+
+            const more = val.length > 50 ? `<div class="list-more">… +${val.length - 50} more rows</div>` : "";
+            return { block: true, html: `<div class="field-table-wrap"><table class="field-table"><thead><tr>${thead}</tr></thead><tbody>${tbody}</tbody></table>${more}</div>` };
+        }
+
+        // Array of scalars → pill list
+        if (Array.isArray(val) && val.length > 0) {
+            const pills = val.slice(0, 30).map(v => `<span class="field-pill">${this._esc(String(v))}</span>`).join("");
+            const more  = val.length > 30 ? `<span class="list-more">+${val.length - 30} more</span>` : "";
+            return { block: true, html: `<div class="field-pills">${pills}${more}</div>` };
+        }
+
+        // Plain scalar
+        return { block: false, html: `<span class="field-val">${this._esc(String(val ?? ""))}</span>` };
     },
 
     // ── Escape helper ─────────────────────────────────────────────
@@ -513,10 +731,7 @@ body {
 .section       { padding: 16px 28px; border-bottom: 1px solid #f1f5f9; }
 .section-title { font-size: 8pt; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; color: #64748b; margin-bottom: 12px; }
 
-/* ── Split ── */
-.split     { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid #f1f5f9; }
-.split-col { padding: 16px 28px; }
-.split-col:first-child { border-right: 1px solid #f1f5f9; }
+/* .split removed — replaced by tp-grid */
 
 /* ── Findings ── */
 .finding { border-left: 3px solid; border-radius: 0 5px 5px 0; padding: 9px 13px; margin-bottom: 8px; }
@@ -554,15 +769,7 @@ tr:last-child td { border-bottom: none; }
 .src       { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 7pt; margin-right: 3px; margin-bottom: 2px; background: #f1f5f9; color: #475569; }
 .src.hit   { background: #fde8e8; color: #c0392b; }
 
-/* ── Highlights ── */
-.highlights { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; padding: 16px 28px; border-bottom: 1px solid #f1f5f9; }
-.hl-card    { background: #f8fafc; border: 0.5px solid #e2e8f0; border-radius: 7px; padding: 11px 13px; }
-.hl-label   { font-size: 7.5pt; color: #64748b; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
-.hl-val     { font-family: 'JetBrains Mono', monospace; font-size: 9pt; font-weight: 600; word-break: break-all; }
-.hl-val.red    { color: #dc2626; }
-.hl-val.purple { color: #7c3aed; }
-.hl-val.amber  { color: #b45309; font-family: 'Inter', sans-serif; }
-.hl-sub     { font-size: 7.5pt; color: #94a3b8; margin-top: 2px; }
+/* .highlights removed — replaced by tp-grid */
 
 /* ── Footer ── */
 .footer { background: #f8fafc; padding: 10px 28px; display: flex; justify-content: space-between; font-size: 7.5pt; color: #94a3b8; border-top: 1px solid #e2e8f0; margin-top: auto; }
@@ -636,6 +843,133 @@ tr:last-child td { border-bottom: none; }
 .score-high { color: #dc2626; font-weight: 700; }
 .score-mid  { color: #d97706; font-weight: 700; }
 .score-low  { color: #16a34a; font-weight: 700; }
+
+/* ── Field table (object arrays like Shodan services) ── */
+.field-row-block {
+  flex-direction: column;
+  gap: 5px;
+  grid-column: 1 / -1;   /* span full module card width */
+}
+
+.field-table-wrap {
+  overflow-x: auto;
+  border-radius: 4px;
+  border: 0.5px solid #e2e8f0;
+  margin-top: 2px;
+}
+
+.field-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 7.5pt;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.field-table th {
+  background: #1e293b;
+  color: #94a3b8;
+  padding: 5px 8px;
+  text-align: left;
+  font-size: 7pt;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+  white-space: nowrap;
+  border-bottom: 1px solid #334155;
+}
+
+.field-table td {
+  padding: 4px 8px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #334155;
+  vertical-align: top;
+  max-width: 200px;
+  word-break: break-all;
+}
+
+.field-table tr:last-child td { border-bottom: none; }
+.field-table tr:nth-child(even) td { background: #fafafa; }
+.cell-empty { color: #cbd5e1 !important; }
+
+/* ── Pill list (scalar arrays) ── */
+.field-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 3px;
+}
+
+.field-pill {
+  display: inline-block;
+  background: #f1f5f9;
+  color: #475569;
+  padding: 2px 7px;
+  border-radius: 3px;
+  font-size: 7.5pt;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.list-more {
+  font-size: 7pt;
+  color: #94a3b8;
+  padding: 2px 4px;
+  font-style: italic;
+}
+
+/* ── Module card: allow full-width field rows ── */
+.mod-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+/* ── Threat Profile layout ── */
+.tp-grid {
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  gap: 0;
+  flex: 1;
+  border-top: 1px solid #f1f5f9;
+  align-items: start;
+}
+.tp-left  { padding: 0; border-right: 1px solid #f1f5f9; }
+.tp-right { padding: 0; background: #fafbfc; }
+.tp-section { padding: 14px 20px; border-bottom: 1px solid #f1f5f9; }
+.tp-section:last-child { border-bottom: none; }
+.tp-empty { font-size: 8.5pt; color: #94a3b8; font-style: italic; }
+
+/* ── Attribution cards ── */
+.tp-cards { display: flex; flex-direction: column; gap: 8px; }
+.tp-card  { background: #f8fafc; border: 0.5px solid #e2e8f0; border-radius: 6px; padding: 9px 12px; }
+.tp-card-header { font-size: 8pt; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; }
+.tp-pills { display: flex; flex-wrap: wrap; gap: 4px; }
+.tp-pill  { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 7.5pt; font-weight: 500; }
+.tp-pill-red    { background: #fee2e2; color: #b91c1c; }
+.tp-pill-purple { background: #ede9fe; color: #6d28d9; }
+.tp-pill-amber  { background: #fef3c7; color: #92400e; }
+.tp-pill-blue   { background: #dbeafe; color: #1d4ed8; }
+
+/* ── Infrastructure grid ── */
+.infra-grid { display: flex; flex-direction: column; gap: 5px; }
+.infra-row  { display: flex; align-items: baseline; gap: 8px; font-size: 8.5pt; }
+.infra-key  { min-width: 96px; font-size: 7.5pt; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: .4px; flex-shrink: 0; }
+.infra-val  { color: #1e293b; line-height: 1.5; word-break: break-word; }
+
+/* ── SIEM exposure ── */
+.siem-exposure { }
+.siem-stat-row { display: flex; gap: 0; flex-wrap: wrap; margin-bottom: 8px; background: #f1f5f9; border-radius: 6px; overflow: hidden; }
+.siem-stat     { flex: 1; min-width: 60px; padding: 8px 10px; text-align: center; border-right: 1px solid #e2e8f0; }
+.siem-stat:last-child { border-right: none; }
+.siem-val      { font-size: 13pt; font-weight: 700; color: #0f172a; }
+.siem-label    { font-size: 7pt; color: #64748b; text-transform: uppercase; letter-spacing: .5px; margin-top: 1px; }
+
+.siem-bar-row  { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+.siem-bar-ioc  { font-size: 7pt; min-width: 0; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #475569; }
+.siem-bar-track{ flex: 1.2; height: 6px; background: #e2e8f0; border-radius: 3px; overflow: hidden; }
+.siem-bar-fill { height: 100%; border-radius: 3px; min-width: 2px; }
+.siem-bar-many { background: #ef4444; }
+.siem-bar-some { background: #f59e0b; }
+.siem-bar-none { background: #94a3b8; }
+.siem-bar-count{ flex-shrink: 0; }
 
 /* ── Print overrides ── */
 @media print {
