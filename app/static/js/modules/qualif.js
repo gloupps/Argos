@@ -26,7 +26,11 @@ window.EnrichPanel = {
     _isEmpty(v) {
         if (v === null || v === undefined || v === "") return true;
         if (typeof v === "number" && v === 0) return true;
-        if (Array.isArray(v) && v.filter(x => x !== "" && x !== null && typeof x !== "object").length === 0 && !v.some(x => x && typeof x === "object")) return true;
+        if (Array.isArray(v)) {
+            if (v.length === 0) return true;
+            if (v.some(x => x && typeof x === "object")) return false;
+            return v.filter(x => x !== "" && x !== null).length === 0;
+        }
         return false;
     },
 
@@ -72,12 +76,16 @@ window.EnrichPanel = {
 
         // TAGS : valeurs uniques aplaties
         if (theme === "tags") {
-            const seen = new Set();
+            let count = 0;
             items.forEach(({ field }) => {
-                (Array.isArray(field.value) ? field.value : [field.value])
-                    .forEach(v => v && seen.add(String(v)));
+                if (field.type === "vt_comment") {
+                    count += Array.isArray(field.value) ? field.value.length : 1;
+                } else {
+                    (Array.isArray(field.value) ? field.value : [field.value])
+                        .forEach(v => v && count++);
+                }
             });
-            return seen.size;
+            return count;
         }
 
         // VULNS : valeurs uniques (CVE ids)
@@ -417,7 +425,7 @@ window.EnrichPanel = {
         "Related Threat Actors":     "vt_refs",
         "Related References":        "vt_refs",
         "Collections":               "vt_refs",
-        "Comments":                  "vt_refs",
+        "Comments":                  "tags",
         "Referrer URLs":             "vt_refs",
         "Redirecting URLs":          "vt_refs",
         "Redirects To":              "vt_refs",
@@ -613,7 +621,7 @@ window.EnrichPanel = {
                     const txtcls = pct > 70 ? "text-red-400" : pct > 40 ? "text-amber-400" : "text-green-400";
                     return `
                         <div class="flex items-center gap-2">
-                            <span class="flex items-center gap-1 text-[15px] text-slate-500 w-20 shrink-0 truncate"
+                            <span class="flex items-center gap-1 text-[15px] text-slate-500 w-24 shrink-0 truncate"
                                   title="${this._esc(this._modLabel(mod))}">
                                 <i data-lucide="${this._modIcon(mod)}" class="w-2.5 h-2.5 shrink-0"></i>
                                 ${this._modLabel(mod)}
@@ -737,7 +745,7 @@ window.EnrichPanel = {
                         ${vulnBadge}${tlsBadge}${srcBadge}
                     </button>`;
             }).join("");
-            const overflow = allServices.length > 30 ? `<div class="pt-1">${this._listExpandBtn("Services", allServices.map(s => `${s.port}/${s.transport||"tcp"}${s.product?" ("+s.product+")":""}`))}</div>` : "";
+            const overflow = allServices.length > 2 ? `<div class="pt-1">${this._listExpandBtn("Services", allServices.map(s => `${s.port}/${s.transport||"tcp"}${s.product?" ("+s.product+")":""}`))}</div>` : "";
             return `<div class="space-y-0.5">${btns}${overflow}</div>`;
         }
 
@@ -754,7 +762,7 @@ window.EnrichPanel = {
                     class="text-[15px] px-1.5 py-0.5 rounded border bg-red-500/10 border-red-500/30
                            text-red-400 hover:text-red-300 font-mono transition">${v}</a>`
             ).join("");
-            const overflow = arr.length > 20 ? this._listExpandBtn("Vulnerabilities", arr) : "";
+            const overflow = arr.length > 2 ? this._listExpandBtn("Vulnerabilities", arr) : "";
             return `<div class="flex flex-wrap gap-1">${badges}${overflow}</div>`;
         }
 
@@ -781,7 +789,7 @@ window.EnrichPanel = {
                                 <i data-lucide="clipboard" class="w-3 h-3 shrink-0 text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity"></i>
                             </button>`;
                 }).join("");
-                const overflow = arr.length > 12 ? this._listExpandBtn(name, arr) : "";
+                const overflow = arr.length > 2 ? this._listExpandBtn(name, arr) : "";
                 sections.push(`
                     <div class="mb-2">
                         <div class="text-[12px] text-slate-500 uppercase tracking-wider mb-1">${name}</div>
@@ -793,19 +801,67 @@ window.EnrichPanel = {
 
         // ── TAGS ──
         if (theme === "tags") {
-            const allItems = new Set();
-            items.forEach(({ field }) => {
-                (Array.isArray(field.value) ? field.value : [field.value]).forEach(v => v && allItems.add(String(v)));
-            });
-            const arr = [...allItems];
-            if (!arr.length) return null;
-            const tags = arr.slice(0, 15).map(v =>
-                `<span class="text-[15px] px-1.5 py-0.5 rounded border bg-slate-800 border-slate-700/50 text-slate-400">${v}</span>`
-            ).join("");
-            const overflow = arr.length > 15 ? this._listExpandBtn("Tags", arr) : "";
-            return `<div class="flex flex-wrap gap-1">${tags}${overflow}</div>`;
-        }
+            const commentItems = items.filter(({ field }) => field.type === "vt_comment");
+            const tagItems     = items.filter(({ field }) => field.type !== "vt_comment");
+            const parts = [];
 
+            // ── Tags génériques (badges) ──
+            if (tagItems.length) {
+                const allTags = new Set();
+                tagItems.forEach(({ field }) => {
+                    (Array.isArray(field.value) ? field.value : [field.value])
+                        .forEach(v => v && allTags.add(String(v)));
+                });
+                const arr = [...allTags];
+                if (arr.length) {
+                    const tags = arr.slice(0, 15).map(v =>
+                        `<span class="text-[15px] px-1.5 py-0.5 rounded border bg-slate-800 border-slate-700/50 text-slate-400">${this._esc(v)}</span>`
+                    ).join("");
+                    const overflow = arr.length > 2 ? this._listExpandBtn("Tags", arr) : "";
+                    parts.push(`<div class="flex flex-wrap gap-1">${tags}${overflow}</div>`);
+                }
+            }
+
+            // ── VT community comments (blog-cards) ──
+            if (commentItems.length) {
+                if (parts.length) parts.push(`<div class="border-t border-slate-800 my-2"></div>`);
+                parts.push(`<p class="text-[10px] text-slate-600 uppercase tracking-wider mb-2">VT Community</p>`);
+                const cards = commentItems.flatMap(({ field }) => {
+                    const list = Array.isArray(field.value) ? field.value : [field.value];
+                    return list.filter(Boolean).map(c => {
+                        const obj      = typeof c === "object" ? c : { text: String(c) };
+                        const text = this._esc(obj.text || "").replace(/\n/g, "<br>");
+                        const ts       = obj.date ? new Date(obj.date * 1000).toISOString().slice(0, 10) : null;
+                        const pos      = obj.votes_pos || 0;
+                        const neg      = obj.votes_neg || 0;
+                        const dateHtml = ts
+                            ? `<span class="ml-auto text-[10px] font-mono text-slate-600">${ts}</span>`
+                            : "";
+                        const votesHtml = (pos > 0 || neg > 0) ? `
+                            <div class="flex items-center gap-2 px-3 pb-2 pt-1">
+                                ${pos > 0 ? `<span class="flex items-center gap-1 text-[10px] text-green-500/70 border border-green-500/20 rounded px-1.5 py-0.5"><i data-lucide="thumbs-up" class="w-2.5 h-2.5"></i>${pos}</span>` : ""}
+                                ${neg > 0 ? `<span class="flex items-center gap-1 text-[10px] text-red-400/60 border border-red-400/20 rounded px-1.5 py-0.5"><i data-lucide="thumbs-down" class="w-2.5 h-2.5"></i>${neg}</span>` : ""}
+                            </div>` : "";
+                        return `
+                            <div class="rounded-lg border border-slate-700/40 bg-slate-900/60 overflow-hidden mb-2">
+                                <div class="flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 border-b border-slate-700/30">
+                                    <span class="w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center text-[9px] font-bold shrink-0">VT</span>
+                                    <span class="text-[11px] font-medium text-slate-400">VT Community</span>
+                                    <i data-lucide="shield" class="w-2.5 h-2.5 text-slate-600"></i>
+                                    ${dateHtml}
+                                </div>
+                                <p class="px-3 py-2 text-[12px] text-slate-300 leading-relaxed">${text}</p>
+                                ${votesHtml}
+                            </div>`;
+                    });
+                }).join("");
+                if (cards) parts.push(cards);
+            }
+
+            return parts.length ? parts.join("") : null;
+        }
+        
+        
         // ── WEB (URLScan : meta + screenshot + web activity + content) ──
         if (theme === "web") {
             const parts = [];
@@ -960,7 +1016,7 @@ window.EnrichPanel = {
         const seen = {};
         items.forEach(({ field }) => { if (!seen[field.name]) seen[field.name] = field; });
         const rows = Object.values(seen).map(field => {
-            if (Array.isArray(field.value) && field.value.length > 3) {
+            if (Array.isArray(field.value) && field.value.length > 2) {
                 const preview = field.value.slice(0, 3).map(x => String(x)).join(", ");
                 const expandBtn = this._listExpandBtn(field.name, field.value.map(x => String(x)));
                 return `
@@ -1009,8 +1065,8 @@ window.EnrichPanel = {
             visible.forEach(f => { if (!seen[f.name]) seen[f.name] = f; });
             const rows = Object.values(seen).map(f => {
                 // List fields: show first few + expand button
-                if (Array.isArray(f.value) && f.value.length > 3 && f.type === "list") {
-                    const preview = f.value.slice(0, 3).map(x => String(x)).join(", ");
+                if (Array.isArray(f.value) && f.value.length >= 2 && (f.type === "list" || f.field_type === "list")) {
+                    const preview = f.value.slice(0, 2).map(x => String(x)).join(", ");
                     const expandBtn = this._listExpandBtn(f.name, f.value.map(x => String(x)));
                     if (f.link) return `
                         <tr>
