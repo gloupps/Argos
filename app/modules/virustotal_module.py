@@ -1,5 +1,7 @@
+# app/modules/virustotal_module.py
 import asyncio
 import base64
+import datetime
 from typing import List, Dict, Any
 from .module import Module
 
@@ -7,7 +9,7 @@ from .module import Module
 class VirusTotalModule(Module):
 
     name = "VirusTotal"
-    description = "Threat intelligence — detections, cross-IOC relations"
+    description = "Threat intelligence — detections, cross-IOC relations, sandbox"
     src_type = "external"
     supported_types = ["ip", "domain", "url", "hash"]
     icon = "shield"
@@ -96,27 +98,45 @@ class VirusTotalModule(Module):
 
         rel_names = self._REL_ENDPOINTS.get(ioc_type, [])
 
-        # Build parallel tasks: relation endpoints + main endpoint last
+        # Build parallel tasks: relation endpoints + main endpoint
         tasks = [
             self.requester.get(f"{base_endpoint}/{rel}?limit=10", headers=headers)
             for rel in rel_names
         ]
         tasks.append(self.requester.get(base_endpoint, headers=headers))
 
+        # For hashes, also fetch behaviours in parallel
+        if ioc_type == "hash":
+            tasks.append(
+                self.requester.get(
+                    f"{self.url}/files/{ioc_id}/behaviours?limit=10", headers=headers
+                )
+            )
+
         responses = await asyncio.gather(*tasks, return_exceptions=True)
 
         # Split results
-        rel_responses = responses[:-1]
-        main_response = responses[-1]
+        if ioc_type == "hash":
+            rel_responses = responses[: len(rel_names)]
+            main_response = responses[len(rel_names)]
+            behaviours_response = responses[len(rel_names) + 1]
+        else:
+            rel_responses = responses[:-1]
+            main_response = responses[-1]
+            behaviours_response = None
 
         if (
             not main_response
             or isinstance(main_response, Exception)
-            or main_response.get("error")
+            or (isinstance(main_response, dict) and main_response.get("error"))
         ):
             return []
 
-        attrs = main_response.get("data", {}).get("attributes", {})
+        attrs = (
+            main_response.get("data", {}).get("attributes", {})
+            if isinstance(main_response, dict)
+            else {}
+        )
 
         # Parse relation data into a flat dict keyed by endpoint name
         relations: Dict[str, List[Dict]] = {}
@@ -126,7 +146,115 @@ class VirusTotalModule(Module):
                 continue
             relations[rel_name] = self._parse_relation(rel_name, data.get("data") or [])
 
-        return self._extract_fields(indicator, ioc_type, attrs, relations)
+        # Parse sandbox behaviours
+        sandbox_screenshots = []
+        sandbox_summary = {}
+        if behaviours_response and not isinstance(behaviours_response, Exception):
+            sandbox_screenshots, sandbox_summary = self._parse_behaviours(
+                behaviours_response.get("data") or []
+            )
+
+        return self._extract_fields(
+            indicator, ioc_type, attrs, relations, sandbox_screenshots, sandbox_summary
+        )
+
+    # ──────────────────────────────────────────────────────
+    # _parse_behaviours
+    # ──────────────────────────────────────────────────────
+    def _parse_behaviours(
+        self, items: list
+    ):
+        """
+        Parse sandbox behaviour items.
+        Returns:
+          - sandbox_screenshots: list of {env, url}
+          - sandbox_summary: dict with aggregated behavioral indicators
+        """
+        screenshots = []
+        processes = []
+        mutexes = []
+        registry_keys = []
+        files_written = []
+        network_dns = []
+        network_http = []
+        tags = []
+
+        seen_processes = set()
+        seen_mutexes = set()
+        seen_reg = set()
+        seen_files = set()
+        seen_dns = set()
+        seen_http = set()
+        seen_tags = set()
+
+        for item in items[:8]:  # max 8 sandboxes
+            attrs = item.get("attributes", {}) or {}
+            env = attrs.get("sandbox_name") or "Unknown sandbox"
+
+            # Screenshots
+            for url in (attrs.get("screenshot_urls") or [])[:4]:
+                screenshots.append({"env": env, "url": url})
+
+            # Processes created
+            for p in attrs.get("processes_created") or []:
+                if p and p not in seen_processes:
+                    seen_processes.add(p)
+                    processes.append(p)
+
+            # Mutexes
+            for m in attrs.get("mutexes_created") or []:
+                if m and m not in seen_mutexes:
+                    seen_mutexes.add(m)
+                    mutexes.append(m)
+
+            # Registry keys set
+            for r in attrs.get("registry_keys_set") or []:
+                key = r.get("key") if isinstance(r, dict) else r
+                if key and key not in seen_reg:
+                    seen_reg.add(key)
+                    registry_keys.append(key)
+
+            # Files written
+            for f in attrs.get("files_written") or []:
+                path = f.get("path") if isinstance(f, dict) else f
+                if path and path not in seen_files:
+                    seen_files.add(path)
+                    files_written.append(path)
+
+            # DNS lookups
+            for d in attrs.get("dns_lookups") or []:
+                hostname = d.get("hostname") if isinstance(d, dict) else d
+                if hostname and hostname not in seen_dns:
+                    seen_dns.add(hostname)
+                    network_dns.append(hostname)
+
+            # HTTP conversations
+            for h in attrs.get("http_conversations") or []:
+                if isinstance(h, dict):
+                    url_val = h.get("url") or h.get("request_method", "") + " " + h.get("url", "")
+                else:
+                    url_val = str(h)
+                if url_val and url_val not in seen_http:
+                    seen_http.add(url_val)
+                    network_http.append(url_val)
+
+            # Tags / verdicts
+            for t in attrs.get("tags") or []:
+                if t and t not in seen_tags:
+                    seen_tags.add(t)
+                    tags.append(t)
+
+        summary = {
+            "processes": processes[:15],
+            "mutexes": mutexes[:10],
+            "registry_keys": registry_keys[:15],
+            "files_written": files_written[:15],
+            "network_dns": network_dns[:15],
+            "network_http": network_http[:10],
+            "tags": tags[:15],
+        }
+
+        return screenshots, summary
 
     # ──────────────────────────────────────────────────────
     # _parse_relation  — normalize raw items per endpoint
@@ -207,7 +335,7 @@ class VirusTotalModule(Module):
 
             elif endpoint == "related_references":
                 raw_id = item.get("id", "")
-                item_type = item.get("type", "")  # "malware", "tool", "report", etc.
+                item_type = item.get("type", "")
                 name = attrs.get("name") or raw_id.split("/")[-1]
                 if name:
                     result.append(
@@ -275,9 +403,13 @@ class VirusTotalModule(Module):
         ioc_type: str,
         attrs: Dict,
         relations: Dict[str, List[Dict]] = None,
+        sandbox_screenshots: List[Dict] = None,
+        sandbox_summary: Dict = None,
     ) -> List[Dict[str, Any]]:
         res = []
         relations = relations or {}
+        sandbox_screenshots = sandbox_screenshots or []
+        sandbox_summary = sandbox_summary or {}
 
         # ── Detection score (all types) ──────────────────
         stats = attrs.get("last_analysis_stats", {})
@@ -286,24 +418,20 @@ class VirusTotalModule(Module):
         total = sum(stats.values()) or 1
         score = round(((malicious + suspicious) / total) * 100)
 
-        # Valeurs émises en string pour que _isEmpty(0) ne filtre pas les scores à zéro
+        # Émis en string pour que _isEmpty(0) ne filtre pas les scores à zéro
         res.append(self._f(indicator, "Detection Score", "score", str(score)))
         res.append(self._f(indicator, "Malicious", "label-capsule", str(malicious)))
         res.append(self._f(indicator, "Suspicious", "label-capsule", str(suspicious)))
 
-        # ── Reputation VT (all types) ──
+        # ── Reputation (all types) ───────────────────────
         if attrs.get("reputation") is not None:
             res.append(
-                self._f(
-                    indicator, "Reputation", "label-capsule", str(attrs["reputation"])
-                )
+                self._f(indicator, "Reputation", "label-capsule", str(attrs["reputation"]))
             )
 
         # ── Last analysis date (all types) ───────────────
         last = attrs.get("last_analysis_date") or attrs.get("last_modification_date")
         if last:
-            import datetime
-
             dt = datetime.datetime.utcfromtimestamp(last).strftime("%Y-%m-%d")
             res.append(self._f(indicator, "Last Analysis", "label-capsule", dt))
 
@@ -312,7 +440,7 @@ class VirusTotalModule(Module):
         if tags:
             res.append(self._f(indicator, "Tags", "list", tags))
 
-        # Collections (all types)
+        # ── Collections (all types) ──────────────────────
         collections = relations.get("collections", [])
         if collections:
             col_labels = []
@@ -323,11 +451,9 @@ class VirusTotalModule(Module):
                 if label:
                     col_labels.append(label)
             if col_labels:
-                res.append(
-                    self._f(indicator, "Collections", "list", col_labels, max_=10)
-                )
+                res.append(self._f(indicator, "Collections", "list", col_labels, max_=10))
 
-        # Related References — Malware & Tools, Reports, Other Sightings (all types)
+        # ── Related References (all types) ───────────────
         references = relations.get("related_references", [])
         if references:
             malware_refs = [
@@ -346,89 +472,62 @@ class VirusTotalModule(Module):
                 if r.get("ref_type") not in ("malware", "tool", "report")
             ]
             if malware_refs:
-                res.append(
-                    self._f(indicator, "Malware Names", "list", malware_refs, max_=10)
-                )
+                res.append(self._f(indicator, "Malware & Tools", "list", malware_refs, max_=10))
             if report_refs:
-                res.append(self._f(indicator, "Reports", "list", report_refs, max_=10))
+                res.append(self._f(indicator, "Related Reports", "list", report_refs, max_=10))
             if other_refs:
-                res.append(
-                    self._f(indicator, "Other Sightings", "list", other_refs, max_=10)
-                )
+                res.append(self._f(indicator, "Related References", "list", other_refs, max_=10))
 
         # ════════════════════════════════════════════════
         # IP
         # ════════════════════════════════════════════════
         if ioc_type == "ip":
-            if attrs.get("asn"):
-                res.append(
-                    self._f(indicator, "ASN", "label-capsule", str(attrs["asn"]))
-                )
-            if attrs.get("as_owner"):
-                res.append(
-                    self._f(
-                        indicator, "Organization", "label-capsule", attrs["as_owner"]
-                    )
-                )
             if attrs.get("country"):
-                res.append(
-                    self._f(indicator, "Country", "label-capsule", attrs["country"])
-                )
-            if attrs.get("network"):
-                res.append(
-                    self._f(indicator, "Network", "label-capsule", attrs["network"])
-                )
+                res.append(self._f(indicator, "Country", "label-capsule", attrs["country"]))
+            if attrs.get("as_owner"):
+                res.append(self._f(indicator, "Organization", "label-capsule", attrs["as_owner"]))
+            if attrs.get("asn"):
+                res.append(self._f(indicator, "ASN", "label-capsule", str(attrs["asn"])))
 
             # Resolutions
-            resolutions = [
-                r["hostname"]
-                for r in relations.get("resolutions", [])
-                if r.get("hostname")
-            ]
-            if resolutions:
-                res.append(
-                    self._f(indicator, "Resolutions", "list", resolutions, max_=10)
-                )
-
-            # URLs seen
-            urls = [r["url"] for r in relations.get("urls", []) if r.get("url")]
-            if urls:
-                res.append(self._f(indicator, "URLs Seen", "list", urls, max_=10))
+            resolved = [r["hostname"] for r in relations.get("resolutions", []) if r.get("hostname")]
+            if resolved:
+                res.append(self._f(indicator, "Passive DNS", "list", resolved, max_=10))
 
             # Communicating files
             comm_files = self._format_files(relations.get("communicating_files", []))
             if comm_files:
-                res.append(
-                    self._f(
-                        indicator, "Communicating Files", "list", comm_files, max_=10
-                    )
-                )
+                res.append(self._f(indicator, "Communicating Files", "list", comm_files, max_=10))
+
+            # Referrer files
+            ref_files = self._format_files(relations.get("referrer_files", []))
+            if ref_files:
+                res.append(self._f(indicator, "Referrer Files", "list", ref_files, max_=5))
 
             # SSL certificates
             certs = [
-                r["thumbprint"]
-                for r in relations.get("historical_ssl_certificates", [])
-                if r.get("thumbprint")
+                f"{c['thumbprint'][:16]}… ({c['date'][:10] if c.get('date') else '?'})"
+                for c in relations.get("historical_ssl_certificates", [])
+                if c.get("thumbprint")
             ]
             if certs:
-                res.append(
-                    self._f(indicator, "SSL Certificates", "list", certs, max_=5)
-                )
+                res.append(self._f(indicator, "SSL Certificates", "list", certs, max_=5))
 
             # Threat actors
-            actors = [
-                r["name"]
-                for r in relations.get("related_threat_actors", [])
-                if r.get("name")
-            ]
+            actors = [r["name"] for r in relations.get("related_threat_actors", []) if r.get("name")]
             if actors:
                 res.append(self._f(indicator, "Threat Actors", "list", actors, max_=10))
 
             # Comments
             comments = [
-                {"text": r["text"], "date": r.get("date"),
-                 "votes_pos": r.get("votes_pos", 0), "votes_neg": r.get("votes_neg", 0)}
-                for r in relations.get("comments", []) if r.get("text")
+                {
+                    "text": r["text"],
+                    "date": r.get("date"),
+                    "votes_pos": r.get("votes_pos", 0),
+                    "votes_neg": r.get("votes_neg", 0),
+                }
+                for r in relations.get("comments", [])
+                if r.get("text")
             ]
             if comments:
                 res.append(self._f(indicator, "Comments", "vt_comment", comments, max_=5))
@@ -438,45 +537,25 @@ class VirusTotalModule(Module):
         # ════════════════════════════════════════════════
         elif ioc_type == "domain":
             if attrs.get("registrar"):
-                res.append(
-                    self._f(indicator, "Registrar", "label-capsule", attrs["registrar"])
-                )
+                res.append(self._f(indicator, "Registrar", "label-capsule", attrs["registrar"]))
 
-            # Parse WHOIS for creation/expiry dates
             whois_str = attrs.get("whois", "")
             if whois_str:
                 whois = self._parse_whois(whois_str)
                 creation = whois.get("create_date") or attrs.get("creation_date")
                 expiry = whois.get("expiry_date") or attrs.get("expiration_date")
                 if creation:
-                    res.append(
-                        self._f(
-                            indicator,
-                            "Creation Date",
-                            "label-capsule",
-                            str(creation)[:10],
-                        )
-                    )
+                    res.append(self._f(indicator, "Creation Date", "label-capsule", str(creation)[:10]))
                 if expiry:
-                    res.append(
-                        self._f(
-                            indicator, "Expiry Date", "label-capsule", str(expiry)[:10]
-                        )
-                    )
+                    res.append(self._f(indicator, "Expiry Date", "label-capsule", str(expiry)[:10]))
 
             # Resolutions (IP)
-            resolved_ips = [
-                r["ip"] for r in relations.get("resolutions", []) if r.get("ip")
-            ]
+            resolved_ips = [r["ip"] for r in relations.get("resolutions", []) if r.get("ip")]
             if resolved_ips:
-                res.append(
-                    self._f(indicator, "Resolved IPs", "list", resolved_ips, max_=10)
-                )
+                res.append(self._f(indicator, "Resolved IPs", "list", resolved_ips, max_=10))
 
             # Subdomains
-            subs = [
-                r["value"] for r in relations.get("subdomains", []) if r.get("value")
-            ]
+            subs = [r["value"] for r in relations.get("subdomains", []) if r.get("value")]
             if subs:
                 res.append(self._f(indicator, "Subdomains", "list", subs, max_=10))
 
@@ -490,68 +569,52 @@ class VirusTotalModule(Module):
             if mx:
                 res.append(self._f(indicator, "MX Records", "list", mx, max_=5))
 
-            # SSL certificates
-            certs = [
-                r["thumbprint"]
-                for r in relations.get("historical_ssl_certificates", [])
-                if r.get("thumbprint")
-            ]
-            if certs:
-                res.append(
-                    self._f(indicator, "SSL Certificates", "list", certs, max_=5)
-                )
-
-            # URLs seen
-            urls = [r["url"] for r in relations.get("urls", []) if r.get("url")]
-            if urls:
-                res.append(self._f(indicator, "URLs Seen", "list", urls, max_=10))
+            # CNAME records
+            cname = [r["value"] for r in relations.get("cname_records", []) if r.get("value")]
+            if cname:
+                res.append(self._f(indicator, "CNAME Records", "list", cname, max_=5))
 
             # Communicating files
             comm_files = self._format_files(relations.get("communicating_files", []))
             if comm_files:
-                res.append(
-                    self._f(
-                        indicator, "Communicating Files", "list", comm_files, max_=10
-                    )
-                )
+                res.append(self._f(indicator, "Communicating Files", "list", comm_files, max_=10))
+
+            # SSL certificates
+            certs = [
+                f"{c['thumbprint'][:16]}… ({c['date'][:10] if c.get('date') else '?'})"
+                for c in relations.get("historical_ssl_certificates", [])
+                if c.get("thumbprint")
+            ]
+            if certs:
+                res.append(self._f(indicator, "SSL Certificates", "list", certs, max_=5))
 
             # Threat actors
-            actors = [
-                r["name"]
-                for r in relations.get("related_threat_actors", [])
-                if r.get("name")
-            ]
+            actors = [r["name"] for r in relations.get("related_threat_actors", []) if r.get("name")]
             if actors:
                 res.append(self._f(indicator, "Threat Actors", "list", actors, max_=10))
 
             # Comments
             comments = [
-                {"text": r["text"], "date": r.get("date"),
-                 "votes_pos": r.get("votes_pos", 0), "votes_neg": r.get("votes_neg", 0)}
-                for r in relations.get("comments", []) if r.get("text")
+                {
+                    "text": r["text"],
+                    "date": r.get("date"),
+                    "votes_pos": r.get("votes_pos", 0),
+                    "votes_neg": r.get("votes_neg", 0),
+                }
+                for r in relations.get("comments", [])
+                if r.get("text")
             ]
             if comments:
                 res.append(self._f(indicator, "Comments", "vt_comment", comments, max_=5))
-
 
         # ════════════════════════════════════════════════
         # URL
         # ════════════════════════════════════════════════
         elif ioc_type == "url":
-            if attrs.get("host"):
-                res.append(self._f(indicator, "Domain", "label-capsule", attrs["host"]))
-            if attrs.get("last_final_url") and attrs["last_final_url"] != indicator:
-                res.append(
-                    self._f(
-                        indicator, "Final URL", "label-capsule", attrs["last_final_url"]
-                    )
-                )
-
-            redirects = attrs.get("redirection_chain", [])
-            if redirects:
-                res.append(
-                    self._f(indicator, "Redirect Chain", "list", redirects, max_=5)
-                )
+            if attrs.get("title"):
+                res.append(self._f(indicator, "Page Title", "label-capsule", attrs["title"]))
+            if attrs.get("final_url") and attrs["final_url"] != indicator:
+                res.append(self._f(indicator, "Final URL", "label-capsule", attrs["final_url"]))
 
             # Contacted IPs
             c_ips = [r["ip"] for r in relations.get("contacted_ips", []) if r.get("ip")]
@@ -559,57 +622,43 @@ class VirusTotalModule(Module):
                 res.append(self._f(indicator, "Contacted IPs", "list", c_ips, max_=10))
 
             # Contacted domains
-            c_domains = [
-                r["hostname"]
-                for r in relations.get("contacted_domains", [])
-                if r.get("hostname")
-            ]
+            c_domains = [r["hostname"] for r in relations.get("contacted_domains", []) if r.get("hostname")]
             if c_domains:
-                res.append(
-                    self._f(indicator, "Contacted Domains", "list", c_domains, max_=10)
-                )
+                res.append(self._f(indicator, "Contacted Domains", "list", c_domains, max_=10))
 
             # Downloaded files
             dl_files = self._format_files(relations.get("downloaded_files", []))
             if dl_files:
-                res.append(
-                    self._f(indicator, "Downloaded Files", "list", dl_files, max_=10)
-                )
+                res.append(self._f(indicator, "Downloaded Files", "list", dl_files, max_=10))
 
             # Redirects to
-            redir_to = [
-                r["url"] for r in relations.get("redirects_to", []) if r.get("url")
-            ]
+            redir_to = [r["url"] for r in relations.get("redirects_to", []) if r.get("url")]
             if redir_to:
                 res.append(self._f(indicator, "Redirects To", "list", redir_to, max_=5))
 
             # Referrer URLs
-            ref_urls = [
-                r["url"] for r in relations.get("referrer_urls", []) if r.get("url")
-            ]
+            ref_urls = [r["url"] for r in relations.get("referrer_urls", []) if r.get("url")]
             if ref_urls:
-                res.append(
-                    self._f(indicator, "Referrer URLs", "list", ref_urls, max_=5)
-                )
+                res.append(self._f(indicator, "Referrer URLs", "list", ref_urls, max_=5))
 
             # Threat actors
-            actors = [
-                r["name"]
-                for r in relations.get("related_threat_actors", [])
-                if r.get("name")
-            ]
+            actors = [r["name"] for r in relations.get("related_threat_actors", []) if r.get("name")]
             if actors:
                 res.append(self._f(indicator, "Threat Actors", "list", actors, max_=10))
 
             # Comments
             comments = [
-                {"text": r["text"], "date": r.get("date"),
-                 "votes_pos": r.get("votes_pos", 0), "votes_neg": r.get("votes_neg", 0)}
-                for r in relations.get("comments", []) if r.get("text")
+                {
+                    "text": r["text"],
+                    "date": r.get("date"),
+                    "votes_pos": r.get("votes_pos", 0),
+                    "votes_neg": r.get("votes_neg", 0),
+                }
+                for r in relations.get("comments", [])
+                if r.get("text")
             ]
             if comments:
                 res.append(self._f(indicator, "Comments", "vt_comment", comments, max_=5))
-
 
         # ════════════════════════════════════════════════
         # Hash / File
@@ -620,24 +669,11 @@ class VirusTotalModule(Module):
             if attrs.get("sha1"):
                 res.append(self._f(indicator, "SHA1", "label-capsule", attrs["sha1"]))
             if attrs.get("sha256"):
-                res.append(
-                    self._f(indicator, "SHA256", "label-capsule", attrs["sha256"])
-                )
+                res.append(self._f(indicator, "SHA256", "label-capsule", attrs["sha256"]))
             if attrs.get("size"):
-                res.append(
-                    self._f(
-                        indicator, "Size", "label-capsule", f"{attrs['size']} bytes"
-                    )
-                )
+                res.append(self._f(indicator, "Size", "label-capsule", f"{attrs['size']} bytes"))
             if attrs.get("type_description"):
-                res.append(
-                    self._f(
-                        indicator,
-                        "File Type",
-                        "label-capsule",
-                        attrs["type_description"],
-                    )
-                )
+                res.append(self._f(indicator, "File Type", "label-capsule", attrs["type_description"]))
 
             names = attrs.get("names", [])
             if names:
@@ -649,67 +685,132 @@ class VirusTotalModule(Module):
                 res.append(self._f(indicator, "Contacted IPs", "list", c_ips, max_=10))
 
             # Contacted domains
-            c_domains = [
-                r["hostname"]
-                for r in relations.get("contacted_domains", [])
-                if r.get("hostname")
-            ]
+            c_domains = [r["hostname"] for r in relations.get("contacted_domains", []) if r.get("hostname")]
             if c_domains:
-                res.append(
-                    self._f(indicator, "Contacted Domains", "list", c_domains, max_=10)
-                )
+                res.append(self._f(indicator, "Contacted Domains", "list", c_domains, max_=10))
 
             # Contacted URLs
-            c_urls = [
-                r["url"] for r in relations.get("contacted_urls", []) if r.get("url")
-            ]
+            c_urls = [r["url"] for r in relations.get("contacted_urls", []) if r.get("url")]
             if c_urls:
-                res.append(
-                    self._f(indicator, "Contacted URLs", "list", c_urls, max_=10)
-                )
+                res.append(self._f(indicator, "Contacted URLs", "list", c_urls, max_=10))
 
             # Dropped files
             dropped = self._format_files(relations.get("dropped_files", []))
             if dropped:
-                res.append(
-                    self._f(indicator, "Dropped Files", "list", dropped, max_=10)
-                )
+                res.append(self._f(indicator, "Dropped Files", "list", dropped, max_=10))
 
             # Execution parents
             exec_parents = self._format_files(relations.get("execution_parents", []))
             if exec_parents:
-                res.append(
-                    self._f(
-                        indicator, "Execution Parents", "list", exec_parents, max_=5
-                    )
-                )
+                res.append(self._f(indicator, "Execution Parents", "list", exec_parents, max_=5))
 
             # Threat actors
-            actors = [
-                r["name"]
-                for r in relations.get("related_threat_actors", [])
-                if r.get("name")
-            ]
+            actors = [r["name"] for r in relations.get("related_threat_actors", []) if r.get("name")]
             if actors:
                 res.append(self._f(indicator, "Threat Actors", "list", actors, max_=10))
 
-            # Submissions count
+            # Submission count
             submissions = relations.get("submissions", [])
             if submissions:
                 res.append(
+                    self._f(indicator, "Submission Count", "label-capsule", str(len(submissions)))
+                )
+
+            # ── Sandbox data ─────────────────────────────
+            # Screenshots (galerie)
+            if sandbox_screenshots:
+                res.append(
                     self._f(
                         indicator,
-                        "Submission Count",
-                        "label-capsule",
-                        str(len(submissions)),
+                        "Sandbox Screenshots",
+                        "vt_sandbox_screenshots",
+                        sandbox_screenshots,
+                        max_=20,
+                    )
+                )
+
+            # Behavioral indicators
+            if sandbox_summary.get("processes"):
+                res.append(
+                    self._f(
+                        indicator,
+                        "Processes Created",
+                        "list",
+                        sandbox_summary["processes"],
+                        max_=15,
+                    )
+                )
+            if sandbox_summary.get("mutexes"):
+                res.append(
+                    self._f(
+                        indicator,
+                        "Mutexes",
+                        "list",
+                        sandbox_summary["mutexes"],
+                        max_=10,
+                    )
+                )
+            if sandbox_summary.get("registry_keys"):
+                res.append(
+                    self._f(
+                        indicator,
+                        "Registry Keys Set",
+                        "list",
+                        sandbox_summary["registry_keys"],
+                        max_=15,
+                    )
+                )
+            if sandbox_summary.get("files_written"):
+                res.append(
+                    self._f(
+                        indicator,
+                        "Files Written",
+                        "list",
+                        sandbox_summary["files_written"],
+                        max_=15,
+                    )
+                )
+            if sandbox_summary.get("network_dns"):
+                res.append(
+                    self._f(
+                        indicator,
+                        "DNS Lookups",
+                        "list",
+                        sandbox_summary["network_dns"],
+                        max_=15,
+                    )
+                )
+            if sandbox_summary.get("network_http"):
+                res.append(
+                    self._f(
+                        indicator,
+                        "HTTP Requests",
+                        "list",
+                        sandbox_summary["network_http"],
+                        max_=10,
+                    )
+                )
+            if sandbox_summary.get("tags"):
+                res.append(
+                    self._f(
+                        indicator,
+                        "Sandbox Tags",
+                        "list",
+                        sandbox_summary["tags"],
+                        max_=15,
                     )
                 )
 
             # Comments
             comments = [
-                {"text": r["text"], "date": r.get("date"),
-                 "votes_pos": r.get("votes_pos", 0), "votes_neg": r.get("votes_neg", 0)}
-                for r in relations.get("comments", []) if r.get("text")
+                {
+                    "text": r["text"],
+                    "date": r.get("date"),
+                    "votes_pos": r.get("votes_pos", 0),
+                    "votes_neg": r.get("votes_neg", 0),
+                }
+                for r in relations.get("comments", [])
+                if r.get("text")
             ]
             if comments:
                 res.append(self._f(indicator, "Comments", "vt_comment", comments, max_=5))
@@ -717,12 +818,9 @@ class VirusTotalModule(Module):
         return res
 
     # ──────────────────────────────────────────────────────
+    # _fetch_collections  — helper : {col_id: col_name}
     # ──────────────────────────────────────────────────────
-    # _fetch_collections  — helper : {col_id: col_name} pour un IOC
-    # ──────────────────────────────────────────────────────
-    async def _fetch_collections(
-        self, base_endpoint: str, headers: Dict
-    ) -> Dict[str, str]:
+    async def _fetch_collections(self, base_endpoint: str, headers: Dict) -> Dict[str, str]:
         data = await self.requester.get(
             f"{base_endpoint}/collections?limit=10", headers=headers
         )
@@ -737,11 +835,9 @@ class VirusTotalModule(Module):
         return result
 
     # ──────────────────────────────────────────────────────
-    # _fetch_collection_members  — helper : {val: ioc_type} pour une collection
+    # _fetch_collection_members  — helper : {val: ioc_type}
     # ──────────────────────────────────────────────────────
-    async def _fetch_collection_members(
-        self, col_id: str, headers: Dict
-    ) -> Dict[str, str]:
+    async def _fetch_collection_members(self, col_id: str, headers: Dict) -> Dict[str, str]:
         subtypes = [
             ("ip_addresses", "ip"),
             ("domains", "domain"),
@@ -813,8 +909,7 @@ class VirusTotalModule(Module):
         }
         results = []
 
-        # ── Pivot 1 : relations VT croisées ──────────────────────────────
-        # IOC tiers partagé par ≥ min_shared_roots membres du pool
+        # ── Pivot 1 : relations VT croisées ──────────────
         my_relations: Dict[str, str] = {}
         for rel_name, target_type in rel_map.get(ioc_type, []):
             data = await self.requester.get(
@@ -828,10 +923,7 @@ class VirusTotalModule(Module):
                 if not val or val == indicator:
                     continue
                 if target_type == "hash":
-                    if (
-                        attrs.get("last_analysis_stats", {}).get("malicious", 0)
-                        < threshold
-                    ):
+                    if attrs.get("last_analysis_stats", {}).get("malicious", 0) < threshold:
                         continue
                 my_relations[val] = target_type
 
@@ -871,11 +963,7 @@ class VirusTotalModule(Module):
                     }
                 )
 
-        # ── Pivot 2 : collections partagées ──────────────────────────────
-        # Si ≥ 2 IOCs du pool sont dans la même collection VT
-        # → tous les IOCs de cette collection deviennent des pivots correlated
-
-        # Récupérer les collections de l'indicateur courant et de tout le pool en parallèle
+        # ── Pivot 2 : collections partagées ──────────────
         col_tasks = [self._fetch_collections(base, headers)]
         pool_bases = []
         for other in other_pool:
@@ -891,11 +979,7 @@ class VirusTotalModule(Module):
         )
 
         if my_cols and pool_bases:
-            # Trouver les collections partagées avec au moins un autre IOC du pool
-            # shared_col_ids = collections présentes chez l'indicateur ET chez ≥1 autre
-            shared_col_ids: Dict[str, int] = (
-                {}
-            )  # col_id → count d'IOCs du pool qui l'ont
+            shared_col_ids: Dict[str, int] = {}
             for idx, (_, _) in enumerate(pool_bases):
                 other_cols = col_responses[idx + 1]
                 if isinstance(other_cols, Exception) or not other_cols:
@@ -904,20 +988,17 @@ class VirusTotalModule(Module):
                     shared_col_ids[col_id] = shared_col_ids.get(col_id, 0) + 1
 
             if shared_col_ids:
-                # Pour chaque collection partagée, récupérer tous ses membres
                 col_ids = list(shared_col_ids.keys())
                 mem_tasks = [
                     self._fetch_collection_members(cid, headers) for cid in col_ids
                 ]
                 mem_responses = await asyncio.gather(*mem_tasks, return_exceptions=True)
 
-                # Déduplication : un IOC peut apparaître dans plusieurs collections
                 emitted: set = set()
                 for col_id, members in zip(col_ids, mem_responses):
                     if isinstance(members, Exception) or not members:
                         continue
                     col_name = my_cols[col_id]
-                    col_count = shared_col_ids[col_id]
                     for val, ttype in members.items():
                         if val == indicator or val in emitted:
                             continue
@@ -937,7 +1018,7 @@ class VirusTotalModule(Module):
         return results
 
     # ──────────────────────────────────────────────────────
-    # get_quotas  (unchanged)
+    # get_quotas
     # ──────────────────────────────────────────────────────
     async def get_quotas(self, context: Dict[str, Any]) -> Dict[str, Any]:
         api_key = context.get("api_key")
@@ -1036,17 +1117,50 @@ class VirusTotalModule(Module):
         """Return compact string representation of file entries."""
         out = []
         for f in file_list:
-            name = f.get("name")
-            sha256 = f.get("sha256", "")
+            sha = (f.get("sha256") or "")[:16]
             det = f.get("detections")
-            label = name or (sha256[:16] + "…" if sha256 else "unknown")
+            name = f.get("name") or ""
+            label = name or sha
             if det is not None:
-                label = f"{label} ({det} detections)"
-            out.append(label)
+                label += f" ({det} det.)"
+            if label:
+                out.append(label)
         return out
 
+    def _parse_whois(self, whois_str: str) -> Dict:
+        """Extract creation/expiry dates from raw WHOIS string."""
+        import re
+
+        result = {}
+        create_patterns = [
+            r"[Cc]reation\s*[Dd]ate\s*[:=]\s*(\S+)",
+            r"[Cc]reated\s*[:=]\s*(\S+)",
+            r"[Rr]egistered\s*[:=]\s*(\S+)",
+        ]
+        expiry_patterns = [
+            r"[Ee]xpir(?:y|ation)\s*[Dd]ate\s*[:=]\s*(\S+)",
+            r"[Ee]xpires?\s*[:=]\s*(\S+)",
+        ]
+        for pat in create_patterns:
+            m = re.search(pat, whois_str)
+            if m:
+                result["create_date"] = m.group(1)[:10]
+                break
+        for pat in expiry_patterns:
+            m = re.search(pat, whois_str)
+            if m:
+                result["expiry_date"] = m.group(1)[:10]
+                break
+        return result
+
     @staticmethod
-    def _f(indicator, name, field_type, value, max_=None) -> Dict[str, Any]:
+    def _f(
+        indicator: str,
+        name: str,
+        field_type: str,
+        value: Any,
+        max_: int = None,
+    ) -> Dict[str, Any]:
         return {
             "indicator": indicator,
             "indicator_type": "ioc",
@@ -1057,14 +1171,3 @@ class VirusTotalModule(Module):
             "link": None,
             "max": max_,
         }
-
-    @staticmethod
-    def _parse_whois(whois_str: str) -> Dict[str, str]:
-        data = {}
-        if not whois_str:
-            return data
-        for line in whois_str.splitlines():
-            if ":" in line:
-                key, _, value = line.partition(":")
-                data[key.strip().lower().replace(" ", "_")] = value.strip()
-        return data
