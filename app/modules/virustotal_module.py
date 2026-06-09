@@ -220,10 +220,13 @@ class VirusTotalModule(Module):
                     )
 
             elif endpoint == "comments":
+                votes = attrs.get("votes", {}) or {}
                 result.append(
                     {
-                        "text": attrs.get("text", "")[:200],
+                        "text": attrs.get("text", "")[:300],
                         "date": attrs.get("date"),
+                        "votes_pos": votes.get("positive", 0),
+                        "votes_neg": votes.get("negative", 0),
                     }
                 )
 
@@ -423,10 +426,12 @@ class VirusTotalModule(Module):
 
             # Comments
             comments = [
-                r["text"] for r in relations.get("comments", []) if r.get("text")
+                {"text": r["text"], "date": r.get("date"),
+                 "votes_pos": r.get("votes_pos", 0), "votes_neg": r.get("votes_neg", 0)}
+                for r in relations.get("comments", []) if r.get("text")
             ]
             if comments:
-                res.append(self._f(indicator, "Comments", "list", comments, max_=5))
+                res.append(self._f(indicator, "Comments", "vt_comment", comments, max_=5))
 
         # ════════════════════════════════════════════════
         # Domain
@@ -521,10 +526,13 @@ class VirusTotalModule(Module):
 
             # Comments
             comments = [
-                r["text"] for r in relations.get("comments", []) if r.get("text")
+                {"text": r["text"], "date": r.get("date"),
+                 "votes_pos": r.get("votes_pos", 0), "votes_neg": r.get("votes_neg", 0)}
+                for r in relations.get("comments", []) if r.get("text")
             ]
             if comments:
-                res.append(self._f(indicator, "Comments", "list", comments, max_=5))
+                res.append(self._f(indicator, "Comments", "vt_comment", comments, max_=5))
+
 
         # ════════════════════════════════════════════════
         # URL
@@ -595,10 +603,13 @@ class VirusTotalModule(Module):
 
             # Comments
             comments = [
-                r["text"] for r in relations.get("comments", []) if r.get("text")
+                {"text": r["text"], "date": r.get("date"),
+                 "votes_pos": r.get("votes_pos", 0), "votes_neg": r.get("votes_neg", 0)}
+                for r in relations.get("comments", []) if r.get("text")
             ]
             if comments:
-                res.append(self._f(indicator, "Comments", "list", comments, max_=5))
+                res.append(self._f(indicator, "Comments", "vt_comment", comments, max_=5))
+
 
         # ════════════════════════════════════════════════
         # Hash / File
@@ -696,10 +707,12 @@ class VirusTotalModule(Module):
 
             # Comments
             comments = [
-                r["text"] for r in relations.get("comments", []) if r.get("text")
+                {"text": r["text"], "date": r.get("date"),
+                 "votes_pos": r.get("votes_pos", 0), "votes_neg": r.get("votes_neg", 0)}
+                for r in relations.get("comments", []) if r.get("text")
             ]
             if comments:
-                res.append(self._f(indicator, "Comments", "list", comments, max_=5))
+                res.append(self._f(indicator, "Comments", "vt_comment", comments, max_=5))
 
         return res
 
