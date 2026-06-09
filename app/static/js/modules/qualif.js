@@ -487,17 +487,27 @@ window.EnrichPanel = {
         "File Type":            "host",
         "File Names":           "host",
         "Last Analysis":        "host",
-        "Sandbox Environments": "host",
         
         // ── SANDBOX BEHAVIOUR ──
         "Sandbox Screenshots":  "vt_sandbox",
+        "Sandbox Environments": "vt_sandbox",
+        "Behavior Signatures":  "vt_sandbox",
+        "MITRE ATT&CK":         "vt_sandbox",
+        "MBC":                  "vt_sandbox",
         "Processes Created":    "vt_sandbox",
-        "Mutexes":              "vt_sandbox",
-        "Registry Keys Set":    "vt_sandbox",
+        "Command Executions":   "vt_sandbox",
+        "Files Dropped":        "vt_sandbox",
         "Files Written":        "vt_sandbox",
+        "Files Deleted":        "vt_sandbox",
+        "Registry Keys Set":    "vt_sandbox",
+        "Registry Keys Opened": "vt_sandbox",
+        "IP Traffic":           "vt_sandbox",
         "DNS Lookups":          "vt_sandbox",
         "HTTP Requests":        "vt_sandbox",
+        "Mutexes":              "vt_sandbox",
+        "Modules Loaded":       "vt_sandbox",
         "Sandbox Tags":         "tags",
+
 
         // ── SERVICES ──
         "Services":             "shodan_services",
@@ -811,6 +821,30 @@ window.EnrichPanel = {
                 if (!seen[field.name]) seen[field.name] = { mod, field };
             });
             const rows = Object.values(seen).map(({ mod, field }) => {
+                // Champs liste → bouton list modal
+                if (Array.isArray(field.value) && field.value.length > 1) {
+                    const allVals = field.value.map(x => String(x));
+                    const preview = allVals[0].length > 30 ? allVals[0].slice(0, 28) + "…" : allVals[0];
+                    let encTitle = "", encItems = "";
+                    try {
+                        encTitle = btoa(unescape(encodeURIComponent(field.name)));
+                        encItems = btoa(unescape(encodeURIComponent(JSON.stringify(allVals))));
+                    } catch(e) {
+                        try { encTitle = btoa(field.name); encItems = btoa(JSON.stringify(allVals)); } catch(e2) {}
+                    }
+                    return `
+                        <tr>
+                            <td class="text-[15px] text-slate-500 pr-3 py-0.5 whitespace-nowrap align-middle">${field.name}</td>
+                            <td class="py-0.5">
+                                <button onclick="EnrichPanel._openListModal('${encTitle}', '${encItems}')"
+                                        class="flex items-center gap-1.5 text-left group">
+                                    <span class="text-[13px] font-mono text-slate-300 truncate max-w-[140px]">${this._esc(preview)}</span>
+                                    <span class="text-[11px] text-slate-600 font-mono shrink-0">+ ${allVals.length} more</span>
+                                    <i data-lucide="maximize-2" class="w-2.5 h-2.5 text-slate-700 group-hover:text-slate-400 transition shrink-0"></i>
+                                </button>
+                            </td>
+                        </tr>`;
+                }
                 const v      = Array.isArray(field.value) ? field.value.join(", ") : String(field.value);
                 const isTrunc = v.length > 28;
                 const disp   = isTrunc ? v.slice(0, 26) + "…" : v;
@@ -1092,11 +1126,11 @@ window.EnrichPanel = {
             return parts.length ? parts.join("") : null;
         }
         
-                // ── SANDBOX (VT behaviours) ──
+        // ── SANDBOX (VT behaviours) ──
         if (theme === "sandbox") {
             const parts = [];
  
-            // Screenshots gallery
+            // Screenshots gallery (premium — vide sur plan free)
             const ssItems = items.filter(i => i.field.type === "vt_sandbox_screenshots");
             if (ssItems.length) {
                 const allShots = [];
@@ -1106,46 +1140,63 @@ window.EnrichPanel = {
                     });
                 });
                 if (allShots.length) {
-                    // Group by env
+                    let encodedShots = "";
+                    try { encodedShots = btoa(unescape(encodeURIComponent(JSON.stringify(allShots)))); } catch(e) { encodedShots = btoa(JSON.stringify(allShots)); }
                     const byEnv = {};
-                    allShots.forEach(s => {
+                    allShots.forEach((s, idx) => {
                         if (!byEnv[s.env]) byEnv[s.env] = [];
-                        byEnv[s.env].push(s.url);
+                        byEnv[s.env].push({ url: s.url, globalIdx: idx });
                     });
-                    const sections = Object.entries(byEnv).map(([env, urls]) => {
-                        const thumbs = urls.map(url => `
-                            <button onclick="EnrichPanel._openScreenshotModal('${this._esc(url)}', '${this._esc(url)}')"
-                                    class="rounded overflow-hidden border border-slate-700/60 hover:border-teal-500/40 transition bg-slate-900/40">
-                                <img src="${this._esc(url)}" alt="sandbox"
-                                     class="w-full object-cover" style="max-height:72px;object-position:top"
-                                     loading="lazy" onerror="this.closest('button').style.display='none'">
+                    const sections = Object.entries(byEnv).map(([env, shots]) => {
+                        const thumbs = shots.map(({ url, globalIdx }) => `
+                            <button onclick="EnrichPanel._openCarouselModal(${globalIdx}, '${this._esc(encodedShots)}')"
+                                    class="rounded overflow-hidden border border-slate-700/60 hover:border-teal-400/60
+                                           transition bg-slate-900/40 relative group">
+                                <img src="${this._esc(url)}" alt="sandbox screenshot"
+                                     class="w-full object-cover object-top" style="height:68px;"
+                                     loading="lazy" onerror="this.closest('button').remove()">
+                                <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition bg-black/40">
+                                    <i data-lucide="maximize-2" class="w-4 h-4 text-white"></i>
+                                </div>
                             </button>`).join("");
                         return `
                             <div class="mb-2">
                                 <div class="flex items-center gap-1 mb-1">
-                                    <i data-lucide="monitor" class="w-2.5 h-2.5 text-teal-500/70 shrink-0"></i>
-                                    <span class="text-[11px] text-slate-500 uppercase tracking-wider truncate" title="${this._esc(env)}">${this._esc(env)}</span>
+                                    <i data-lucide="cpu" class="w-2.5 h-2.5 text-teal-400/70 shrink-0"></i>
+                                    <span class="text-[10px] text-slate-500 uppercase tracking-wider truncate">${this._esc(env)}</span>
+                                    <span class="text-[10px] text-slate-700 ml-auto">${shots.length} shot${shots.length > 1 ? "s" : ""}</span>
                                 </div>
-                                <div class="grid grid-cols-2 gap-1">${thumbs}</div>
+                                <div class="grid grid-cols-3 gap-1">${thumbs}</div>
                             </div>`;
                     }).join("");
                     parts.push(`<div class="space-y-1 mb-2">${sections}</div>`);
                 }
             }
  
-            // Behavioral list fields (processes, mutexes, registry, files, dns, http)
+            // Behavioral fields → list modal buttons
             const listFields = [
-                { name: "Processes Created", icon: "terminal",    color: "text-slate-400" },
-                { name: "Files Written",      icon: "file-plus",   color: "text-amber-400/70" },
-                { name: "Registry Keys Set",  icon: "database",    color: "text-blue-400/70" },
-                { name: "Mutexes",            icon: "lock",        color: "text-violet-400/70" },
-                { name: "DNS Lookups",        icon: "globe-2",     color: "text-green-400/70" },
-                { name: "HTTP Requests",      icon: "arrow-right-left", color: "text-sky-400/70" },
+                { name: "Sandbox Environments", icon: "cpu",              color: "text-teal-400"      },
+                { name: "Behavior Signatures",  icon: "shield-alert",     color: "text-red-400"       },
+                { name: "MITRE ATT&CK",         icon: "crosshair",        color: "text-orange-400"    },
+                { name: "MBC",                  icon: "book-open",        color: "text-amber-400"     },
+                { name: "Processes Created",    icon: "terminal",         color: "text-slate-400"     },
+                { name: "Command Executions",   icon: "chevrons-right",   color: "text-slate-400"     },
+                { name: "Files Dropped",        icon: "file-down",        color: "text-red-400"       },
+                { name: "Files Written",        icon: "file-plus",        color: "text-amber-400"     },
+                { name: "Files Deleted",        icon: "file-minus",       color: "text-slate-500"     },
+                { name: "Registry Keys Set",    icon: "database",         color: "text-blue-400"      },
+                { name: "Registry Keys Opened", icon: "key",              color: "text-blue-300"      },
+                { name: "IP Traffic",           icon: "network",          color: "text-violet-400"    },
+                { name: "DNS Lookups",          icon: "globe-2",          color: "text-green-400"     },
+                { name: "HTTP Requests",        icon: "arrow-right-left", color: "text-sky-400"       },
+                { name: "Mutexes",              icon: "lock",             color: "text-violet-400"    },
+                { name: "Modules Loaded",       icon: "package",          color: "text-slate-500"     },
             ];
  
             listFields.forEach(({ name, icon, color }) => {
                 const matched = items.filter(({ field }) => field.name === name);
                 if (!matched.length) return;
+ 
                 const allVals = [];
                 matched.forEach(({ field }) => {
                     (Array.isArray(field.value) ? field.value : [field.value]).forEach(v => {
@@ -1153,25 +1204,36 @@ window.EnrichPanel = {
                     });
                 });
                 if (!allVals.length) return;
-                const max = matched[0].field.max || 15;
-                const rows = allVals.slice(0, max).map(v => {
-                    const disp = v.length > 85 ? v.slice(0, 83) + "…" : v;
-                    return `<div class="text-[12px] font-mono text-slate-400 truncate py-px" title="${this._esc(v)}">${this._esc(disp)}</div>`;
-                }).join("");
-                const overflow = allVals.length > max ? `<div class="text-[12px] text-slate-600 mt-0.5">+${allVals.length - max} more</div>` : "";
+ 
+                const preview = allVals[0].length > 55 ? allVals[0].slice(0, 53) + "…" : allVals[0];
+ 
+                let encTitle = "", encItems = "";
+                try {
+                    encTitle = btoa(unescape(encodeURIComponent(name)));
+                    encItems = btoa(unescape(encodeURIComponent(JSON.stringify(allVals))));
+                } catch(e) {
+                    try { encTitle = btoa(name); encItems = btoa(JSON.stringify(allVals)); } catch(e2) {}
+                }
+ 
                 parts.push(`
-                    <div class="mb-2">
-                        <div class="flex items-center gap-1 mb-1">
-                            <i data-lucide="${icon}" class="w-2.5 h-2.5 ${color} shrink-0"></i>
-                            <span class="text-[12px] text-slate-500 uppercase tracking-wider">${name}</span>
-                            <span class="text-[12px] text-slate-700 ml-auto">${allVals.length}</span>
+                    <button onclick="EnrichPanel._openListModal('${encTitle}', '${encItems}')"
+                            class="flex items-center gap-2 w-full text-left rounded border border-slate-700/60
+                                   hover:border-slate-600/60 bg-slate-900/30 px-2 py-1.5 transition group">
+                        <i data-lucide="${icon}" class="w-3 h-3 ${color} shrink-0"></i>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-1.5">
+                                <span class="text-[13px] font-medium text-slate-300">${name}</span>
+                                <span class="text-[11px] text-slate-600 font-mono">${allVals.length}</span>
+                            </div>
+                            <div class="text-[11px] text-slate-600 font-mono truncate">${this._esc(preview)}</div>
                         </div>
-                        <div class="space-y-px">${rows}${overflow}</div>
-                    </div>`);
+                        <i data-lucide="maximize-2" class="w-3 h-3 text-slate-700 group-hover:text-slate-500 shrink-0 transition"></i>
+                    </button>`);
             });
  
-            return parts.length ? parts.join("") : null;
+            return parts.length ? `<div class="space-y-1">${parts.join("")}</div>` : null;
         }
+
 
         // ── RELATIONS (VT refs) ──
         if (theme === "relations") {
@@ -1476,30 +1538,150 @@ window.EnrichPanel = {
     // ── Screenshot modal ──────────────────────────────────
 
     _openScreenshotModal(src, href) {
-        let modal = document.getElementById("screenshot-modal");
-        if (modal) modal.remove();
-        modal = document.createElement("div");
-        modal.id = "screenshot-modal";
-        modal.className = "fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4";
-        modal.innerHTML = `
-            <div class="relative w-full max-w-4xl">
-                <div class="flex items-center justify-between mb-2">
-                    <a href="${href}" target="_blank" rel="noopener noreferrer"
-                       class="flex items-center gap-1 text-[15px] text-blue-400 hover:text-blue-300 transition">
-                        <i data-lucide="external-link" class="w-3 h-3"></i> Open in URLScan
-                    </a>
-                    <button onclick="document.getElementById('screenshot-modal').remove()"
-                            class="text-slate-400 hover:text-white transition">
-                        <i data-lucide="x" class="w-4 h-4"></i>
+        // Conservé pour URLScan (une seule image)
+        this._openCarouselModal(0, btoa(unescape(encodeURIComponent(JSON.stringify([{ env: "Screenshot", url: src, link: href }])))));
+    },
+ 
+    _openCarouselModal(startIdx, encodedShots) {
+        let shots = [];
+        try { shots = JSON.parse(decodeURIComponent(escape(atob(encodedShots)))); } catch(e) { return; }
+        if (!shots.length) return;
+ 
+        const modalId = "carousel-modal";
+        document.getElementById(modalId)?.remove();
+ 
+        const modal = document.createElement("div");
+        modal.id = modalId;
+        modal.className = "fixed inset-0 z-50 flex items-center justify-center bg-black/92 backdrop-blur-sm";
+        modal.style.cssText = "animation: fadeIn .15s ease";
+ 
+        const total = shots.length;
+ 
+        const buildSlide = (idx) => {
+            const s = shots[idx];
+            const env = s.env || "Sandbox";
+            const url = s.url || "";
+            const link = s.link || url;
+            const hasPrev = idx > 0;
+            const hasNext = idx < total - 1;
+ 
+            return `
+            <div class="relative flex flex-col items-center w-full max-w-5xl px-4" id="carousel-inner">
+ 
+                <!-- Header -->
+                <div class="flex items-center justify-between w-full mb-3">
+                    <div class="flex items-center gap-2">
+                        <i data-lucide="cpu" class="w-3.5 h-3.5 text-teal-400 shrink-0"></i>
+                        <span class="text-[13px] text-slate-300 font-mono truncate max-w-xs" title="${EnrichPanel._esc(env)}">${EnrichPanel._esc(env)}</span>
+                        <span class="text-[12px] text-slate-600 ml-1">${idx + 1} / ${total}</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <a href="${EnrichPanel._esc(link)}" target="_blank" rel="noopener noreferrer"
+                           class="text-[13px] text-blue-400 hover:text-blue-300 transition flex items-center gap-1">
+                            <i data-lucide="external-link" class="w-3 h-3"></i> Open
+                        </a>
+                        <button id="carousel-close"
+                                class="text-slate-400 hover:text-white transition">
+                            <i data-lucide="x" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>
+ 
+                <!-- Image -->
+                <div class="relative w-full flex items-center justify-center">
+ 
+                    <!-- Prev -->
+                    <button id="carousel-prev"
+                            class="absolute left-0 z-10 flex items-center justify-center
+                                   w-9 h-9 rounded-full bg-slate-800/80 border border-slate-700/60
+                                   hover:bg-slate-700 transition ${hasPrev ? "" : "opacity-20 pointer-events-none"}">
+                        <i data-lucide="chevron-left" class="w-4 h-4 text-white"></i>
+                    </button>
+ 
+                    <img src="${EnrichPanel._esc(url)}" alt="sandbox screenshot ${idx + 1}"
+                         class="rounded-lg border border-slate-700/60 shadow-2xl"
+                         style="max-height:72vh; max-width:calc(100% - 5rem); object-fit:contain;"
+                         onerror="this.src=''; this.alt='Image not available'; this.className='text-slate-500 text-sm p-8';">
+ 
+                    <!-- Next -->
+                    <button id="carousel-next"
+                            class="absolute right-0 z-10 flex items-center justify-center
+                                   w-9 h-9 rounded-full bg-slate-800/80 border border-slate-700/60
+                                   hover:bg-slate-700 transition ${hasNext ? "" : "opacity-20 pointer-events-none"}">
+                        <i data-lucide="chevron-right" class="w-4 h-4 text-white"></i>
                     </button>
                 </div>
-                <img src="${src}" alt="Screenshot"
-                     class="w-full rounded border border-slate-700/60 shadow-2xl">
+ 
+                <!-- Dots -->
+                ${total > 1 ? `
+                <div class="flex items-center gap-1.5 mt-3">
+                    ${shots.map((_, i) => `
+                        <button class="carousel-dot w-1.5 h-1.5 rounded-full transition-all
+                                       ${i === idx ? "bg-teal-400 scale-125" : "bg-slate-600 hover:bg-slate-500"}"
+                                data-idx="${i}"></button>`).join("")}
+                </div>` : ""}
+ 
+                <!-- Thumbnails strip (si > 3) -->
+                ${total > 3 ? `
+                <div class="flex gap-1.5 mt-2 max-w-full overflow-x-auto pb-1">
+                    ${shots.map((sh, i) => `
+                        <button class="carousel-thumb shrink-0 rounded overflow-hidden border transition
+                                       ${i === idx ? "border-teal-400/80" : "border-slate-700/50 hover:border-slate-500 opacity-60 hover:opacity-100"}"
+                                data-idx="${i}" style="width:52px;height:34px;">
+                            <img src="${EnrichPanel._esc(sh.url)}" class="w-full h-full object-cover object-top"
+                                 loading="lazy" onerror="this.closest('button').style.display='none'">
+                        </button>`).join("")}
+                </div>` : ""}
             </div>`;
-        modal.addEventListener("click", e => { if (e.target === modal) modal.remove(); });
+        };
+ 
+        const render = (idx) => {
+            const inner = document.getElementById("carousel-inner");
+            const wrapper = inner ? inner.parentElement : null;
+            const html = buildSlide(idx);
+ 
+            if (wrapper) {
+                wrapper.innerHTML = html;
+            } else {
+                modal.innerHTML = `<div class="relative flex flex-col items-center w-full max-w-5xl px-4 transition-all">${buildSlide(idx)}</div>`;
+            }
+ 
+            // Re-init content (inner may have been replaced)
+            const newInner = document.getElementById("carousel-inner");
+            if (!newInner) return;
+ 
+            lucide.createIcons({ nodes: [newInner.parentElement] });
+ 
+            document.getElementById("carousel-close")?.addEventListener("click", () => modal.remove());
+            if (idx > 0) document.getElementById("carousel-prev")?.addEventListener("click", () => render(idx - 1));
+            if (idx < total - 1) document.getElementById("carousel-next")?.addEventListener("click", () => render(idx + 1));
+ 
+            newInner.parentElement.querySelectorAll(".carousel-dot, .carousel-thumb").forEach(btn => {
+                btn.addEventListener("click", () => render(parseInt(btn.dataset.idx)));
+            });
+        };
+ 
+        // Keyboard navigation
+        const keyHandler = (e) => {
+            const cur = parseInt(modal.dataset.idx || "0");
+            if (e.key === "ArrowLeft"  && cur > 0)       { modal.dataset.idx = cur - 1; render(cur - 1); }
+            if (e.key === "ArrowRight" && cur < total - 1){ modal.dataset.idx = cur + 1; render(cur + 1); }
+            if (e.key === "Escape") { modal.remove(); document.removeEventListener("keydown", keyHandler); }
+        };
+        document.addEventListener("keydown", keyHandler);
+        modal.addEventListener("remove", () => document.removeEventListener("keydown", keyHandler));
+ 
+        // Click outside to close
+        modal.addEventListener("click", e => {
+            if (e.target === modal) { modal.remove(); document.removeEventListener("keydown", keyHandler); }
+        });
+ 
+        modal.dataset.idx = String(startIdx);
+        modal.innerHTML = `<div class="relative flex flex-col items-center w-full max-w-5xl px-4"></div>`;
         document.body.appendChild(modal);
-        lucide.createIcons({ nodes: [modal] });
+        render(startIdx);
     },
+
 
     _openTextModal(label, encoded) {
         let text = "";
