@@ -404,6 +404,9 @@ class VirusTotalModule(Module):
             if isinstance(item, str):
                 result.append({"value": item})
                 continue
+            
+            if not isinstance(item, dict):
+                continue
 
             attrs = item.get("attributes", {}) or {}
 
@@ -462,10 +465,15 @@ class VirusTotalModule(Module):
             elif endpoint == "historical_ssl_certificates":
                 result.append(
                     {
-                        "thumbprint": attrs.get("thumbprint_sha256"),
-                        "date": attrs.get("first_seen_date"),
+                        "thumbprint": attrs.get("thumbprint") or attrs.get("sha1"),
+                        "date": attrs.get("not_after") or attrs.get("not_before"),
                     }
                 )
+                
+            elif endpoint in ("soa_records", "caa_records", "cname_records", "mx_records", "ns_records"):
+                val = attrs.get("value") or item.get("id")
+                if val:
+                    result.append({"value": str(val)})
 
             elif endpoint == "related_threat_actors":
                 name = attrs.get("name") or item.get("id")
@@ -643,12 +651,18 @@ class VirusTotalModule(Module):
             if ref_files:
                 res.append(self._f(indicator, "Referrer Files", "list", ref_files, max_=5))
 
-            # SSL certificates
-            certs = [
-                f"{c['thumbprint'][:16]}… ({c['date'][:10] if c.get('date') else '?'})"
-                for c in relations.get("historical_ssl_certificates", [])
-                if c.get("thumbprint")
-            ]
+            certs = []
+            for c in relations.get("historical_ssl_certificates", []):
+                if not c.get("thumbprint"):
+                    continue
+                d = c.get("date")
+                if isinstance(d, int):
+                    d = datetime.datetime.utcfromtimestamp(d).strftime("%Y-%m-%d")
+                elif isinstance(d, str):
+                    d = d[:10]
+                else:
+                    d = "?"
+                certs.append(f"{c['thumbprint'][:16]}… ({d})")
             if certs:
                 res.append(self._f(indicator, "SSL Certificates", "list", certs, max_=5))
 
@@ -718,12 +732,18 @@ class VirusTotalModule(Module):
             if comm_files:
                 res.append(self._f(indicator, "Communicating Files", "list", comm_files, max_=10))
 
-            # SSL certificates
-            certs = [
-                f"{c['thumbprint'][:16]}… ({c['date'][:10] if c.get('date') else '?'})"
-                for c in relations.get("historical_ssl_certificates", [])
-                if c.get("thumbprint")
-            ]
+            certs = []
+            for c in relations.get("historical_ssl_certificates", []):
+                if not c.get("thumbprint"):
+                    continue
+                d = c.get("date")
+                if isinstance(d, int):
+                    d = datetime.datetime.utcfromtimestamp(d).strftime("%Y-%m-%d")
+                elif isinstance(d, str):
+                    d = d[:10]
+                else:
+                    d = "?"
+                certs.append(f"{c['thumbprint'][:16]}… ({d})")
             if certs:
                 res.append(self._f(indicator, "SSL Certificates", "list", certs, max_=5))
 
