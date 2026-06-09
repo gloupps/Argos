@@ -29,21 +29,19 @@ class URLScanModule(Module):
         headers  = {"API-Key": api_key}
 
         # ── 1. Search : récupérer la liste des scans ──────
-        if ioc_type == "url":
-            search_data = await self.requester.get(
-                f"{self.url}/search/",
-                params={"q": f'page.url:"{indicator}"'},
-                headers=headers,
-            )
-        else:
+        search_data = await self.requester.get(
+            f"{self.url}/search/",
+            params={"q": f'page.url:"{indicator}"'},
+            headers=headers,
+        )
+        if not search_data or "results" not in search_data:
             search_data = await self.requester.get(
                 f"{self.url}/search/",
                 params={"q": f"domain:{indicator}"},
                 headers=headers,
             )
-
-        if not search_data or "results" not in search_data:
-            return []
+            if not search_data or "results" not in search_data:
+                return []
 
         results_raw = search_data.get("results", [])
 
