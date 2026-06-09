@@ -315,18 +315,124 @@ window.EnrichPanel = {
         lucide.createIcons({ nodes: [el] });
     },
 
-    _injectVerdictBadge(maxScore) {
+    _injectVerdictBadge(verdict, score) {
         const el = document.getElementById("header-badges");
-        if (!el || maxScore === null) return;
-        const label = maxScore > 70 ? "Malicious" : maxScore > 40 ? "Suspicious" : "Clean";
-        const cls   = maxScore > 70 ? "bg-red-500/20 text-red-400 border border-red-500/30"
-                    : maxScore > 40 ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
-                    :                 "bg-green-500/20 text-green-400 border border-green-500/30";
-        const dot   = maxScore > 70 ? "bg-red-500" : maxScore > 40 ? "bg-amber-500" : "bg-green-500";
+        if (!el || verdict === "unknown") return;
+        const label = verdict === "malicious" ? "Malicious" : verdict === "suspicious" ? "Suspicious" : "Clean";
+        const cls   = verdict === "malicious" ? "bg-red-500/20 text-red-400 border border-red-500/30"
+                    : verdict === "suspicious" ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                    :                            "bg-green-500/20 text-green-400 border border-green-500/30";
+        const dot   = verdict === "malicious" ? "bg-red-500" : verdict === "suspicious" ? "bg-amber-500" : "bg-green-500";
+        const scoreStr = score !== null ? ` · ${score}` : "";
         const b = document.createElement("span");
         b.className = `flex items-center gap-1 text-[15px] font-bold px-1.5 py-0.5 rounded border ${cls}`;
-        b.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${dot} inline-block"></span>${label} · ${maxScore}`;
+        b.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${dot} inline-block"></span>${label}${scoreStr}`;
         el.appendChild(b);
+    },
+    
+    // ── VERDICT COMPUTATION ───────────────────────────────────────
+    _computeVerdict(info) {
+        const modules = info?.modules || {};
+        const allFields = Object.values(modules).flat().filter(Boolean);
+
+        // 1. Score de détection (base VT)
+        let maxScore = null;
+        allFields.forEach(f => {
+            if (f.type === "score") {
+                const v = Number(f.value);
+                if (!isNaN(v) && (maxScore === null || v > maxScore)) maxScore = v;
+            }
+        });
+
+        // 2. Signaux CTI
+        const threatFields = new Set([
+            "Threat Actors", "Related Threat Actors", "Malware Family", "Malware Families",
+            "malware_family", "Threat Type", "Threat Types", "ThreatFox Entry",
+            "Malware Description", "Verdict",
+        ]);
+        const reportFields  = new Set(["Collections", "Reports", "Malware Refs", "Matching Events", "Events"]);
+        const internalKeys  = this._internalKeys(); // misp, opencti, misp_ext_*
+
+        let hasThreat       = false;
+        let communityMal    = 0;
+        let communitySusp   = 0;
+        let hasCollection   = false;
+        let hasReport       = false;
+        let hasInternalHit  = false;
+
+        allFields.forEach(f => {
+            const name = f.name || "";
+            const val  = f.value;
+            const isEmpty = this._isEmpty(val);
+
+            // Threat signals
+            if (threatFields.has(name) && !isEmpty) hasThreat = true;
+            // Compromised flag (ThreatFox)
+            if (name === "Compromised" && String(val).toLowerCase() === "yes") hasThreat = true;
+
+            // Community votes VT
+            if (name === "Malicious"  && !isEmpty) communityMal  = Math.max(communityMal,  Number(val) || 0);
+            if (name === "Suspicious" && !isEmpty) communitySusp = Math.max(communitySusp, Number(val) || 0);
+
+            // Collections / Reports
+            if (name === "Collections" && !isEmpty) hasCollection = true;
+            if (reportFields.has(name) && !isEmpty) hasReport = true;
+        });
+
+        // Modules internes : au moins un champ non vide
+        internalKeys.forEach(k => {
+            if (!modules[k]) return;
+            const fields = modules[k] || [];
+            if (fields.some(f => !this._isEmpty(f.value))) hasInternalHit = true;
+        });
+
+        // 3. Décision
+        const reasons = [];
+
+        // Escalade vers malicious si menace confirmée
+        if (hasThreat) {
+            reasons.push("threat");
+            return { verdict: "malicious", score: maxScore, reasons };
+        }
+
+        // Score de détection élevé
+        if (maxScore !== null && maxScore > 70) {
+            reasons.push("detection");
+            return { verdict: "malicious", score: maxScore, reasons };
+        }
+
+        // Score moyen + context aggravant → malicious
+        if (maxScore !== null && maxScore > 40) {
+            if (communityMal > 0 || hasCollection || hasInternalHit) {
+                reasons.push("detection+context");
+                return { verdict: "malicious", score: maxScore, reasons };
+            }
+            reasons.push("detection");
+            return { verdict: "suspicious", score: maxScore, reasons };
+        }
+
+        // Pas de score élevé mais community votes
+        if (communityMal > 0) {
+            reasons.push("community");
+            return { verdict: "suspicious", score: maxScore, reasons };
+        }
+        if (communitySusp > 0) {
+            reasons.push("community_susp");
+            return { verdict: "suspicious", score: maxScore, reasons };
+        }
+
+        // Présence dans rapports/collections/modules internes → suspicious
+        if (hasCollection || hasReport || hasInternalHit) {
+            reasons.push("reports");
+            return { verdict: "suspicious", score: maxScore, reasons };
+        }
+
+        // Score faible
+        if (maxScore !== null && maxScore <= 40) {
+            return { verdict: "clean", score: maxScore, reasons: ["detection"] };
+        }
+
+        return { verdict: "unknown", score: null, reasons: [] };
     },
 
     _renderLoading() {
@@ -493,14 +599,8 @@ window.EnrichPanel = {
         const internal = entries.filter(([k]) =>  internalKeys.includes(k));
 
         // Verdict global
-        let maxScore = null;
-        entries.forEach(([, fields]) => (fields || []).forEach(f => {
-            if (f.type === "score" && !this._isEmpty(f.value)) {
-                const v = Number(f.value);
-                if (maxScore === null || v > maxScore) maxScore = v;
-            }
-        }));
-        this._injectVerdictBadge(maxScore);
+        const { verdict, score: maxScore } = this._computeVerdict(info);
+        this._injectVerdictBadge(verdict, maxScore);
 
         // Collecter tous les champs externes par thème
         const themes = {};
