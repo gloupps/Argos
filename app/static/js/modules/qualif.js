@@ -57,6 +57,21 @@ window.EnrichPanel = {
                 .forEach(({ field }) => seen.add(field.name));
             return scores + seen.size;
         }
+        
+        if (theme === "sandbox") {
+            // screenshots comptent comme 1 par env, plus les champs listés
+            let count = 0;
+            items.forEach(({ field }) => {
+                if (field.type === "vt_sandbox_screenshots") {
+                    const envs = new Set((Array.isArray(field.value) ? field.value : []).map(v => v?.env).filter(Boolean));
+                    count += envs.size || 1;
+                } else {
+                    count += 1;
+                }
+            });
+            return count;
+        }
+
 
         // HOST : déduplication par field.name (même logique que _renderThemeBody "host")
         if (theme === "host") {
@@ -473,6 +488,16 @@ window.EnrichPanel = {
         "File Names":           "host",
         "Last Analysis":        "host",
         "Sandbox Environments": "host",
+        
+        // ── SANDBOX BEHAVIOUR ──
+        "Sandbox Screenshots":  "vt_sandbox",
+        "Processes Created":    "vt_sandbox",
+        "Mutexes":              "vt_sandbox",
+        "Registry Keys Set":    "vt_sandbox",
+        "Files Written":        "vt_sandbox",
+        "DNS Lookups":          "vt_sandbox",
+        "HTTP Requests":        "vt_sandbox",
+        "Sandbox Tags":         "tags",
 
         // ── SERVICES ──
         "Services":             "shodan_services",
@@ -524,6 +549,20 @@ window.EnrichPanel = {
         "NS Records":                "vt_refs",
         "SOA Records":               "vt_refs",
         "SSL Certificates":          "vt_refs",
+        "Malware & Tools":           "vt_refs",
+        "Related Reports":           "vt_refs",
+        "Referrer Files":            "vt_refs",
+        "Dropped Files":             "vt_refs",
+        "Execution Parents":         "vt_refs",
+        "Submission Count":          "host",
+        "Contacted URLs":            "vt_refs",
+        "Resolved IPs":              "vt_refs",
+        "Registrar":                 "host",
+        "Creation Date":             "host",
+        "Expiry Date":               "host",
+        "Page Title":                "host",
+        "Final URL":                 "host",
+
 
     },
     _getTheme(name) { return this._THEME_MAP[name] || "other"; },
@@ -605,8 +644,10 @@ window.EnrichPanel = {
             { key: "dns",       icon: "globe-2",      label: "DNS",       color: "green",  open: false },
             { key: "tags",      icon: "tag",          label: "Tags",      color: "violet", open: false },
             { key: "web",       icon: "monitor",      label: "WEB",       color: "sky",    open: false },
+            { key: "sandbox", icon: "cpu", label: "Sandbox", color: "teal", open: false },
             { key: "relations", icon: "git-fork",     label: "Relations", color: "amber",  open: false },
             { key: "other",     icon: "info",         label: "Other",     color: "slate",  open: false },
+            
         ];
 
         const mergeMap = {
@@ -617,6 +658,7 @@ window.EnrichPanel = {
             "urlscan_web":     "web",
             "urlscan_content": "web",
             "screenshot":      "web",
+            "vt_sandbox": "sandbox",
         };
         const mergedThemes = {};
         Object.entries(themes).forEach(([t, items]) => {
@@ -1018,6 +1060,8 @@ window.EnrichPanel = {
                 });
                 if (subsections.length) parts.push(subsections.join(""));
             }
+            
+            
 
             // Page content (DOM, body text modals)
             const contentItems = items.filter(i => i.origTheme === "urlscan_content");
@@ -1045,6 +1089,87 @@ window.EnrichPanel = {
                 if (btns) parts.push(`<div class="space-y-1.5">${btns}</div>`);
             }
 
+            return parts.length ? parts.join("") : null;
+        }
+        
+                // ── SANDBOX (VT behaviours) ──
+        if (theme === "sandbox") {
+            const parts = [];
+ 
+            // Screenshots gallery
+            const ssItems = items.filter(i => i.field.type === "vt_sandbox_screenshots");
+            if (ssItems.length) {
+                const allShots = [];
+                ssItems.forEach(({ field }) => {
+                    (Array.isArray(field.value) ? field.value : []).forEach(v => {
+                        if (v && typeof v === "object" && v.url) allShots.push(v);
+                    });
+                });
+                if (allShots.length) {
+                    // Group by env
+                    const byEnv = {};
+                    allShots.forEach(s => {
+                        if (!byEnv[s.env]) byEnv[s.env] = [];
+                        byEnv[s.env].push(s.url);
+                    });
+                    const sections = Object.entries(byEnv).map(([env, urls]) => {
+                        const thumbs = urls.map(url => `
+                            <button onclick="EnrichPanel._openScreenshotModal('${this._esc(url)}', '${this._esc(url)}')"
+                                    class="rounded overflow-hidden border border-slate-700/60 hover:border-teal-500/40 transition bg-slate-900/40">
+                                <img src="${this._esc(url)}" alt="sandbox"
+                                     class="w-full object-cover" style="max-height:72px;object-position:top"
+                                     loading="lazy" onerror="this.closest('button').style.display='none'">
+                            </button>`).join("");
+                        return `
+                            <div class="mb-2">
+                                <div class="flex items-center gap-1 mb-1">
+                                    <i data-lucide="monitor" class="w-2.5 h-2.5 text-teal-500/70 shrink-0"></i>
+                                    <span class="text-[11px] text-slate-500 uppercase tracking-wider truncate" title="${this._esc(env)}">${this._esc(env)}</span>
+                                </div>
+                                <div class="grid grid-cols-2 gap-1">${thumbs}</div>
+                            </div>`;
+                    }).join("");
+                    parts.push(`<div class="space-y-1 mb-2">${sections}</div>`);
+                }
+            }
+ 
+            // Behavioral list fields (processes, mutexes, registry, files, dns, http)
+            const listFields = [
+                { name: "Processes Created", icon: "terminal",    color: "text-slate-400" },
+                { name: "Files Written",      icon: "file-plus",   color: "text-amber-400/70" },
+                { name: "Registry Keys Set",  icon: "database",    color: "text-blue-400/70" },
+                { name: "Mutexes",            icon: "lock",        color: "text-violet-400/70" },
+                { name: "DNS Lookups",        icon: "globe-2",     color: "text-green-400/70" },
+                { name: "HTTP Requests",      icon: "arrow-right-left", color: "text-sky-400/70" },
+            ];
+ 
+            listFields.forEach(({ name, icon, color }) => {
+                const matched = items.filter(({ field }) => field.name === name);
+                if (!matched.length) return;
+                const allVals = [];
+                matched.forEach(({ field }) => {
+                    (Array.isArray(field.value) ? field.value : [field.value]).forEach(v => {
+                        if (v) allVals.push(String(v));
+                    });
+                });
+                if (!allVals.length) return;
+                const max = matched[0].field.max || 15;
+                const rows = allVals.slice(0, max).map(v => {
+                    const disp = v.length > 85 ? v.slice(0, 83) + "…" : v;
+                    return `<div class="text-[12px] font-mono text-slate-400 truncate py-px" title="${this._esc(v)}">${this._esc(disp)}</div>`;
+                }).join("");
+                const overflow = allVals.length > max ? `<div class="text-[12px] text-slate-600 mt-0.5">+${allVals.length - max} more</div>` : "";
+                parts.push(`
+                    <div class="mb-2">
+                        <div class="flex items-center gap-1 mb-1">
+                            <i data-lucide="${icon}" class="w-2.5 h-2.5 ${color} shrink-0"></i>
+                            <span class="text-[12px] text-slate-500 uppercase tracking-wider">${name}</span>
+                            <span class="text-[12px] text-slate-700 ml-auto">${allVals.length}</span>
+                        </div>
+                        <div class="space-y-px">${rows}${overflow}</div>
+                    </div>`);
+            });
+ 
             return parts.length ? parts.join("") : null;
         }
 
