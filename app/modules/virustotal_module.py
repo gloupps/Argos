@@ -158,100 +158,239 @@ class VirusTotalModule(Module):
             indicator, ioc_type, attrs, relations, sandbox_screenshots, sandbox_summary
         )
 
+   # ──────────────────────────────────────────────────────
+    # _parse_behaviours  — REMPLACER la méthode existante
     # ──────────────────────────────────────────────────────
-    # _parse_behaviours
-    # ──────────────────────────────────────────────────────
-    def _parse_behaviours(
-        self, items: list
-    ):
+    def _parse_behaviours(self, items: list):
         """
-        Parse sandbox behaviour items.
-        Returns:
-          - sandbox_screenshots: list of {env, url}
-          - sandbox_summary: dict with aggregated behavioral indicators
+        Parse sandbox behaviour items depuis /files/{id}/behaviours.
+        Agrège toutes les sandboxes en dédupliquant par valeur.
+        Retourne (screenshots, summary).
         """
-        screenshots = []
-        processes = []
-        mutexes = []
-        registry_keys = []
-        files_written = []
-        network_dns = []
-        network_http = []
-        tags = []
 
-        seen_processes = set()
-        seen_mutexes = set()
-        seen_reg = set()
-        seen_files = set()
-        seen_dns = set()
-        seen_http = set()
-        seen_tags = set()
+        screenshots = []  # toujours vide sur plan free, préservé pour plan premium
 
-        for item in items[:8]:  # max 8 sandboxes
+        # ── Sets pour déduplication ───────────────────────
+        seen = {k: set() for k in [
+            "signatures", "mitre", "mbc",
+            "processes", "commands",
+            "files_written", "files_dropped", "files_deleted", "files_opened",
+            "registry_set", "registry_opened",
+            "ip_traffic", "dns", "http",
+            "mutexes", "modules",
+            "tags",
+        ]}
+
+        agg = {k: [] for k in seen}
+        artifacts = {}  # sandbox_name → {has_html, has_pcap, has_evtx, has_memdump}
+
+        for item in items:
             attrs = item.get("attributes", {}) or {}
-            env = attrs.get("sandbox_name") or "Unknown sandbox"
+            env   = attrs.get("sandbox_name") or "Unknown"
 
-            # Screenshots
-            for url in (attrs.get("screenshot_urls") or [])[:4]:
+            # Artefacts disponibles
+            artifacts[env] = {
+                "html":    attrs.get("has_html_report", False),
+                "pcap":    attrs.get("has_pcap",        False),
+                "evtx":    attrs.get("has_evtx",        False),
+                "memdump": attrs.get("has_memdump",     False),
+                "date":    attrs.get("analysis_date"),
+            }
+
+            # Screenshots (premium)
+            for url in attrs.get("screenshot_urls") or []:
                 screenshots.append({"env": env, "url": url})
 
-            # Processes created
+            # ── Signature matches ─────────────────────────
+            for sig in attrs.get("signature_matches") or []:
+                name = sig.get("name") or sig.get("description") or ""
+                desc = sig.get("description") or ""
+                sev  = sig.get("severity", "")
+                # Formater avec sévérité si disponible
+                sev_short = {
+                    "IMPACT_SEVERITY_HIGH":   "HIGH",
+                    "IMPACT_SEVERITY_MEDIUM": "MED",
+                    "IMPACT_SEVERITY_LOW":    "LOW",
+                    "IMPACT_SEVERITY_INFO":   "INFO",
+                }.get(sev, "")
+                label = f"[{sev_short}] {desc}" if sev_short else desc or name
+                if label and label not in seen["signatures"]:
+                    seen["signatures"].add(label)
+                    agg["signatures"].append(label)
+
+            # ── MITRE ATT&CK ──────────────────────────────
+            for t in attrs.get("mitre_attack_techniques") or []:
+                tid  = t.get("id", "")
+                desc = t.get("signature_description") or ""
+                sev  = t.get("severity", "")
+                sev_short = {
+                    "IMPACT_SEVERITY_HIGH":   "HIGH",
+                    "IMPACT_SEVERITY_MEDIUM": "MED",
+                    "IMPACT_SEVERITY_LOW":    "LOW",
+                    "IMPACT_SEVERITY_INFO":   "INFO",
+                }.get(sev, "")
+                label = f"{tid} — {desc}" if desc else tid
+                if sev_short and sev_short not in ("INFO",):
+                    label = f"[{sev_short}] {label}"
+                if label and label not in seen["mitre"]:
+                    seen["mitre"].add(label)
+                    agg["mitre"].append(label)
+
+            # ── MBC (Malware Behavior Catalog) ────────────
+            for m in attrs.get("mbc") or []:
+                mid  = m.get("id", "")
+                obj  = m.get("objective", "")
+                beh  = m.get("behavior", "")
+                meth = m.get("method", "")
+                parts = [p for p in [obj, beh, meth] if p]
+                label = " / ".join(parts) if parts else mid
+                if mid:
+                    label = f"{mid}: {label}" if label != mid else mid
+                if label and label not in seen["mbc"]:
+                    seen["mbc"].add(label)
+                    agg["mbc"].append(label)
+
+            # ── Processes created ─────────────────────────
             for p in attrs.get("processes_created") or []:
-                if p and p not in seen_processes:
-                    seen_processes.add(p)
-                    processes.append(p)
+                if p and p not in seen["processes"]:
+                    seen["processes"].add(p)
+                    agg["processes"].append(p)
 
-            # Mutexes
-            for m in attrs.get("mutexes_created") or []:
-                if m and m not in seen_mutexes:
-                    seen_mutexes.add(m)
-                    mutexes.append(m)
+            # ── Command executions ────────────────────────
+            for c in attrs.get("command_executions") or []:
+                if c and c.strip() and c.strip() not in seen["commands"]:
+                    seen["commands"].add(c.strip())
+                    agg["commands"].append(c.strip())
 
-            # Registry keys set
-            for r in attrs.get("registry_keys_set") or []:
-                key = r.get("key") if isinstance(r, dict) else r
-                if key and key not in seen_reg:
-                    seen_reg.add(key)
-                    registry_keys.append(key)
-
-            # Files written
+            # ── Files written ─────────────────────────────
             for f in attrs.get("files_written") or []:
-                path = f.get("path") if isinstance(f, dict) else f
-                if path and path not in seen_files:
-                    seen_files.add(path)
-                    files_written.append(path)
+                path = f.get("path") if isinstance(f, dict) else str(f)
+                if path and path not in seen["files_written"]:
+                    seen["files_written"].add(path)
+                    agg["files_written"].append(path)
 
-            # DNS lookups
+            # ── Files dropped ─────────────────────────────
+            for f in attrs.get("files_dropped") or []:
+                path = f.get("path") if isinstance(f, dict) else str(f)
+                if path and path not in seen["files_dropped"]:
+                    seen["files_dropped"].add(path)
+                    agg["files_dropped"].append(path)
+
+            # ── Files deleted ─────────────────────────────
+            for f in attrs.get("files_deleted") or []:
+                path = f.get("path") if isinstance(f, dict) else str(f)
+                if path and path not in seen["files_deleted"]:
+                    seen["files_deleted"].add(path)
+                    agg["files_deleted"].append(path)
+
+            # ── Files opened (limité — très verbeux) ──────
+            for f in attrs.get("files_opened") or []:
+                path = f.get("path") if isinstance(f, dict) else str(f)
+                # Filtrer les paths système génériques trop verbeux
+                if path and path not in seen["files_opened"]:
+                    seen["files_opened"].add(path)
+                    agg["files_opened"].append(path)
+
+            # ── Registry keys set ─────────────────────────
+            for r in attrs.get("registry_keys_set") or []:
+                key = r.get("key") if isinstance(r, dict) else str(r)
+                if key and key not in seen["registry_set"]:
+                    seen["registry_set"].add(key)
+                    agg["registry_set"].append(key)
+
+            # ── Registry keys opened ──────────────────────
+            for r in attrs.get("registry_keys_opened") or []:
+                key = r.get("key") if isinstance(r, dict) else str(r)
+                if key and key not in seen["registry_opened"]:
+                    seen["registry_opened"].add(key)
+                    agg["registry_opened"].append(key)
+
+            # ── IP traffic ────────────────────────────────
+            for t in attrs.get("ip_traffic") or []:
+                ip   = t.get("destination_ip", "")
+                port = t.get("destination_port", "")
+                proto = t.get("transport_layer_protocol", "")
+                label = f"{ip}:{port}/{proto}" if port else ip
+                if label and label not in seen["ip_traffic"]:
+                    seen["ip_traffic"].add(label)
+                    agg["ip_traffic"].append(label)
+
+            # ── DNS lookups ───────────────────────────────
             for d in attrs.get("dns_lookups") or []:
-                hostname = d.get("hostname") if isinstance(d, dict) else d
-                if hostname and hostname not in seen_dns:
-                    seen_dns.add(hostname)
-                    network_dns.append(hostname)
+                hostname = d.get("hostname") if isinstance(d, dict) else str(d)
+                if hostname and hostname not in seen["dns"]:
+                    seen["dns"].add(hostname)
+                    agg["dns"].append(hostname)
 
-            # HTTP conversations
+            # ── HTTP conversations ─────────────────────────
             for h in attrs.get("http_conversations") or []:
                 if isinstance(h, dict):
-                    url_val = h.get("url") or h.get("request_method", "") + " " + h.get("url", "")
+                    url_val = h.get("url", "")
+                    method  = h.get("request_method", "")
+                    label   = f"{method} {url_val}".strip() if method else url_val
                 else:
-                    url_val = str(h)
-                if url_val and url_val not in seen_http:
-                    seen_http.add(url_val)
-                    network_http.append(url_val)
+                    label = str(h)
+                if label and label not in seen["http"]:
+                    seen["http"].add(label)
+                    agg["http"].append(label)
 
-            # Tags / verdicts
+            # ── Mutexes ────────────────────────────────────
+            for m in (attrs.get("mutexes_created") or []) + (attrs.get("mutexes_opened") or []):
+                if m and m not in seen["mutexes"]:
+                    seen["mutexes"].add(m)
+                    agg["mutexes"].append(m)
+
+            # ── Modules loaded ────────────────────────────
+            for mod in attrs.get("modules_loaded") or []:
+                if mod and mod not in seen["modules"]:
+                    seen["modules"].add(mod)
+                    agg["modules"].append(mod)
+
+            # ── Tags ──────────────────────────────────────
             for t in attrs.get("tags") or []:
-                if t and t not in seen_tags:
-                    seen_tags.add(t)
-                    tags.append(t)
+                if t and t not in seen["tags"]:
+                    seen["tags"].add(t)
+                    agg["tags"].append(t)
+
+        # ── Résumé des sandboxes (noms + artefacts) ───────
+        sandbox_envs = []
+        for env, art in artifacts.items():
+            flags = []
+            if art["html"]:    flags.append("HTML")
+            if art["pcap"]:    flags.append("PCAP")
+            if art["evtx"]:    flags.append("EVTX")
+            if art["memdump"]: flags.append("MEM")
+            label = env
+            if flags:
+                label += f" [{', '.join(flags)}]"
+            if art.get("date"):
+                try:
+                    import datetime
+                    dt = datetime.datetime.utcfromtimestamp(art["date"]).strftime("%Y-%m-%d")
+                    label += f" ({dt})"
+                except Exception:
+                    pass
+            sandbox_envs.append(label)
 
         summary = {
-            "processes": processes[:15],
-            "mutexes": mutexes[:10],
-            "registry_keys": registry_keys[:15],
-            "files_written": files_written[:15],
-            "network_dns": network_dns[:15],
-            "network_http": network_http[:10],
-            "tags": tags[:15],
+            "sandbox_envs":    sandbox_envs,
+            "signatures":      agg["signatures"][:20],
+            "mitre":           agg["mitre"][:20],
+            "mbc":             agg["mbc"][:15],
+            "processes":       agg["processes"][:15],
+            "commands":        agg["commands"][:10],
+            "files_written":   agg["files_written"][:15],
+            "files_dropped":   agg["files_dropped"][:20],
+            "files_deleted":   agg["files_deleted"][:10],
+            "files_opened":    agg["files_opened"][:15],
+            "registry_set":    agg["registry_set"][:15],
+            "registry_opened": agg["registry_opened"][:15],
+            "ip_traffic":      agg["ip_traffic"][:20],
+            "dns":             agg["dns"][:20],
+            "http":            agg["http"][:10],
+            "mutexes":         agg["mutexes"][:10],
+            "modules":         agg["modules"][:20],
+            "tags":            agg["tags"][:15],
         }
 
         return screenshots, summary
@@ -716,8 +855,7 @@ class VirusTotalModule(Module):
                     self._f(indicator, "Submission Count", "label-capsule", str(len(submissions)))
                 )
 
-            # ── Sandbox data ─────────────────────────────
-            # Screenshots (galerie)
+             # Screenshots (premium seulement — vide sur free)
             if sandbox_screenshots:
                 res.append(
                     self._f(
@@ -729,7 +867,55 @@ class VirusTotalModule(Module):
                     )
                 )
 
-            # Behavioral indicators
+            # Sandboxes ayant tourné (avec artefacts disponibles)
+            if sandbox_summary.get("sandbox_envs"):
+                res.append(
+                    self._f(
+                        indicator,
+                        "Sandbox Environments",
+                        "list",
+                        sandbox_summary["sandbox_envs"],
+                        max_=15,
+                    )
+                )
+
+            # Signatures comportementales (CAPE, Zenbox…)
+            if sandbox_summary.get("signatures"):
+                res.append(
+                    self._f(
+                        indicator,
+                        "Behavior Signatures",
+                        "list",
+                        sandbox_summary["signatures"],
+                        max_=20,
+                    )
+                )
+
+            # MITRE ATT&CK
+            if sandbox_summary.get("mitre"):
+                res.append(
+                    self._f(
+                        indicator,
+                        "MITRE ATT&CK",
+                        "list",
+                        sandbox_summary["mitre"],
+                        max_=20,
+                    )
+                )
+
+            # MBC
+            if sandbox_summary.get("mbc"):
+                res.append(
+                    self._f(
+                        indicator,
+                        "MBC",
+                        "list",
+                        sandbox_summary["mbc"],
+                        max_=15,
+                    )
+                )
+
+            # Processes created
             if sandbox_summary.get("processes"):
                 res.append(
                     self._f(
@@ -740,26 +926,32 @@ class VirusTotalModule(Module):
                         max_=15,
                     )
                 )
-            if sandbox_summary.get("mutexes"):
+
+            # Command executions
+            if sandbox_summary.get("commands"):
                 res.append(
                     self._f(
                         indicator,
-                        "Mutexes",
+                        "Command Executions",
                         "list",
-                        sandbox_summary["mutexes"],
+                        sandbox_summary["commands"],
                         max_=10,
                     )
                 )
-            if sandbox_summary.get("registry_keys"):
+
+            # Files dropped
+            if sandbox_summary.get("files_dropped"):
                 res.append(
                     self._f(
                         indicator,
-                        "Registry Keys Set",
+                        "Files Dropped",
                         "list",
-                        sandbox_summary["registry_keys"],
-                        max_=15,
+                        sandbox_summary["files_dropped"],
+                        max_=20,
                     )
                 )
+
+            # Files written
             if sandbox_summary.get("files_written"):
                 res.append(
                     self._f(
@@ -770,26 +962,104 @@ class VirusTotalModule(Module):
                         max_=15,
                     )
                 )
-            if sandbox_summary.get("network_dns"):
+
+            # Files deleted
+            if sandbox_summary.get("files_deleted"):
+                res.append(
+                    self._f(
+                        indicator,
+                        "Files Deleted",
+                        "list",
+                        sandbox_summary["files_deleted"],
+                        max_=10,
+                    )
+                )
+
+            # Registry keys set
+            if sandbox_summary.get("registry_set"):
+                res.append(
+                    self._f(
+                        indicator,
+                        "Registry Keys Set",
+                        "list",
+                        sandbox_summary["registry_set"],
+                        max_=15,
+                    )
+                )
+
+            # Registry keys opened
+            if sandbox_summary.get("registry_opened"):
+                res.append(
+                    self._f(
+                        indicator,
+                        "Registry Keys Opened",
+                        "list",
+                        sandbox_summary["registry_opened"],
+                        max_=15,
+                    )
+                )
+
+            # IP traffic
+            if sandbox_summary.get("ip_traffic"):
+                res.append(
+                    self._f(
+                        indicator,
+                        "IP Traffic",
+                        "list",
+                        sandbox_summary["ip_traffic"],
+                        max_=20,
+                    )
+                )
+
+            # DNS lookups
+            if sandbox_summary.get("dns"):
                 res.append(
                     self._f(
                         indicator,
                         "DNS Lookups",
                         "list",
-                        sandbox_summary["network_dns"],
-                        max_=15,
+                        sandbox_summary["dns"],
+                        max_=20,
                     )
                 )
-            if sandbox_summary.get("network_http"):
+
+            # HTTP requests
+            if sandbox_summary.get("http"):
                 res.append(
                     self._f(
                         indicator,
                         "HTTP Requests",
                         "list",
-                        sandbox_summary["network_http"],
+                        sandbox_summary["http"],
                         max_=10,
                     )
                 )
+
+            # Mutexes
+            if sandbox_summary.get("mutexes"):
+                res.append(
+                    self._f(
+                        indicator,
+                        "Mutexes",
+                        "list",
+                        sandbox_summary["mutexes"],
+                        max_=10,
+                    )
+                )
+
+            # Modules loaded
+            if sandbox_summary.get("modules"):
+                res.append(
+                    self._f(
+                        indicator,
+                        "Modules Loaded",
+                        "list",
+                        sandbox_summary["modules"],
+                        max_=20,
+                    )
+                )
+
+            # Sandbox tags
             if sandbox_summary.get("tags"):
                 res.append(
                     self._f(
@@ -800,6 +1070,7 @@ class VirusTotalModule(Module):
                         max_=15,
                     )
                 )
+
 
             # Comments
             comments = [
