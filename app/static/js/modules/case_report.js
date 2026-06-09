@@ -120,8 +120,7 @@ window.CaseReport = {
         let hasThreat      = false;
         let communityMal   = 0;
         let communitySusp  = 0;
-        let hasCollection  = false;
-        let hasReport      = false;
+        let reportCount    = 0; // total reports across all sources
 
         allFields.forEach(f => {
             const name = f.name || "";
@@ -132,18 +131,25 @@ window.CaseReport = {
             // Community votes (VT Malicious / Suspicious counts)
             if (name === "Malicious"  && !_isEmpty(val)) communityMal  = Math.max(communityMal,  Number(val) || 0);
             if (name === "Suspicious" && !_isEmpty(val)) communitySusp = Math.max(communitySusp, Number(val) || 0);
-            // Collections
-            if (name === "Collections" && !_isEmpty(val)) hasCollection = true;
-            // Reports / internal hits
-            if (REPORT_FIELDS.has(name) && !_isEmpty(val)) hasReport = true;
+            // Report counting — all sources: VT Collections, VT Reports/Malware Refs,
+            // MISP Events, Matching Events, OpenCTI reports, etc.
+            if (REPORT_FIELDS.has(name) && !_isEmpty(val)) {
+                const count = Array.isArray(val) ? val.length : 1;
+                reportCount += count;
+            }
         });
 
-        // Internal modules: at least one non-empty field = internal hit
+        // Internal modules: at least one non-empty field = internal hit (counts as 1 report source)
         let hasInternalHit = false;
         _internalKeys().forEach(k => {
             if (!modules[k]) return;
-            if ((modules[k] || []).some(f => !_isEmpty(f.value))) hasInternalHit = true;
+            if ((modules[k] || []).some(f => !_isEmpty(f.value))) {
+                hasInternalHit = true;
+                reportCount += 1;
+            }
         });
+
+        const highReportCount = reportCount >= 3;
 
         // 3. Decision tree
         //    Rule 1 – Threat identified → always malicious
@@ -154,22 +160,30 @@ window.CaseReport = {
         if (maxScore !== null && maxScore > 70) {
             return { verdict: "malicious", score: maxScore, reasons: ["detection"] };
         }
-        //    Rule 3 – Medium score + aggravating context
+        //    Rule 3 – Community voted malicious by more than 5 engines
+        if (communityMal > 5) {
+            return { verdict: "malicious", score: maxScore, reasons: ["community_votes"] };
+        }
+        //    Rule 4 – Referenced in 3+ reports across all sources
+        if (highReportCount) {
+            return { verdict: "malicious", score: maxScore, reasons: ["reports"] };
+        }
+        //    Rule 5 – Medium score + aggravating context
         if (maxScore !== null && maxScore > 40) {
-            if (communityMal > 0 || hasCollection || hasInternalHit) {
+            if (communityMal > 0 || hasInternalHit) {
                 return { verdict: "malicious", score: maxScore, reasons: ["detection+context"] };
             }
             return { verdict: "suspicious", score: maxScore, reasons: ["detection"] };
         }
-        //    Rule 4 – Community votes without score
+        //    Rule 6 – Community votes without high score
         if (communityMal > 0) {
             return { verdict: "suspicious", score: maxScore, reasons: ["community"] };
         }
         if (communitySusp > 0) {
             return { verdict: "suspicious", score: maxScore, reasons: ["community_susp"] };
         }
-        //    Rule 5 – Reports / collections / internal only (no threat) → suspicious
-        if (hasCollection || hasReport || hasInternalHit) {
+        //    Rule 7 – Some reports / internal hit but below thresholds → suspicious
+        if (reportCount > 0 || hasInternalHit) {
             return { verdict: "suspicious", score: maxScore, reasons: ["reports"] };
         }
         //    Rule 6 – Low detection score
