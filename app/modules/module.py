@@ -10,6 +10,10 @@ class Module(ABC):
     supported_types: list = []
     icon:            str  = "box"
     url:             str  = ""
+    # Certains modules internes acceptent Basic Auth ou aucune auth
+    # (ex: EsInstanceModule) — mettre False pour ne pas bloquer l'exécution
+    # sur l'absence de api_keys[mod_key] dans services.py.
+    requires_api_key: bool = True
 
     # Optional extra settings fields (non-key config, e.g. instance URLs).
     # Each entry: { key, type, label, placeholder }
