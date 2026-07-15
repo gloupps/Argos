@@ -5,12 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Argos</title>
     <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='images/argos-favicon.svg') }}">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono&family=Cinzel:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/css/tailwind.css') }}">
+    <script src="{{ url_for('static', filename='vendor/js/lucide.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='vendor/js/cytoscape.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='vendor/js/socket.io.min.js') }}"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/fonts/fonts.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/argos-theme.css') }}">
 </head>
 <body class="h-screen flex overflow-hidden argos-body">
