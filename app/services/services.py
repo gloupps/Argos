@@ -154,8 +154,8 @@ class Services:
                         )
                         continue
 
-                    api_key = api_keys.get(mod_key)
-                    if not api_key:
+                    api_key = api_keys.get(mod_key, "")
+                    if not api_key and getattr(module, "requires_api_key", True):
                         self.job_manager.add_log(
                             job_id, f"⚠ [{module.name}] no key for '{mod_key}'"
                         )
@@ -351,8 +351,8 @@ class Services:
                 for mod_key, module in job_modules.items():
                     if ioc_type not in module.supported_types:
                         continue
-                    api_key = api_keys.get(mod_key)
-                    if not api_key:
+                    api_key = api_keys.get(mod_key, "")
+                    if not api_key and getattr(module, "requires_api_key", True):
                         continue
 
                     self.job_manager.add_log(
@@ -483,8 +483,8 @@ class Services:
         result = {}
         job_modules = self._build_modules_for_job(extra_config)
         for mod_key, module in job_modules.items():
-            api_key = api_keys.get(mod_key)
-            if not api_key:
+            api_key = api_keys.get(mod_key, "")
+            if not api_key and getattr(module, "requires_api_key", True):
                 continue
             try:
                 ctx = {"api_key": api_key, **extra_config}
