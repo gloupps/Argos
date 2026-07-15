@@ -164,6 +164,10 @@ window.SIEMModule = {
         const caseId = tabId ? App?.state?.tabs[tabId]?.caseId : null;
         if (!caseId) { console.warn("[SIEM] no active case"); return; }
 
+        // FIX : siemType n'était pas défini dans ce scope (ReferenceError → le bouton
+        // "Run Investigation" plantait silencieusement avant d'appeler App.runAction)
+        const siemType = this.state.siem_type || "qradar";
+
         // Compute date strings → ISO or null
         const ds = this.state.date_start || null;
         const de = this.state.date_end   || null;
