@@ -347,9 +347,12 @@ class EsInstanceModule(Module):
     Chaque instance possède ses propres index avec ioc_type / search_field / output_fields.
     """
 
-    src_type        = "internal"
-    supported_types = ["ip", "domain", "url", "hash"]
-    icon            = "database"
+    src_type          = "internal"
+    supported_types   = ["ip", "domain", "url", "hash"]
+    icon              = "database"
+    # Basic Auth (ou aucune auth) est une alternative valide au token ApiKey :
+    # ne pas bloquer l'exécution du module si api_keys[mod_key] est absent.
+    requires_api_key  = False
 
     def __init__(self, requester, instance_id: str, label: str):
         self.requester    = requester
