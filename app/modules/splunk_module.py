@@ -38,9 +38,16 @@ from .module import Module
 # ─────────────────────────────────────────────────────────────
 
 def _time_range(date_start: str, date_end: str) -> Tuple[str, str]:
-    """Retourne (earliest, latest) au format Splunk ISO."""
+    """Retourne (earliest, latest) au format Splunk ISO (avec secondes)."""
     def _iso(dt: str) -> str:
-        return dt.replace(" ", "T") if dt else ""
+        if not dt:
+            return ""
+        dt = dt.replace(" ", "T")
+        # <input type="datetime-local"> envoie "YYYY-MM-DDTHH:MM" (pas de secondes) :
+        # Splunk a besoin du format complet pour bien parser earliest/latest_time.
+        if len(dt) == 16:  # "YYYY-MM-DDTHH:MM"
+            dt += ":00"
+        return dt
 
     earliest = _iso(date_start) if date_start else "-30d@d"
     latest   = _iso(date_end)   if date_end   else "now"
@@ -177,21 +184,31 @@ class SplunkModule(Module):
                 for f in (idx_cfg.get("output_fields") or "").split(",")
                 if f.strip()
             ]
-            ioc_key    = _IOC_FRONT_MAP.get(ioc_type_raw)
-            ioc_values = dict_indicators.get(ioc_key, []) if ioc_key else []
 
-            if not idx_name or not ioc_key or not ioc_values:
+            if not idx_name:
                 continue
 
-            tasks.append(
-                self._query_index(
-                    base, token,
-                    idx_name, ioc_key, ioc_values,
-                    output_fields, earliest, latest,
-                    results,
-                    search_field=search_field,
+            # "— any —" (ioc_type_raw vide) → on matche sur TOUS les types
+            # d'IOC présents dans le case, au lieu de skip silencieusement.
+            if ioc_type_raw:
+                ioc_keys = [_IOC_FRONT_MAP.get(ioc_type_raw)]
+            else:
+                ioc_keys = list(dict.fromkeys(_IOC_FRONT_MAP.values()))
+
+            for ioc_key in ioc_keys:
+                ioc_values = dict_indicators.get(ioc_key, []) if ioc_key else []
+                if not ioc_key or not ioc_values:
+                    continue
+
+                tasks.append(
+                    self._query_index(
+                        base, token,
+                        idx_name, ioc_key, ioc_values,
+                        output_fields, earliest, latest,
+                        results,
+                        search_field=search_field,
+                    )
                 )
-            )
 
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
@@ -312,6 +329,10 @@ class SplunkModule(Module):
             "exec_mode":     "oneshot",
             "earliest_time": earliest,
             "latest_time":   latest,
+            # Force le format de parsing pour earliest/latest_time : sans ça,
+            # une instance Splunk avec un TIME_FORMAT custom (LDAP/locale) peut
+            # rejeter ou mal interpréter la date envoyée par le front.
+            "time_format":   "%Y-%m-%dT%H:%M:%S",
             "count":         str(count),
             "output_mode":   "json",
         }
