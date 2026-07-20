@@ -51,6 +51,7 @@ class Requester:
         retries: int = 3,
         return_json: bool = True,
         allow_redirects: bool = True,
+        capture_redirect: bool = False,
     ) -> Optional[Any]:
         """
         Effectue une requête HTTP avec retry exponentiel.
@@ -70,6 +71,13 @@ class Requester:
                           Utile pour détecter une redirection vers une page de
                           login (auth refusée) qui renverrait sinon du HTML
                           avec un statut 200 après avoir été suivie silencieusement.
+        capture_redirect : si True (et allow_redirects=False), une 3xx n'est
+                          pas traitée comme un échec : le Location est renvoyé
+                          sous la forme {"__redirect__": True, "status": int,
+                          "location": str} au lieu d'un None silencieux.
+                          Permet à l'appelant de récupérer explicitement un
+                          lien (ex. sid de job) sans jamais suivre la
+                          redirection lui-même.
 
         Retour
         ──────
@@ -107,7 +115,7 @@ class Requester:
                             allow_redirects=allow_redirects,
                         ) as resp:
                             return await self._handle_response(
-                                resp, url, method, return_json
+                                resp, url, method, return_json, capture_redirect
                             )
 
                 except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
@@ -142,6 +150,7 @@ class Requester:
         url: str,
         method: str,
         return_json: bool,
+        capture_redirect: bool = False,
     ) -> Optional[Any]:
         status = resp.status
 
@@ -153,8 +162,18 @@ class Requester:
         # Typiquement une session/API-token refusé qui renvoie vers une
         # page de login : mieux vaut le signaler explicitement plutôt que
         # de laisser aiohttp suivre silencieusement et retomber sur du HTML.
+        # Si capture_redirect=True, ce n'est pas forcément un échec : le
+        # Location peut être le lien à interroger explicitement (ex. sid de
+        # job renvoyé par redirection selon le proxy) — on le remonte tel
+        # quel à l'appelant plutôt que de le jeter.
         if 300 <= status < 400:
             location = resp.headers.get("Location", "")
+            if capture_redirect and location:
+                logger.debug(
+                    "[Requester] %s %s → %d redirection capturée vers %s",
+                    method, url, status, location,
+                )
+                return {"__redirect__": True, "status": status, "location": location}
             logger.warning(
                 "[Requester] %s %s → %d redirection vers %s "
                 "(authentification probablement refusée ou URL incorrecte)",
