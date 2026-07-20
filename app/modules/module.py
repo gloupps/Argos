@@ -43,6 +43,7 @@ class Module(ABC):
             "supported_types": self.supported_types,
             "correlation":     self.get_correlation_fields(),
             "settings_fields": self.settings_fields,
+            "requires_api_key": self.requires_api_key,
         }
 
     def get_correlation_fields(self) -> List[Dict[str, Any]]:
