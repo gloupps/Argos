@@ -19,7 +19,7 @@ search_field (optional) :
   Ex : "src_ip", "destinationIP", "query", "sha256"
 
 Each index entry generates one SPL search scoped to:
-  - index=<name>  (or no index filter if name is "*" or empty)
+  - index=<n>  (or no index filter if name is "*" or empty)
   - the matching IOC field(s) via OR in the base search
   - the configured date range (earliest/latest)
   - table columns = _time + user-defined output_fields
@@ -278,6 +278,21 @@ class SplunkModule(Module):
         rows = self._extract_rows(data)
         link = self._make_link(base, spl, earliest, latest)
 
+        # `data is None` alors que le job a bien été soumis à Splunk (statut
+        # HTTP OK) signifie généralement que la réponse n'était pas exploitable
+        # (redirection vers une page de login, mauvais port/URL, proxy qui
+        # renvoie du HTML…) — voir logs [Requester] pour le détail. On le
+        # remonte ici de façon explicite au lieu de rapporter silencieusement
+        # "0 hits", pour que ce soit visible côté UI.
+        error = None
+        if data is None:
+            error = (
+                f"Splunk n'a pas retourné de résultats exploitables pour l'index "
+                f"'{idx_name}' (réponse HTTP inattendue — vérifie splunk_url, le "
+                f"token, ou une éventuelle redirection d'authentification ; "
+                f"voir les logs serveur pour le détail)."
+            )
+
         # Distribuer par IOC
         result_label = f"splunk:{idx_name}"
         matched_map: Dict[str, List[Dict]] = {}
@@ -287,11 +302,14 @@ class SplunkModule(Module):
 
         for val in values:
             val_rows = matched_map.get(val.lower(), [])
-            results.setdefault(val, {})[result_label] = {
+            entry = {
                 "events": len(val_rows),
                 "rows":   val_rows[:200],
                 "link":   link,
             }
+            if error:
+                entry["error"] = error
+            results.setdefault(val, {})[result_label] = entry
 
     # ─────────────────────────────────────────────────────
     # Auth
@@ -338,7 +356,9 @@ class SplunkModule(Module):
             "count":         str(count),
             "output_mode":   "json",
         }
-        data = await self.requester.post(url, headers=headers, data=payload)
+        data = await self.requester.post(
+            url, headers=headers, data=payload, allow_redirects=False
+        )
 
         # Cas standard "oneshot" : les résultats arrivent directement.
         if data and "results" in data:
@@ -366,7 +386,8 @@ class SplunkModule(Module):
 
         for _ in range(poll_attempts):
             status_data = await self.requester.get(
-                status_url, headers=headers, params={"output_mode": "json"}
+                status_url, headers=headers, params={"output_mode": "json"},
+                allow_redirects=False,
             )
             if not status_data:
                 return None
@@ -394,6 +415,7 @@ class SplunkModule(Module):
             results_url,
             headers=headers,
             params={"output_mode": "json", "count": str(count)},
+            allow_redirects=False,
         )
 
     @staticmethod
