@@ -43,19 +43,25 @@ window.SIEMModule = {
         // ── SIEM type sélectionné (défaut: qradar) ──
         const siemType = this.state.siem_type || "qradar";
 
-        // Elastic/Kibana acceptent Basic Auth (user/pass) comme alternative
-        // valide à la clé API — ne pas bloquer le bouton Run juste parce que
-        // le champ clé API est vide dans ce cas.
+        // Elastic accepte Basic Auth (user/pass) comme alternative valide à
+        // la clé API — ne pas bloquer le bouton Run juste parce que le champ
+        // clé API est vide dans ce cas.
         const basicAuthOk = (type) => {
             if (type === "elasticsearch") {
                 return !!(SecretStore?.get("extra_elasticsearch_user") && SecretStore?.get("extra_elasticsearch_pass"));
             }
-            if (type === "kibana") {
-                return !!(SecretStore?.get("extra_kibana_user") && SecretStore?.get("extra_kibana_pass"));
-            }
             return false;
         };
-        const isConfigured = !!SecretStore?.has?.(siemType) || basicAuthOk(siemType);
+
+        const kibanaInstances = SecretStore?.getJSON?.("kibana_instances", []) ?? [];
+        const kibanaInstanceId = this.state.kibana_instance_id || kibanaInstances[0]?.id || "";
+
+        const isConfigured = siemType === "kibana"
+            ? !!kibanaInstanceId && !!SecretStore?.get(`extra_kibana_inst_${kibanaInstanceId}_url`) && (
+                  !!SecretStore?.get(`kibana_inst_${kibanaInstanceId}`) ||
+                  !!(SecretStore?.get(`extra_kibana_inst_${kibanaInstanceId}_user`) && SecretStore?.get(`extra_kibana_inst_${kibanaInstanceId}_pass`))
+              )
+            : !!SecretStore?.has?.(siemType) || basicAuthOk(siemType);
 
         const now  = new Date();
         const week = new Date(now - 7 * 86400000);
@@ -93,11 +99,28 @@ window.SIEMModule = {
                 <!-- SIEM type picker -->
                 ${typePickerHtml}
 
+                ${siemType === "kibana" ? `
+                <div class="space-y-1">
+                    <p class="text-[9px] text-slate-500 uppercase">Kibana Instance (Internal Sources)</p>
+                    <select class="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1.5
+                                   text-[11px] font-mono text-slate-200 focus:outline-none focus:ring-1 focus:ring-teal-500"
+                            onchange="SIEMModule.update('kibana_instance_id', this.value); SIEMModule._render()">
+                        ${kibanaInstances.length
+                            ? kibanaInstances.map(inst => `
+                                <option value="${inst.id}" ${inst.id === kibanaInstanceId ? "selected" : ""}>
+                                    ${inst.label}
+                                </option>`).join("")
+                            : `<option value="">No Kibana instance configured</option>`}
+                    </select>
+                </div>` : ""}
+
                 ${!isConfigured ? `
                 <div class="flex items-center gap-2 text-[10px] text-amber-400/80
                             bg-amber-500/10 border border-amber-500/20 rounded px-2 py-1.5">
                     <i data-lucide="alert-triangle" class="w-3 h-3 shrink-0"></i>
-                    ${siemType === "qradar" ? "QRadar" : siemType} token missing — check Settings
+                    ${siemType === "kibana"
+                        ? "No Kibana instance configured — add one under Settings → Internal Sources"
+                        : `${siemType === "qradar" ? "QRadar" : siemType} token missing — check Settings`}
                 </div>` : ""}
 
                 <!-- Date range -->
@@ -206,13 +229,22 @@ window.SIEMModule = {
             elasticsearch_pass:     SecretStore?.get("extra_elasticsearch_pass")       || "",
             elasticsearch_indexes:  SecretStore?.getJSON("siem_logsources_elasticsearch", []),
 
-            // ── Kibana (ES via console proxy) ────────────────────
-            kibana:              SecretStore?.get("kibana")               || "",
-            kibana_url:          SecretStore?.get("extra_kibana_url")      || "",
-            kibana_user:         SecretStore?.get("extra_kibana_user")     || "",
-            kibana_pass:         SecretStore?.get("extra_kibana_pass")     || "",
-            kibana_indexes:      SecretStore?.getJSON("siem_logsources_kibana", []),
+            // ── Kibana (ES via console proxy) — config tirée de l'instance
+            // interne sélectionnée (Settings → Internal Sources), pas d'un
+            // bloc SIEM dédié.
+            kibana_instance_id: this.state.kibana_instance_id
+                || (SecretStore?.getJSON("kibana_instances", [])[0]?.id ?? ""),
         };
+
+        if (siemType === "kibana" && extraConfig.kibana_instance_id) {
+            const iid = extraConfig.kibana_instance_id;
+            extraConfig[`kibana_inst_${iid}_url`]     = SecretStore?.get(`extra_kibana_inst_${iid}_url`)  || "";
+            extraConfig[`kibana_inst_${iid}`]         = SecretStore?.get(`kibana_inst_${iid}`)            || "";
+            extraConfig[`kibana_inst_${iid}_user`]    = SecretStore?.get(`extra_kibana_inst_${iid}_user`) || "";
+            extraConfig[`kibana_inst_${iid}_pass`]    = SecretStore?.get(`extra_kibana_inst_${iid}_pass`) || "";
+            extraConfig[`kibana_inst_${iid}_indexes`] = SecretStore?.getJSON(`kibana_inst_${iid}_indexes`, []);
+        }
+
 
 
         // Show spinner in SIEM row result panel if present
