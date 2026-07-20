@@ -18,6 +18,20 @@ _IOC_FRONT_MAP: Dict[str, str] = {
     "Hash-SHA256": "hash",
 }
 
+# dict_indicators (le case graph classifié par classify_indicators() dans
+# qradar_module.py) utilise des clés "IPv4-Addr"/"Domain-Name"/"Url"/
+# "StixFile-MD5"/... — PAS "ip"/"domain"/"url"/"hash". _IOC_FRONT_MAP sert
+# aux champs de recherche (_IOC_FIELD_MAP) et à l'enrichment ; pour le SIEM
+# investigate() on a besoin de CETTE table pour retrouver les IOCs du case.
+_FRONT_TO_DICTKEY: Dict[str, str] = {
+    "IP":          "IPv4-Addr",
+    "Domain":      "Domain-Name",
+    "URL":         "Url",
+    "Hash-MD5":    "StixFile-MD5",
+    "Hash-SHA1":   "StixFile-SHA1",
+    "Hash-SHA256": "StixFile-SHA256",
+}
+
 _INTERNAL_TO_FRONT: Dict[str, List[str]] = {
     "ip":     ["IP"],
     "domain": ["Domain"],
@@ -196,6 +210,9 @@ class ElasticsearchModule(Module):
     supported_types = ["ip", "domain", "url", "hash"]
     icon        = "database"
     url         = ""
+    # Basic Auth (elasticsearch_user/elasticsearch_pass) est une alternative
+    # valide à l'ApiKey → ne pas bloquer/afficher MISSING sur son absence seule.
+    requires_api_key = False
 
     settings_fields = [
         {
@@ -271,15 +288,25 @@ class ElasticsearchModule(Module):
                 for f in (idx_cfg.get("output_fields") or "").split(",")
                 if f.strip()
             ]
-            ioc_key    = _IOC_FRONT_MAP.get(ioc_type_raw)
-            ioc_values = dict_indicators.get(ioc_key, []) if ioc_key else []
-            if not idx_name or not ioc_key or not ioc_values:
+
+            if not idx_name:
                 continue
 
-            tasks.append(self._query_siem_index(
-                base_url, headers, idx_name, ioc_key, ioc_values,
-                search_field, output_fields, date_range, results,
-            ))
+            # "— any —" (ioc_type_raw vide) → on matche sur TOUS les types
+            # d'IOC présents dans le case, au lieu de skip silencieusement.
+            front_labels = [ioc_type_raw] if ioc_type_raw else list(_FRONT_TO_DICTKEY.keys())
+
+            for front_label in front_labels:
+                dict_key   = _FRONT_TO_DICTKEY.get(front_label)   # clé dans dict_indicators
+                simple_key = _IOC_FRONT_MAP.get(front_label)      # clé pour _IOC_FIELD_MAP
+                ioc_values = dict_indicators.get(dict_key, []) if dict_key else []
+                if not simple_key or not ioc_values:
+                    continue
+
+                tasks.append(self._query_siem_index(
+                    base_url, headers, idx_name, simple_key, ioc_values,
+                    search_field, output_fields, date_range, results,
+                ))
 
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
