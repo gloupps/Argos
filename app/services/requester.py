@@ -50,21 +50,26 @@ class Requester:
         auth: Optional[Tuple[str, str]] = None,
         retries: int = 3,
         return_json: bool = True,
+        allow_redirects: bool = True,
     ) -> Optional[Any]:
         """
         Effectue une requête HTTP avec retry exponentiel.
 
         Paramètres
         ──────────
-        method      : verbe HTTP ("GET", "POST", …)
-        endpoint    : chemin ajouté à base_url, OU URL absolue complète
-        params      : query string parameters
-        json        : corps JSON (sérialisation auto)
-        data        : corps brut (form data, bytes…)
-        headers     : headers additionnels, fusionnés avec self.headers
-        auth        : tuple (login, password) pour HTTP Basic Auth
-        retries     : nombre de tentatives avant abandon
-        return_json : si False, retourne le texte brut de la réponse
+        method          : verbe HTTP ("GET", "POST", …)
+        endpoint        : chemin ajouté à base_url, OU URL absolue complète
+        params          : query string parameters
+        json            : corps JSON (sérialisation auto)
+        data            : corps brut (form data, bytes…)
+        headers         : headers additionnels, fusionnés avec self.headers
+        auth            : tuple (login, password) pour HTTP Basic Auth
+        retries         : nombre de tentatives avant abandon
+        return_json     : si False, retourne le texte brut de la réponse
+        allow_redirects : si False, une 3xx n'est pas suivie automatiquement.
+                          Utile pour détecter une redirection vers une page de
+                          login (auth refusée) qui renverrait sinon du HTML
+                          avec un statut 200 après avoir été suivie silencieusement.
 
         Retour
         ──────
@@ -99,6 +104,7 @@ class Requester:
                             json=json,
                             data=data,
                             auth=_auth,
+                            allow_redirects=allow_redirects,
                         ) as resp:
                             return await self._handle_response(
                                 resp, url, method, return_json
@@ -143,6 +149,19 @@ class Requester:
         if status == 204:
             return None
 
+        # ── Redirection non suivie (allow_redirects=False) ─
+        # Typiquement une session/API-token refusé qui renvoie vers une
+        # page de login : mieux vaut le signaler explicitement plutôt que
+        # de laisser aiohttp suivre silencieusement et retomber sur du HTML.
+        if 300 <= status < 400:
+            location = resp.headers.get("Location", "")
+            logger.warning(
+                "[Requester] %s %s → %d redirection vers %s "
+                "(authentification probablement refusée ou URL incorrecte)",
+                method, url, status, location,
+            )
+            return None
+
         # ── Auth / droits ──────────────────────────────────
         if status in (401, 403):
             logger.warning("[Requester] %s %s → %d (auth refusé)", method, url, status)
@@ -184,11 +203,26 @@ class Requester:
             try:
                 return await resp.json(content_type=None)
             except Exception:
-                logger.debug(
-                    "[Requester] %s %s → content-type inattendu : %s",
+                # Content-type inattendu ET corps non-JSON (ex. text/html) :
+                # généralement une page de login, une erreur de proxy, ou le
+                # mauvais port/URL (ex. port web Splunk au lieu du port mgmt).
+                # Le status HTTP peut être 2xx même si la requête n'a pas
+                # abouti côté applicatif (dispatch effectué mais réponse non
+                # exploitable) — on le rend visible via un warning avec un
+                # extrait du corps pour permettre le diagnostic.
+                snippet = ""
+                try:
+                    body = await resp.text()
+                    snippet = body[:200].replace("\n", " ").strip()
+                except Exception:
+                    pass
+                logger.warning(
+                    "[Requester] %s %s → %d, content-type inattendu : %s%s",
                     method,
                     url,
-                    content_type,
+                    status,
+                    content_type or "(absent)",
+                    f" — corps : {snippet!r}" if snippet else "",
                 )
                 return None
 
