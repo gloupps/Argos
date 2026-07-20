@@ -414,7 +414,8 @@ class SplunkModule(Module):
         rest_base, headers = self._cookie_target(base, auth_state)
         data = await self.requester.post(
             f"{rest_base}/services/search/jobs",
-            headers=headers, data=payload, allow_redirects=False,
+            headers=headers, data=payload,
+            allow_redirects=False, capture_redirect=True,
         )
         return data, headers
 
@@ -436,7 +437,13 @@ class SplunkModule(Module):
     ) -> Optional[Dict]:
         payload = {
             "search":        f"search {spl}",
-            "exec_mode":     "oneshot",
+            # Plus de exec_mode="oneshot" : on soumet le job en mode normal
+            # (asynchrone). Splunk répond immédiatement — soit avec un corps
+            # JSON {"sid": "..."} (cas standard splunkd), soit via une 3xx
+            # dont le Location porte le lien du job (cas de certains proxies/
+            # Splunk Web). Dans les deux cas on récupère ce lien explicitement
+            # (cf. _resolve_job_url) puis on va le requêter nous-mêmes pour le
+            # statut et les résultats — on ne suit JAMAIS la redirection HTTP.
             "earliest_time": earliest,
             "latest_time":   latest,
             # Force le format de parsing pour earliest/latest_time : sans ça,
@@ -454,14 +461,16 @@ class SplunkModule(Module):
             rest_base, headers = self._cookie_target(base, auth_state)
             data = await self.requester.post(
                 f"{rest_base}/services/search/jobs",
-                headers=headers, data=payload, allow_redirects=False,
+                headers=headers, data=payload,
+                allow_redirects=False, capture_redirect=True,
             )
         else:
             rest_base = base
             headers   = self._auth_headers(token)
             data = await self.requester.post(
                 f"{rest_base}/services/search/jobs",
-                headers=headers, data=payload, allow_redirects=False,
+                headers=headers, data=payload,
+                allow_redirects=False, capture_redirect=True,
             )
 
             # Échec + identifiants "user:pass" disponibles → on bascule sur
@@ -475,33 +484,64 @@ class SplunkModule(Module):
                 if auth_state.use_cookie:
                     rest_base, _ = self._cookie_target(base, auth_state)
 
-        # Cas standard "oneshot" : les résultats arrivent directement.
-        if data and "results" in data:
-            return data
+        job_url = self._resolve_job_url(base, rest_base, data)
+        if not job_url:
+            # Ni sid en JSON, ni Location exploitable → rien à poller.
+            return data if isinstance(data, dict) and "__redirect__" not in data else None
 
-        # Cas job asynchrone (certains gateways/proxies LDAP ne supportent
-        # pas exec_mode=oneshot et renvoient une référence de job à poller,
-        # ex. {"job_id": "...", "status": "started"} ou {"sid": "..."}).
-        job_id = None
-        if isinstance(data, dict):
-            job_id = data.get("job_id") or data.get("sid") or data.get("id")
-        if not job_id:
-            return data
-
-        return await self._poll_job(rest_base, headers, job_id, count, poll_attempts, poll_interval)
+        return await self._poll_job_url(job_url, headers, count, poll_attempts, poll_interval)
 
     _DONE_STATES  = {"done", "completed", "finished", "succeeded", "success"}
     _WAIT_STATES  = {"started", "running", "queued", "parsing", "pending", "in_progress"}
 
-    async def _poll_job(
-        self, base: str, headers: Dict[str, str], job_id: str,
+    def _resolve_job_url(
+        self, base: str, rest_base: str, data: Optional[Any]
+    ) -> Optional[str]:
+        """
+        Détermine l'URL exacte du job à interroger à partir de la réponse de
+        soumission — sans jamais suivre de redirection HTTP nous-mêmes :
+
+          - corps JSON standard  : {"sid": "..."} (ou "job_id"/"id")
+            → {rest_base}/services/search/jobs/{sid}
+          - redirection capturée : {"__redirect__": True, "location": "..."}
+            (certains proxies/Splunk Web répondent ainsi au lieu du JSON sid)
+            → le Location est déjà le lien du job ; on le résout en URL
+              absolue (relatif → concaténé à rest_base) et on s'en sert tel
+              quel comme point d'interrogation.
+        """
+        if not isinstance(data, dict):
+            return None
+
+        if data.get("__redirect__"):
+            location = (data.get("location") or "").strip()
+            if not location:
+                return None
+            if location.startswith("http://") or location.startswith("https://"):
+                job_url = location
+            else:
+                root = (rest_base or base).rstrip("/")
+                job_url = f"{root}/{location.lstrip('/')}"
+            return job_url.split("?", 1)[0].rstrip("/")
+
+        sid = data.get("sid") or data.get("job_id") or data.get("id")
+        if sid:
+            root = (rest_base or base).rstrip("/")
+            return f"{root}/services/search/jobs/{sid}"
+
+        return None
+
+    async def _poll_job_url(
+        self, job_url: str, headers: Dict[str, str],
         count: int, poll_attempts: int, poll_interval: float,
     ) -> Optional[Dict]:
-        status_url = f"{base}/services/search/jobs/{job_id}"
-
+        """
+        Interroge explicitement le lien du job (statut puis résultats) résolu
+        par _resolve_job_url — jamais via une redirection HTTP suivie
+        automatiquement.
+        """
         for _ in range(poll_attempts):
             status_data = await self.requester.get(
-                status_url, headers=headers, params={"output_mode": "json"},
+                job_url, headers=headers, params={"output_mode": "json"},
                 allow_redirects=False,
             )
             if not status_data:
@@ -524,8 +564,8 @@ class SplunkModule(Module):
             # Timeout de polling atteint sans état "done" confirmé.
             return None
 
-        # Job terminé → récupérer les résultats.
-        results_url = f"{status_url}/results"
+        # Job terminé → récupérer les résultats via le même lien de job.
+        results_url = f"{job_url}/results"
         return await self.requester.get(
             results_url,
             headers=headers,
