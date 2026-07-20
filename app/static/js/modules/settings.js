@@ -78,21 +78,11 @@ window.Settings = {
         const esBlock = document.createElement("div");
         esBlock.id = "siem-block-elasticsearch";
         colSiem.appendChild(esBlock);
-        // Séparateur Elasticsearch → Kibana
-        const siemDivider3 = document.createElement("div");
-        siemDivider3.className = "argos-divider my-4";
-        colSiem.appendChild(siemDivider3);
-
-        // Bloc Kibana (ES via console proxy) : URL + indexes
-        const kibanaBlock = document.createElement("div");
-        kibanaBlock.id = "siem-block-kibana";
-        colSiem.appendChild(kibanaBlock);
 
         // Conteneurs sources (référencés plus bas)
         const siemSourcesQradar = document.createElement("div");
         const siemSourcesSplunk = document.createElement("div");
         const siemSourcesElastic = document.createElement("div");
-        const siemSourcesKibana = document.createElement("div");
 
         grid.appendChild(colInternal);
         grid.appendChild(colExternal);
@@ -149,17 +139,6 @@ window.Settings = {
             esBlockEl.appendChild(siemSourcesElastic);
         }
 
-        const kibanaMod = Object.values(Modules?.registry || {}).find(m => m.key === "kibana");
-        const kibanaBlockEl = document.getElementById("siem-block-kibana");
-        if (kibanaMod && kibanaBlockEl) {
-            const card = Modules._buildSettingsCard(kibanaMod, true);
-            siemSourcesKibana.className = "mt-3";
-            card.appendChild(siemSourcesKibana);
-            kibanaBlockEl.appendChild(card);
-        } else if (kibanaBlockEl) {
-            kibanaBlockEl.appendChild(siemSourcesKibana);
-        }
-
         // MISP
         document.getElementById("misp-instances-section")?.remove();
         MISPInstances?.render?.(colMisp);
@@ -182,11 +161,9 @@ window.Settings = {
         document.getElementById(`siem-sources-section-qradar`)?.remove();
         document.getElementById(`siem-sources-section-splunk`)?.remove();
         document.getElementById(`siem-sources-section-elasticsearch`)?.remove();
-        document.getElementById(`siem-sources-section-kibana`)?.remove();
         SIEMInstances?.render?.(siemSourcesQradar, "qradar");
         SIEMInstances?.render?.(siemSourcesSplunk, "splunk");
         SIEMInstances?.render?.(siemSourcesElastic, "elasticsearch");
-        SIEMInstances?.render?.(siemSourcesKibana, "kibana");
 
         document.getElementById("settings-modal")?.classList.remove("hidden");
         lucide.createIcons({ nodes: [modalBody] });
@@ -211,7 +188,6 @@ window.Settings = {
         SIEMInstances?.collect?.("qradar");
         SIEMInstances?.collect?.("splunk");
         SIEMInstances?.collect?.("elasticsearch");
-        SIEMInstances?.collect?.("kibana");
         
         this.close();
         document.dispatchEvent(new Event("settings:updated"));
