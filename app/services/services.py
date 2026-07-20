@@ -36,6 +36,7 @@ class Services:
         from app.modules.censys_module import CensysModule
         from app.modules.qradar_module import QRadarModule
         from app.modules.splunk_module import SplunkModule
+        from app.modules.kibana_module import KibanaModule
         from app.modules.hybrid_analysis_module import HybridAnalysisModule
 
         self.modules = {
@@ -50,6 +51,7 @@ class Services:
             "censys": CensysModule(self.requester),
             "qradar": QRadarModule(self.requester),
             "splunk": SplunkModule(self.requester),
+            "kibana": KibanaModule(self.requester),
             "hybrid_analysis": HybridAnalysisModule(self.requester),
         }
 
@@ -574,6 +576,18 @@ class Services:
             if key not in modules:
                 modules[key] = EsInstanceModule(self.requester, iid, label)
 
+        from app.modules.kibana_module import KibanaInstanceModule
+
+        kibana_instances = extra_config.get("kibana_instances") or []
+        for inst in kibana_instances:
+            iid = str(inst.get("id", "")).strip()
+            label = str(inst.get("label", "")).strip()
+            if not iid or not label:
+                continue
+            key = f"kibana_inst_{iid}"
+            if key not in modules:
+                modules[key] = KibanaInstanceModule(self.requester, iid, label)
+
         return modules
 
     async def _handle_fetch_internal_source(self, job_id, data):
@@ -970,6 +984,27 @@ class Services:
                 return
             self.job_manager.add_log(
                 job_id, f"Running ES queries ({date_start} → {date_end})…"
+            )
+            results = await mod.investigate(dict_indicators, context)
+
+        elif siem_type == "kibana":
+            context = {
+                "api_key": extra.get("kibana", ""),
+                "kibana_url": extra.get("kibana_url", ""),
+                "kibana_indexes": extra.get("kibana_indexes", []),
+                "kibana_user": extra.get("kibana_user", ""),
+                "kibana_pass": extra.get("kibana_pass", ""),
+                "date_start": date_start,
+                "date_end": date_end,
+            }
+            mod = self.modules.get("kibana")
+            if not mod:
+                self.job_manager.add_log(
+                    job_id, "Kibana module not registered", "failed"
+                )
+                return
+            self.job_manager.add_log(
+                job_id, f"Running ES queries via Kibana proxy ({date_start} → {date_end})…"
             )
             results = await mod.investigate(dict_indicators, context)
 
