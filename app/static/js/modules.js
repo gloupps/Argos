@@ -52,6 +52,7 @@ window.Modules = {
             // ── Injecter les modules MISP externes depuis SecretStore ──────
             this._injectExternalMispModules();
             this._injectEsInstances();
+            this._injectKibanaInstances();
 
             console.log("[Modules] registry:", Object.keys(this.registry));
 
@@ -95,6 +96,26 @@ window.Modules = {
                 description:     `Internal Elasticsearch instance: ${inst.label}`,
                 type:            "internal",
                 icon:            "database",
+                url:             "",
+                supported_types: ["ip", "domain", "url", "hash"],
+                correlation:     [],
+                settings_fields: [],
+            };
+            if (this.state.enabled[key]     === undefined) this.state.enabled[key]     = true;
+            if (this._correlateEnabled[key] === undefined) this._correlateEnabled[key] = true;
+        });
+    },
+
+    _injectKibanaInstances() {
+        const instances = SecretStore.getJSON?.("kibana_instances", []) ?? [];
+        instances.forEach(inst => {
+            const key = `kibana_inst_${inst.id}`;
+            this.registry[key] = {
+                key,
+                name:            `Kibana — ${inst.label}`,
+                description:     `Internal Kibana instance (via console proxy): ${inst.label}`,
+                type:            "internal",
+                icon:            "compass",
                 url:             "",
                 supported_types: ["ip", "domain", "url", "hash"],
                 correlation:     [],
@@ -210,6 +231,19 @@ window.Modules = {
                 const mod    = this.registry[key];
                 if (!mod) return;
                 const hasKey = SecretStore?.has?.(`extra_es_inst_${inst.id}_url`) ?? false;
+                const on     = hasKey && (this.state.enabled[key] !== false);
+                internalEl.appendChild(this._buildSidebarItem(mod, hasKey, on));
+            });
+        }
+
+        // ── Injecter les instances Kibana internes dans Internal Sources ──
+        if (internalEl) {
+            const kibanaInstances = SecretStore.getJSON?.("kibana_instances", []) ?? [];
+            kibanaInstances.forEach(inst => {
+                const key    = `kibana_inst_${inst.id}`;
+                const mod    = this.registry[key];
+                if (!mod) return;
+                const hasKey = SecretStore?.has?.(`extra_kibana_inst_${inst.id}_url`) ?? false;
                 const on     = hasKey && (this.state.enabled[key] !== false);
                 internalEl.appendChild(this._buildSidebarItem(mod, hasKey, on));
             });
@@ -501,6 +535,25 @@ window.Modules = {
             });
         }
 
+        // Instances Kibana internes (recherche ES via /api/console/proxy)
+        const kibanaInstances = SecretStore.getJSON?.("kibana_instances", []) ?? [];
+        if (kibanaInstances.length) {
+            extra["kibana_instances"] = kibanaInstances;
+            kibanaInstances.forEach(inst => {
+                const iid = inst.id;
+                const url  = SecretStore.get(`extra_kibana_inst_${iid}_url`);
+                const key  = SecretStore.get(`kibana_inst_${iid}`);
+                const user = SecretStore.get(`extra_kibana_inst_${iid}_user`);
+                const pass = SecretStore.get(`extra_kibana_inst_${iid}_pass`);
+                const idxs = SecretStore.getJSON(`kibana_inst_${iid}_indexes`, []);
+                if (url)  extra[`kibana_inst_${iid}_url`]     = url;
+                if (key)  extra[`kibana_inst_${iid}`]          = key;
+                if (user) extra[`kibana_inst_${iid}_user`]     = user;
+                if (pass) extra[`kibana_inst_${iid}_pass`]     = pass;
+                if (idxs.length) extra[`kibana_inst_${iid}_indexes`] = idxs;
+            });
+        }
+
         return extra;
     },
 
@@ -536,7 +589,18 @@ window.Modules = {
 
     _buildSettingsCard(mod, fullWidth) {
         const current = SecretStore?.get(mod.key) || "";
-        const isSet   = !!current;
+
+        // Certains modules (ES/Kibana SIEM+instances) acceptent Basic Auth
+        // (user/pass) comme alternative valide à la clé API — ne pas afficher
+        // "MISSING" juste parce que le champ clé API est vide dans ce cas.
+        const userField = (mod.settings_fields || []).find(sf => sf.key.endsWith("_user"));
+        const passField = (mod.settings_fields || []).find(sf => sf.key.endsWith("_pass"));
+        const hasBasicAuth = !!(
+            userField && passField &&
+            SecretStore?.get(`extra_${userField.key}`) &&
+            SecretStore?.get(`extra_${passField.key}`)
+        );
+        const isSet = !!current || (mod.requires_api_key === false && hasBasicAuth);
 
         const extraHtml = (mod.settings_fields || []).map(sf => {
             const stored = SecretStore?.get(`extra_${sf.key}`) || "";
