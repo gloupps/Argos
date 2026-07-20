@@ -988,12 +988,21 @@ class Services:
             results = await mod.investigate(dict_indicators, context)
 
         elif siem_type == "kibana":
+            instance_id = extra.get("kibana_instance_id", "")
+            if not instance_id:
+                self.job_manager.add_log(
+                    job_id,
+                    "No Kibana instance selected — configure one under "
+                    "Settings → Internal Sources",
+                    "failed",
+                )
+                return
             context = {
-                "api_key": extra.get("kibana", ""),
-                "kibana_url": extra.get("kibana_url", ""),
-                "kibana_indexes": extra.get("kibana_indexes", []),
-                "kibana_user": extra.get("kibana_user", ""),
-                "kibana_pass": extra.get("kibana_pass", ""),
+                "api_key": extra.get(f"kibana_inst_{instance_id}", ""),
+                "kibana_url": extra.get(f"kibana_inst_{instance_id}_url", ""),
+                "kibana_indexes": extra.get(f"kibana_inst_{instance_id}_indexes", []),
+                "kibana_user": extra.get(f"kibana_inst_{instance_id}_user", ""),
+                "kibana_pass": extra.get(f"kibana_inst_{instance_id}_pass", ""),
                 "date_start": date_start,
                 "date_end": date_end,
             }
