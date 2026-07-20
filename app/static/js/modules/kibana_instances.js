@@ -193,7 +193,7 @@ window.KibanaInstances = {
                     <input type="hidden" class="kibana-idx-id" value="${this._esc(idx.id)}">
                     <input type="text" class="kibana-idx-name flex-1 bg-transparent border-b border-slate-700
                                               text-[11px] font-mono focus:outline-none focus:border-violet-500 px-1"
-                           placeholder="Index name (e.g. logs-*)"
+                           placeholder="Index pattern (logs-*) or Data View ID/name"
                            value="${this._esc(idx.name)}">
                     <button class="kibana-idx-del-btn text-slate-600 hover:text-red-400 transition shrink-0">
                         <i data-lucide="trash-2" class="w-3 h-3"></i>
