@@ -2,7 +2,7 @@
 import aiohttp
 import asyncio
 import logging
-from typing import Optional, Any, Tuple
+from typing import Optional, Any, Dict, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -251,3 +251,63 @@ class Requester:
 
     async def patch(self, endpoint: str = "", **kw) -> Optional[Any]:
         return await self.request("PATCH", endpoint, **kw)
+
+    # ─────────────────────────────────────────────────────
+    # Login par formulaire → cookie de session
+    # ─────────────────────────────────────────────────────
+    async def login_form(
+        self,
+        endpoint: str,
+        data: dict,
+        headers: Optional[dict] = None,
+    ) -> Optional[Dict[str, str]]:
+        """
+        POST de connexion classique (form-urlencoded) qui renvoie les
+        cookies de session de la réponse, sans suivre les redirections.
+
+        Utilisé pour l'auth par cookie quand l'API cible n'accepte pas de
+        header Authorization (ex. Splunk Web sur le port 8000, qui protège
+        son proxy REST par un cookie de session obtenu via
+        POST /en-US/account/login, contrairement à splunkd sur le port 8089
+        qui accepte Bearer/Basic directement).
+
+        Retour
+        ──────
+        dict {cookie_name: value} si le login a produit au moins un cookie,
+        None sinon.
+        """
+        url = endpoint if endpoint.startswith("http") else f"{self.base_url}{endpoint}"
+        merged_headers = {**self.headers, **(headers or {})}
+        connector = aiohttp.TCPConnector(ssl=False)
+
+        try:
+            async with aiohttp.ClientSession(
+                timeout=self.timeout, headers=merged_headers, connector=connector
+            ) as session:
+                async with session.post(
+                    url, data=data, allow_redirects=False
+                ) as resp:
+                    # Un login réussi renvoie généralement 200 (JSON avec
+                    # sessionKey) ou 303 (redirection vers l'app) — les deux
+                    # cas nous intéressent tant qu'un cookie est posé.
+                    if resp.status not in (200, 302, 303):
+                        logger.warning(
+                            "[Requester] login %s → %d (échec probable des identifiants)",
+                            url, resp.status,
+                        )
+                        return None
+
+                    cookies = {
+                        key: morsel.value for key, morsel in resp.cookies.items()
+                    }
+                    if not cookies:
+                        logger.warning(
+                            "[Requester] login %s → %d mais aucun cookie de session reçu",
+                            url, resp.status,
+                        )
+                        return None
+                    return cookies
+
+        except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
+            logger.warning("[Requester] login %s — échec : %s", url, exc)
+            return None
