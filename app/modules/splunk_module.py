@@ -3,7 +3,7 @@
 Splunk SIEM module — PivotLens.
 
 Credentials / extra_config keys :
-  api_key              → Bearer token (ou user:pass pour Basic Auth)
+  api_key              → Bearer token (ou user:pass pour Basic Auth / cookie)
   splunk_url           → Splunk base URL  (ex. https://splunk.corp:8089)
   splunk_indexes       → list of dicts [{id, name, ioc_type, search_field, output_fields}, ...]
                          stored in SecretStore as "siem_logsources_splunk"
@@ -19,7 +19,7 @@ search_field (optional) :
   Ex : "src_ip", "destinationIP", "query", "sha256"
 
 Each index entry generates one SPL search scoped to:
-  - index=<n>  (or no index filter if name is "*" or empty)
+  - index=<name>  (or no index filter if name is "*" or empty)
   - the matching IOC field(s) via OR in the base search
   - the configured date range (earliest/latest)
   - table columns = _time + user-defined output_fields
@@ -105,6 +105,27 @@ _IOC_MATCH_ALIAS: Dict[str, str] = {
 }
 
 
+class _SplunkAuthState:
+    """
+    État d'authentification partagé entre toutes les requêtes d'une même
+    investigation (asyncio.gather en parallèle sur plusieurs index/types).
+
+    Par défaut on tente l'auth "classique" (header Authorization: Bearer/Basic
+    sur splunkd, port 8089). Si ça échoue et qu'on dispose d'identifiants
+    user:pass, on bascule sur un cookie de session obtenu via
+    POST /en-US/account/login (nécessaire quand seul le port Splunk Web 8000
+    est exposé — splunkweb ignore le header Authorization et redirige vers
+    /account/login). Le login n'est fait qu'une seule fois (verrou asyncio)
+    et le cookie est réutilisé par toutes les requêtes suivantes.
+    """
+
+    def __init__(self):
+        self.use_cookie = False
+        self.cookie_header: Optional[str] = None
+        self.login_attempted = False
+        self.lock = asyncio.Lock()
+
+
 # ─────────────────────────────────────────────────────────────
 # Module
 # ─────────────────────────────────────────────────────────────
@@ -175,6 +196,12 @@ class SplunkModule(Module):
         results: Dict[str, Any] = {}
         tasks = []
 
+        # État d'auth partagé (voir _SplunkAuthState) : permet de basculer
+        # une seule fois vers le cookie de session si l'auth par header
+        # échoue (ex. Splunk Web port 8000), et de le réutiliser pour
+        # toutes les requêtes parallèles de cette investigation.
+        auth_state = _SplunkAuthState()
+
         for idx_cfg in indexes:
             idx_name      = (idx_cfg.get("name") or "").strip()
             ioc_type_raw  = idx_cfg.get("ioc_type") or ""
@@ -207,6 +234,7 @@ class SplunkModule(Module):
                         output_fields, earliest, latest,
                         results,
                         search_field=search_field,
+                        auth_state=auth_state,
                     )
                 )
 
@@ -231,6 +259,7 @@ class SplunkModule(Module):
         latest: str,
         results: Dict,
         search_field: str = "",
+        auth_state: Optional["_SplunkAuthState"] = None,
     ) -> None:
         # Résolution des champs de recherche :
         # - search_field non vide → champ unique explicite configuré par l'utilisateur
@@ -274,7 +303,9 @@ class SplunkModule(Module):
             f"| table {match_alias}, {table_fields}"
         )
 
-        data = await self._run_search(base, token, spl, earliest, latest)
+        data = await self._run_search(
+            base, token, spl, earliest, latest, auth_state=auth_state
+        )
         rows = self._extract_rows(data)
         link = self._make_link(base, spl, earliest, latest)
 
@@ -286,12 +317,19 @@ class SplunkModule(Module):
         # "0 hits", pour que ce soit visible côté UI.
         error = None
         if data is None:
-            error = (
-                f"Splunk n'a pas retourné de résultats exploitables pour l'index "
-                f"'{idx_name}' (réponse HTTP inattendue — vérifie splunk_url, le "
-                f"token, ou une éventuelle redirection d'authentification ; "
-                f"voir les logs serveur pour le détail)."
-            )
+            if auth_state and auth_state.login_attempted and not auth_state.use_cookie:
+                error = (
+                    f"Échec de connexion Splunk (login par cookie refusé — "
+                    f"vérifie que 'api_key' contient bien 'user:mot_de_passe' "
+                    f"valides pour {base})."
+                )
+            else:
+                error = (
+                    f"Splunk n'a pas retourné de résultats exploitables pour l'index "
+                    f"'{idx_name}' (réponse HTTP inattendue — vérifie splunk_url, le "
+                    f"token, ou une éventuelle redirection d'authentification ; "
+                    f"voir les logs serveur pour le détail)."
+                )
 
         # Distribuer par IOC
         result_label = f"splunk:{idx_name}"
@@ -327,6 +365,59 @@ class SplunkModule(Module):
             "Content-Type":  "application/x-www-form-urlencoded",
         }
 
+    def _cookie_target(
+        self, base: str, auth_state: "_SplunkAuthState"
+    ) -> Tuple[str, Dict[str, str]]:
+        """
+        Splunk Web (port 8000, ex. splunk.corp:8000) n'expose pas directement
+        splunkd : il faut passer par son proxy REST interne (__raw), qui
+        s'authentifie par cookie de session au lieu du header Authorization.
+        """
+        rest_base = f"{base}/en-US/splunkd/__raw"
+        headers = {
+            "Cookie":           auth_state.cookie_header or "",
+            "Content-Type":     "application/x-www-form-urlencoded",
+            "X-Requested-With": "XMLHttpRequest",
+        }
+        return rest_base, headers
+
+    async def _fallback_to_cookie_auth(
+        self,
+        base: str,
+        token: str,
+        auth_state: "_SplunkAuthState",
+        payload: Dict[str, str],
+    ) -> Tuple[Optional[Dict], Dict[str, str]]:
+        """
+        Login POST /en-US/account/login (une seule fois par investigation,
+        verrouillé pour éviter les logins concurrents) puis rejoue la requête
+        via le proxy REST de Splunk Web avec le cookie de session obtenu.
+        """
+        async with auth_state.lock:
+            if not auth_state.use_cookie and not auth_state.login_attempted:
+                auth_state.login_attempted = True
+                user, _, password = token.partition(":")
+                if user and password:
+                    cookies = await self.requester.login_form(
+                        f"{base}/en-US/account/login",
+                        data={"username": user, "password": password},
+                    )
+                    if cookies:
+                        auth_state.cookie_header = "; ".join(
+                            f"{k}={v}" for k, v in cookies.items()
+                        )
+                        auth_state.use_cookie = True
+
+        if not auth_state.use_cookie:
+            return None, self._auth_headers(token)
+
+        rest_base, headers = self._cookie_target(base, auth_state)
+        data = await self.requester.post(
+            f"{rest_base}/services/search/jobs",
+            headers=headers, data=payload, allow_redirects=False,
+        )
+        return data, headers
+
     # ─────────────────────────────────────────────────────
     # Core search executor (oneshot)
     # ─────────────────────────────────────────────────────
@@ -341,9 +432,8 @@ class SplunkModule(Module):
         count: int = 500,
         poll_attempts: int = 15,
         poll_interval: float = 1.0,
+        auth_state: Optional["_SplunkAuthState"] = None,
     ) -> Optional[Dict]:
-        url     = f"{base}/services/search/jobs"
-        headers = self._auth_headers(token)
         payload = {
             "search":        f"search {spl}",
             "exec_mode":     "oneshot",
@@ -356,9 +446,34 @@ class SplunkModule(Module):
             "count":         str(count),
             "output_mode":   "json",
         }
-        data = await self.requester.post(
-            url, headers=headers, data=payload, allow_redirects=False
-        )
+
+        # Mode cookie déjà établi par une requête précédente de la même
+        # investigation → on l'utilise directement, pas besoin de retenter
+        # le header Authorization qu'on sait déjà refusé.
+        if auth_state and auth_state.use_cookie and auth_state.cookie_header:
+            rest_base, headers = self._cookie_target(base, auth_state)
+            data = await self.requester.post(
+                f"{rest_base}/services/search/jobs",
+                headers=headers, data=payload, allow_redirects=False,
+            )
+        else:
+            rest_base = base
+            headers   = self._auth_headers(token)
+            data = await self.requester.post(
+                f"{rest_base}/services/search/jobs",
+                headers=headers, data=payload, allow_redirects=False,
+            )
+
+            # Échec + identifiants "user:pass" disponibles → on bascule sur
+            # l'auth par cookie de session (typiquement Splunk Web port 8000,
+            # qui redirige /services/... vers /account/login au lieu de
+            # répondre en JSON, cf. logs [Requester] avec le status 303).
+            if data is None and auth_state is not None and ":" in token:
+                data, headers = await self._fallback_to_cookie_auth(
+                    base, token, auth_state, payload
+                )
+                if auth_state.use_cookie:
+                    rest_base, _ = self._cookie_target(base, auth_state)
 
         # Cas standard "oneshot" : les résultats arrivent directement.
         if data and "results" in data:
@@ -373,7 +488,7 @@ class SplunkModule(Module):
         if not job_id:
             return data
 
-        return await self._poll_job(base, headers, job_id, count, poll_attempts, poll_interval)
+        return await self._poll_job(rest_base, headers, job_id, count, poll_attempts, poll_interval)
 
     _DONE_STATES  = {"done", "completed", "finished", "succeeded", "success"}
     _WAIT_STATES  = {"started", "running", "queued", "parsing", "pending", "in_progress"}
