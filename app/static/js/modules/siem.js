@@ -43,7 +43,19 @@ window.SIEMModule = {
         // ── SIEM type sélectionné (défaut: qradar) ──
         const siemType = this.state.siem_type || "qradar";
 
-        const isConfigured = !!SecretStore?.has?.(siemType)
+        // Elastic/Kibana acceptent Basic Auth (user/pass) comme alternative
+        // valide à la clé API — ne pas bloquer le bouton Run juste parce que
+        // le champ clé API est vide dans ce cas.
+        const basicAuthOk = (type) => {
+            if (type === "elasticsearch") {
+                return !!(SecretStore?.get("extra_elasticsearch_user") && SecretStore?.get("extra_elasticsearch_pass"));
+            }
+            if (type === "kibana") {
+                return !!(SecretStore?.get("extra_kibana_user") && SecretStore?.get("extra_kibana_pass"));
+            }
+            return false;
+        };
+        const isConfigured = !!SecretStore?.has?.(siemType) || basicAuthOk(siemType);
 
         const now  = new Date();
         const week = new Date(now - 7 * 86400000);
@@ -57,6 +69,7 @@ window.SIEMModule = {
             { key: "splunk",  label: "SPLUNK",  soon: false  },
             { key: "qradar",  label: "QRADAR",  soon: false },
             { key: "elasticsearch",  label: "ELASTIC", soon: false },
+            { key: "kibana",  label: "KIBANA",  soon: false },
         ];
 
         const typePickerHtml = `
@@ -164,8 +177,6 @@ window.SIEMModule = {
         const caseId = tabId ? App?.state?.tabs[tabId]?.caseId : null;
         if (!caseId) { console.warn("[SIEM] no active case"); return; }
 
-        // FIX : siemType n'était pas défini dans ce scope (ReferenceError → le bouton
-        // "Run Investigation" plantait silencieusement avant d'appeler App.runAction)
         const siemType = this.state.siem_type || "qradar";
 
         // Compute date strings → ISO or null
@@ -194,6 +205,13 @@ window.SIEMModule = {
             elasticsearch_user:     SecretStore?.get("extra_elasticsearch_user")       || "",
             elasticsearch_pass:     SecretStore?.get("extra_elasticsearch_pass")       || "",
             elasticsearch_indexes:  SecretStore?.getJSON("siem_logsources_elasticsearch", []),
+
+            // ── Kibana (ES via console proxy) ────────────────────
+            kibana:              SecretStore?.get("kibana")               || "",
+            kibana_url:          SecretStore?.get("extra_kibana_url")      || "",
+            kibana_user:         SecretStore?.get("extra_kibana_user")     || "",
+            kibana_pass:         SecretStore?.get("extra_kibana_pass")     || "",
+            kibana_indexes:      SecretStore?.getJSON("siem_logsources_kibana", []),
         };
 
 
@@ -203,7 +221,7 @@ window.SIEMModule = {
             panel.innerHTML = `
             <div class="flex items-center gap-2 text-[11px] text-slate-500 py-2">
                 <i data-lucide="loader" class="w-3.5 h-3.5 animate-spin text-teal-400"></i>
-                ${{ splunk: "Running SPL searches…", elasticsearch: "Running ES queries…" }[siemType] || "Running AQL queries…"}
+                ${{ splunk: "Running SPL searches…", elasticsearch: "Running ES queries…", kibana: "Running ES queries via Kibana…" }[siemType] || "Running AQL queries…"}
             </div>`;
             lucide.createIcons();
         }
