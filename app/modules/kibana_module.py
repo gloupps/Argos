@@ -24,8 +24,9 @@ Credentials / extra_config keys :
   kibana_user/pass   → Basic Auth alternative si pas de clé API
   kibana_indexes     → list of dicts [{id, name, ioc_type, search_field, output_fields}, ...]
                         stored in SecretStore as "siem_logsources_kibana"
-                        "name" = le pattern d'index réel (ex. "urlfeed-*"),
-                        PAS le nom d'affichage du Data View Kibana.
+                        "name" accepte soit un pattern d'index brut (ex. "urlfeed-*"),
+                        soit un Data View ID ou nom Kibana — résolu automatiquement
+                        au pattern réel via /api/data_views (cf. _resolve_index_pattern).
   date_start/date_end → ISO datetime string
 
 ioc_type ("— any —" / vide) : matche tous les types d'IOC présents dans le case
@@ -179,6 +180,68 @@ def _proxy_url(kibana_url: str, idx_name: str) -> str:
     """URL du endpoint console proxy pour un _search sur idx_name."""
     path = urllib.parse.quote(f"/{idx_name}/_search", safe="")
     return f"{kibana_url}/api/console/proxy?path={path}&method=POST"
+
+
+# Cache de résolution Data View → pattern d'index, en mémoire process.
+# Best-effort : évite de re-résoudre le même Data View à chaque IOC/tâche
+# parallèle dans un même job. Pas de TTL — un redémarrage du process vide
+# le cache (suffisant pour un outil local-only).
+_DV_CACHE: Dict[str, str] = {}
+
+
+async def _resolve_index_pattern(
+    requester, kibana_url: str, headers: Dict[str, str], value: str,
+) -> str:
+    """
+    Résout `value` en pattern d'index Elasticsearch réel.
+
+    `value` peut être :
+      - un pattern d'index brut (ex. "urlfeed-*")     → renvoyé tel quel si non résolvable en Data View
+      - un Data View ID Kibana (UUID)                  → résolu via /api/data_views/data_view/{id}
+      - un nom de Data View (ex. "Threat Feed Logs")   → résolu via /api/data_views (match par name/id)
+
+    Résolution best-effort : si aucune correspondance Data View n'est trouvée
+    (erreur API, 404, pas de match), `value` est utilisé tel quel comme pattern
+    d'index — fallback silencieux, garde la compatibilité avec les configs
+    existantes en pattern brut.
+    """
+    if not value or value == "*":
+        return value or "*"
+
+    cache_key = f"{kibana_url}::{value}"
+    if cache_key in _DV_CACHE:
+        return _DV_CACHE[cache_key]
+
+    resolved = value  # fallback par défaut : value utilisé tel quel
+
+    # 1) Tentative directe par ID (cas le plus courant : l'utilisateur colle
+    #    l'ID du Data View copié depuis Kibana → Stack Management → Data Views)
+    get_headers = {k: v for k, v in headers.items() if k != "Content-Type"}
+    try:
+        data = await requester.get(
+            f"{kibana_url}/api/data_views/data_view/{urllib.parse.quote(value, safe='')}",
+            headers=get_headers,
+        )
+        title = ((data or {}).get("data_view") or {}).get("title")
+        if title:
+            resolved = title
+    except Exception:
+        pass
+
+    # 2) Sinon, tentative par nom (liste tous les Data Views, match par name/id)
+    if resolved == value:
+        try:
+            listing = await requester.get(f"{kibana_url}/api/data_views", headers=get_headers)
+            for dv in (listing or {}).get("data_view", []):
+                if dv.get("name") == value or dv.get("id") == value:
+                    if dv.get("title"):
+                        resolved = dv["title"]
+                    break
+        except Exception:
+            pass
+
+    _DV_CACHE[cache_key] = resolved
+    return resolved
 
 
 def _extract_hits(indicator: str, total: int, hits: List[Dict],
@@ -349,9 +412,10 @@ class KibanaModule(Module):
         if not fields:
             return
 
+        resolved_idx  = await _resolve_index_pattern(self.requester, base_url, headers, idx_name)
         source_fields = output_fields if output_fields else _DEFAULT_CONTEXT_FIELDS
-        url = _proxy_url(base_url, idx_name)
-        result_label = f"kibana:{idx_name}"
+        url = _proxy_url(base_url, resolved_idx)
+        result_label = f"kibana:{idx_name}"   # label affiché = valeur saisie (nom/ID Data View ou pattern)
 
         for val in values:
             query = _build_es_query(val, fields, source_fields, date_range=date_range)
@@ -523,12 +587,13 @@ class KibanaInstanceModule(Module):
         search_fields = [search_field] if search_field else _IOC_FIELD_MAP.get(ioc_type, [])
         if not search_fields:
             return []
+        resolved_idx  = await _resolve_index_pattern(self.requester, base_url, headers, idx_name)
         source_fields = output_fields if output_fields else _DEFAULT_CONTEXT_FIELDS
         q = _build_es_query(indicator, search_fields, source_fields, date_range=date_range)
         data = await self.requester.post(
-            _proxy_url(base_url, idx_name), json=q, headers=headers,
+            _proxy_url(base_url, resolved_idx), json=q, headers=headers,
         )
-        return self._parse(indicator, data, idx_name, output_fields)
+        return self._parse(indicator, data, idx_name, output_fields)  # label affiché = valeur saisie
 
     def _parse(self, indicator, data, idx_label, output_fields) -> List[Dict]:
         if not data:
