@@ -154,7 +154,7 @@ window.SIEMInstances = {
             const search_field = row.querySelector(".siem-src-search-field")?.value.trim() || "";
             const output_fields = row.querySelector(".siem-src-fields")?.value.trim();
             if (!name) return;
-            updated.push({ id: id || `src${Date.now()}`, name, ioc_type, output_fields });
+            updated.push({ id: id || `src${Date.now()}`, name, ioc_type, search_field, output_fields });
         });
         this.saveSources(siemType, updated);
     },
