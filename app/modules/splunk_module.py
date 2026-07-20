@@ -321,6 +321,8 @@ class SplunkModule(Module):
         earliest: str,
         latest: str,
         count: int = 500,
+        poll_attempts: int = 15,
+        poll_interval: float = 1.0,
     ) -> Optional[Dict]:
         url     = f"{base}/services/search/jobs"
         headers = self._auth_headers(token)
@@ -336,7 +338,78 @@ class SplunkModule(Module):
             "count":         str(count),
             "output_mode":   "json",
         }
-        return await self.requester.post(url, headers=headers, data=payload)
+        data = await self.requester.post(url, headers=headers, data=payload)
+
+        # Cas standard "oneshot" : les résultats arrivent directement.
+        if data and "results" in data:
+            return data
+
+        # Cas job asynchrone (certains gateways/proxies LDAP ne supportent
+        # pas exec_mode=oneshot et renvoient une référence de job à poller,
+        # ex. {"job_id": "...", "status": "started"} ou {"sid": "..."}).
+        job_id = None
+        if isinstance(data, dict):
+            job_id = data.get("job_id") or data.get("sid") or data.get("id")
+        if not job_id:
+            return data
+
+        return await self._poll_job(base, headers, job_id, count, poll_attempts, poll_interval)
+
+    _DONE_STATES  = {"done", "completed", "finished", "succeeded", "success"}
+    _WAIT_STATES  = {"started", "running", "queued", "parsing", "pending", "in_progress"}
+
+    async def _poll_job(
+        self, base: str, headers: Dict[str, str], job_id: str,
+        count: int, poll_attempts: int, poll_interval: float,
+    ) -> Optional[Dict]:
+        status_url = f"{base}/services/search/jobs/{job_id}"
+
+        for _ in range(poll_attempts):
+            status_data = await self.requester.get(
+                status_url, headers=headers, params={"output_mode": "json"}
+            )
+            if not status_data:
+                return None
+
+            # Si le statut est déjà accompagné des résultats (certains
+            # wrappers custom les embarquent directement une fois "done").
+            if "results" in status_data:
+                return status_data
+
+            state = self._extract_state(status_data)
+            if state in self._DONE_STATES:
+                break
+            if state and state not in self._WAIT_STATES:
+                # État inconnu (ex. "failed", "error") → on arrête de poller.
+                return status_data
+
+            await asyncio.sleep(poll_interval)
+        else:
+            # Timeout de polling atteint sans état "done" confirmé.
+            return None
+
+        # Job terminé → récupérer les résultats.
+        results_url = f"{status_url}/results"
+        return await self.requester.get(
+            results_url,
+            headers=headers,
+            params={"output_mode": "json", "count": str(count)},
+        )
+
+    @staticmethod
+    def _extract_state(data: Dict) -> str:
+        """Cherche l'état du job dans les formats connus (custom gateway ou Splunk natif)."""
+        for key in ("status", "state"):
+            if isinstance(data.get(key), str):
+                return data[key].lower()
+        # Format Splunk natif : {"entry": [{"content": {"dispatchState": "DONE"}}]}
+        entries = data.get("entry") or []
+        if entries and isinstance(entries, list):
+            content = entries[0].get("content", {})
+            ds = content.get("dispatchState")
+            if isinstance(ds, str):
+                return ds.lower()
+        return ""
 
     def _extract_rows(self, data: Optional[Dict], max_rows: int = 200) -> List[Dict]:
         if not data:
