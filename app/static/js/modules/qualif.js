@@ -913,7 +913,7 @@ window.EnrichPanel = {
                         ${vulnBadge}${tlsBadge}${srcBadge}
                     </button>`;
             }).join("");
-            const overflow = allServices.length > 2 ? `<div class="pt-1">${this._listExpandBtn("Services", allServices.map(s => `${s.port}/${s.transport||"tcp"}${s.product?" ("+s.product+")":""}`))}</div>` : "";
+            const overflow = allServices.length > 2 ? `<div class="pt-1">${this._listExpandBtn("Services", allServices.map(({ svc: s = {} }) => `${s.port ?? "?"}/${s.transport||"tcp"}${s.product?" ("+s.product+")":""}`))}</div>` : "";
             return `<div class="space-y-0.5">${btns}${overflow}</div>`;
         }
 
