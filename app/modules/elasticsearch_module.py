@@ -505,7 +505,11 @@ class EsInstanceModule(Module):
         if not data:
             return [self._f(indicator, f"[{idx_label}] In Elasticsearch", "label-capsule", "Not found")]
         if data.get("error"):
-            reason = (data["error"].get("reason") or str(data["error"]))[:120]
+            # ES renvoie "error" en dict ({"reason": …}) ou en chaîne selon la
+            # version / le proxy : .get() sur une str levait AttributeError,
+            # avalée par gather() → l'index disparaissait sans message.
+            err = data["error"]
+            reason = ((err.get("reason") if isinstance(err, dict) else None) or str(err))[:120]
             return [self._f(indicator, f"[{idx_label}] Error", "label-capsule", reason)]
 
         hits_obj  = data.get("hits", {})
