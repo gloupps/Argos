@@ -292,7 +292,9 @@ class Database:
     async def undo_last_correlation(self, case_id):
         """Restaure le dernier snapshot complet."""
         cur = await self.db.execute(
-            "SELECT id, snapshot FROM correlation_history WHERE case_id=? ORDER BY timestamp DESC LIMIT 1",
+            # id (AUTOINCREMENT) et non timestamp : CURRENT_TIMESTAMP est à la
+            # seconde, deux snapshots de la même seconde étaient départagés au hasard.
+            "SELECT id, snapshot FROM correlation_history WHERE case_id=? ORDER BY id DESC LIMIT 1",
             (case_id,),
         )
         row = await cur.fetchone()
