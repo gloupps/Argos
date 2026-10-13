@@ -515,20 +515,17 @@ def register_routes(app, services, job_manager):
                     int(pivot_db_id_raw) if pivot_db_id_raw is not None else None
                 )
 
-                # ── Upsert le pivot ──
-                pivot_id = _get_or_create_pivot(pivot_label, pivot_db_id=pivot_db_id)
-                if not pivot_id:
-                    conn.close()
-                    return jsonify({"error": "could not create pivot"}), 500
-
                 # direction transmise par le frontend
                 # src_dir : sens du drag depuis src vers le pivot
                 # tgt_dir : sens opposé
                 link_type = data.get(
                     "link_type", "correlation"
                 )  # "correlation" ou "manual_directed"
+
+                # Bloquer un doublon AVANT de créer le pivot : sinon le
+                # pivot fraîchement inséré était détecté comme doublon
+                # (409 systématique + pivot orphelin laissé en base).
                 if link_type == "correlation":
-                    # Bloquer si un pivot avec ce nom existe déjà
                     dup_pivot = conn.execute(
                         "SELECT id FROM pivots WHERE case_id=? AND label=?",
                         (case_id, pivot_label),
@@ -543,7 +540,14 @@ def register_routes(app, services, job_manager):
                             ),
                             409,
                         )
-                elif link_type == "manual_directed":
+
+                # ── Upsert le pivot ──
+                pivot_id = _get_or_create_pivot(pivot_label, pivot_db_id=pivot_db_id)
+                if not pivot_id:
+                    conn.close()
+                    return jsonify({"error": "could not create pivot"}), 500
+
+                if link_type == "manual_directed":
                     # Lien manuel avec direction explicite (drag IOC→pivot ou pivot→IOC)
                     src_direction = data.get("src_direction", "out")
                     tgt_direction = "in" if src_direction == "out" else "out"
