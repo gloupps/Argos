@@ -422,6 +422,11 @@ def register_routes(app, services, job_manager):
                     "DELETE FROM correlation  WHERE case_id=? AND (src_indicator_id=? OR tgt_indicator_id=?)",
                     (case_id, ind_id, ind_id),
                 )
+                # Pas de CASCADE effective (foreign_keys OFF) → liens orphelins sinon
+                conn.execute(
+                    "DELETE FROM pivot_links  WHERE case_id=? AND indicator_id=?",
+                    (case_id, ind_id),
+                )
                 conn.execute("DELETE FROM indicators   WHERE id=?", (ind_id,))
                 conn.commit()
                 conn.close()
@@ -663,7 +668,13 @@ def register_routes(app, services, job_manager):
                 return jsonify({"error": "missing case_id or pivot_label"}), 400
             try:
                 conn = _get_conn(db_path)
-                # pivot_links supprimés par CASCADE
+                # PRAGMA foreign_keys n'est pas activé : ON DELETE CASCADE ne
+                # joue pas, on supprime les pivot_links explicitement.
+                conn.execute(
+                    """DELETE FROM pivot_links WHERE case_id=? AND pivot_id IN
+                       (SELECT id FROM pivots WHERE case_id=? AND label=?)""",
+                    (case_id, case_id, pivot_label),
+                )
                 conn.execute(
                     "DELETE FROM pivots WHERE case_id=? AND label=?",
                     (case_id, pivot_label),

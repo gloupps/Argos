@@ -375,7 +375,12 @@ class Database:
         await self.db.commit()
 
     async def delete_pivot(self, case_id, label):
-        """Supprime le pivot et tous ses liens (CASCADE)."""
+        """Supprime le pivot et tous ses liens (explicitement : foreign_keys OFF)."""
+        await self.db.execute(
+            """DELETE FROM pivot_links WHERE case_id=? AND pivot_id IN
+               (SELECT id FROM pivots WHERE case_id=? AND label=?)""",
+            (case_id, case_id, label),
+        )
         await self.db.execute(
             "DELETE FROM pivots WHERE case_id=? AND label=?",
             (case_id, label),
