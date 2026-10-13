@@ -233,7 +233,7 @@ class Services:
 
                     except Exception as e:
                         import traceback
-                        print(f"[VirusTotal]: {e}\n{traceback.format_exc()}")
+                        print(f"[{module.name}]: {e}\n{traceback.format_exc()}")
                         self.job_manager.add_log(
                             job_id, f"❌ [{module.name}] {ind['value']}: {e}"
                         )
