@@ -33,7 +33,14 @@ window.GraphModule = {
     create(tabId, caseId) {
         const container = document.getElementById("cy");
         if (!container) { console.warn("[Graph] #cy not found"); return; }
-        this.instances[tabId]?.cy?.destroy();
+
+        // Un seul #cy existe à la fois (la vue est remplacée à chaque changement
+        // d'onglet) : les instances des autres onglets sont détachées du DOM.
+        // On les détruit pour ne pas leur router les graph_update ni les fuir.
+        Object.keys(this.instances).forEach(tid => {
+            this.instances[tid]?.cy?.destroy();
+            delete this.instances[tid];
+        });
 
         const cy = cytoscape({
             container,
@@ -79,48 +86,82 @@ window.GraphModule = {
         cy.on("viewport", () => ContextMenu.hide());
 
         // ── Drag-to-link : clic droit maintenu ──────────────
-        const _hitNode = (clientX, clientY) => {
-            const rect = container.getBoundingClientRect();
-            const x = clientX - rect.left;
-            const y = clientY - rect.top;
-            return cy.nodes().filter(n => {
-                const np = n.renderedPosition();
-                const w  = n.renderedWidth()  / 2 + 12;
-                const h  = n.renderedHeight() / 2 + 12;
-                return Math.abs(np.x - x) <= w && Math.abs(np.y - y) <= h;
-            })[0] || null;
-        };
+        // Les écouteurs DOM sont posés UNE fois par conteneur / par document
+        // et lisent le contexte courant : create() peut être rappelé sur le
+        // même #cy (refreshGraph) et l'était à chaque loadView, ce qui
+        // empilait des handlers liés à d'anciennes instances.
+        container._graphCtx = { cy, caseId, tabId };
+        if (!container._graphBound) {
+            container._graphBound = true;
 
-        container.addEventListener("mousedown", e => {
-            if (e.button !== 2) return;
-            const node = _hitNode(e.clientX, e.clientY);
-            if (!node) return;
-            e.preventDefault();
-            LinkDrag.start(node, caseId, cy, tabId);
-        });
+            container.addEventListener("mousedown", e => {
+                if (e.button !== 2) return;
+                const ctx = container._graphCtx;
+                if (!ctx || ctx.cy.destroyed()) return;
+                const node = this._hitNode(ctx.cy, e.clientX, e.clientY);
+                if (!node) return;
+                e.preventDefault();
+                LinkDrag.start(node, ctx.caseId, ctx.cy, ctx.tabId);
+            });
 
-        container.addEventListener("mousemove", e => {
-            LinkDrag.move(e, cy);
-        });
+            container.addEventListener("mousemove", e => {
+                const ctx = container._graphCtx;
+                if (ctx && !ctx.cy.destroyed()) LinkDrag.move(e, ctx.cy);
+            });
 
-        const _onDocMouseUp = e => {
+            container.addEventListener("contextmenu", e => {
+                if (LinkDrag.isActive()) { e.preventDefault(); LinkDrag.cancel(); }
+            });
+        }
+
+        this._bindDocumentListeners();
+    },
+
+    _hitNode(cy, clientX, clientY) {
+        const rect = cy.container().getBoundingClientRect();
+        const x = clientX - rect.left;
+        const y = clientY - rect.top;
+        return cy.nodes().filter(n => {
+            const np = n.renderedPosition();
+            const w  = n.renderedWidth()  / 2 + 12;
+            const h  = n.renderedHeight() / 2 + 12;
+            return Math.abs(np.x - x) <= w && Math.abs(np.y - y) <= h;
+        })[0] || null;
+    },
+
+    // Écouteurs globaux (mouseup du drag-to-link, Ctrl+F) — enregistrés une
+    // seule fois. Auparavant ajoutés à chaque create() : N handlers après N
+    // chargements de vue → Ctrl+F basculait N fois (no-op si N pair) et un
+    // handler périmé pouvait terminer un drag sur un nœud d'un autre graphe.
+    _docListenersBound: false,
+
+    _bindDocumentListeners() {
+        if (this._docListenersBound) return;
+        this._docListenersBound = true;
+
+        document.addEventListener("mouseup", e => {
             if (e.button !== 2) return;
             if (!LinkDrag.isActive()) return;
             e.preventDefault();
-            const node = _hitNode(e.clientX, e.clientY);
+            const cy = LinkDrag._cy;
+            const node = cy && !cy.destroyed() ? this._hitNode(cy, e.clientX, e.clientY) : null;
             if (node && node.id() !== LinkDrag.srcId()) {
-                LinkDrag.end(node, tabId);
+                LinkDrag.end(node, LinkDrag._tabId);
             } else {
                 LinkDrag.cancel();
             }
-        };
-        document.addEventListener("mouseup", _onDocMouseUp);
-
-        container.addEventListener("contextmenu", e => {
-            if (LinkDrag.isActive()) { e.preventDefault(); LinkDrag.cancel(); }
         });
 
-        this._initSearch(tabId);
+        // Keyboard shortcut Ctrl+F / Cmd+F
+        document.addEventListener("keydown", e => {
+            if (!((e.ctrlKey || e.metaKey) && e.key === "f")) return;
+            if (!this.instances[App?.state?.activeTab]) return;
+            const wrapper = document.getElementById("cy")?.closest(".glass");
+            if (!wrapper) return;
+            e.preventDefault();
+            const bar = document.getElementById("graph-search-bar");
+            if (bar) { bar.classList.toggle("hidden"); bar.querySelector("input")?.focus(); }
+        });
     },
 
     async loadCase(tabId, caseId) {
@@ -501,21 +542,6 @@ window.GraphModule = {
     },
 
     // ── Recherche de nœuds ───────────────────────────────
-    _initSearch(tabId) {
-        // Keyboard shortcut Ctrl+F / Cmd+F
-        document.addEventListener("keydown", e => {
-            const inst = this.instances[tabId];
-            if (!inst) return;
-            if ((e.ctrlKey || e.metaKey) && e.key === "f") {
-                const wrapper = document.getElementById("cy")?.closest(".glass");
-                if (!wrapper) return;
-                e.preventDefault();
-                const bar = document.getElementById("graph-search-bar");
-                if (bar) { bar.classList.toggle("hidden"); bar.querySelector("input")?.focus(); }
-            }
-        });
-    },
-
     searchNodes(tabId, query) {
         const inst = this.instances[tabId];
         if (!inst) return;
