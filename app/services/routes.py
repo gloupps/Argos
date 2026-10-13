@@ -274,7 +274,16 @@ def register_routes(app, services, job_manager):
 
     @app.route("/api/run", methods=["POST"])
     def api_run():
-        data = request.get_json(force=True) or {}
+        # Anti-CSRF : un site tiers peut envoyer un POST "simple" (text/plain)
+        # vers 127.0.0.1 sans preflight CORS. Exiger application/json force le
+        # preflight (refusé, aucun header CORS côté Flask) et on rejette tout
+        # Origin étranger explicite.
+        if not request.is_json:
+            return jsonify({"error": "Content-Type must be application/json"}), 415
+        origin = request.headers.get("Origin")
+        if origin and origin.rstrip("/") != request.host_url.rstrip("/"):
+            return jsonify({"error": "cross-origin request refused"}), 403
+        data = request.get_json(silent=True) or {}
         action = data.get("action")
         if not action:
             return jsonify({"error": "missing action"}), 400

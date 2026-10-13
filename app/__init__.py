@@ -12,7 +12,10 @@ class PivotLenApp:
 
     def __init__(self):
         self.app      = Flask(__name__)
-        self.socketio = SocketIO(self.app, cors_allowed_origins="*")
+        # cors_allowed_origins par défaut (None) = même origine uniquement :
+        # "*" laissait n'importe quel site ouvert dans le navigateur se
+        # connecter au socket et recevoir graphes / résultats SIEM diffusés.
+        self.socketio = SocketIO(self.app)
         self.app.socketio = self.socketio
 
         self.job_manager = JobManager(self.socketio)
