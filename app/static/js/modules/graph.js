@@ -920,7 +920,9 @@ window.ContextMenu = {
             items.push(this._item("trash-2", "Delete pivot", "Remove pivot and its edges",     "red",
                 () => this._runDeleteNode(nodeData, caseId)));
 
-        } else if (nodeType === "root" || nodeType === "correlated") {
+        } else if (nodeType === "root" || nodeType === "correlated" || nodeType === "pivoted") {
+            // "pivoted" (ajout manuel « Pivoted IOC ») est un IOC à part entière :
+            // sans lui ici il tombait dans le menu « Add indicator » du canevas.
             // ── Section : Enrichment ──────────────────────
             items.push(this._sectionLabel("Enrichment"));
             items.push(this._item("zap",       "Enrich",            "Enrich via enrichment modules (VT, Shodan…)", "blue",
