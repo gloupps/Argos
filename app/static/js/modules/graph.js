@@ -1074,8 +1074,13 @@ window.ContextMenu = {
         const el = document.createElement("div");
         el.className = "px-3 py-2 border-b border-slate-800 flex items-center gap-2";
         el.innerHTML = `
-            <span class="text-slate-200 text-xs font-bold mono truncate max-w-[150px]" title="${label}">${label}</span>
-            <span class="bg-slate-700 text-slate-400 text-[9px] px-1.5 py-0.5 rounded uppercase shrink-0">${type}</span>`;
+            <span class="text-slate-200 text-xs font-bold mono truncate max-w-[150px]"></span>
+            <span class="bg-slate-700 text-slate-400 text-[9px] px-1.5 py-0.5 rounded uppercase shrink-0"></span>`;
+        // Valeurs d'IOC non fiables (API tierces) → textContent, jamais innerHTML
+        const [lblEl, typeEl] = el.querySelectorAll("span");
+        lblEl.textContent = label ?? "";
+        lblEl.title       = label ?? "";
+        typeEl.textContent = type ?? "";
         return el;
     },
 

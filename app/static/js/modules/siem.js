@@ -262,9 +262,9 @@ window.SIEMModule = {
         <div class="flex items-center justify-between mb-3 text-[10px]">
             <span class="text-slate-400">
                 <span class="text-teal-400 font-bold font-mono">${hitIOCs}/${iocs.length}</span> IOCs with hits ·
-                <span class="text-teal-400 font-bold font-mono">${totalHits}</span> total events
+                <span class="text-teal-400 font-bold font-mono">${this._esc(totalHits)}</span> total events
             </span>
-            <span class="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-500 font-mono uppercase">${siemType}</span>
+            <span class="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-500 font-mono uppercase">${this._esc(siemType)}</span>
         </div>
         <div class="space-y-1.5">`;
 
@@ -313,14 +313,14 @@ window.SIEMModule = {
             <div class="overflow-x-auto mt-1.5 rounded border border-slate-800/80">
                 <table class="w-full text-[9px] font-mono">
                     <thead><tr class="bg-slate-900 text-slate-600">
-                        ${headers.map(h => `<th class="px-1.5 py-0.5 text-left whitespace-nowrap">${h}</th>`).join("")}
+                        ${headers.map(h => `<th class="px-1.5 py-0.5 text-left whitespace-nowrap">${this._esc(h)}</th>`).join("")}
                     </tr></thead>
                     <tbody class="divide-y divide-slate-800/60">
                         ${preview.map(row => `
                         <tr class="hover:bg-slate-800/30">
                             ${headers.map(h => `
                             <td class="px-1.5 py-0.5 text-slate-400 max-w-[90px] truncate"
-                                title="${String(row[h] || "").replace(/"/g, "&quot;")}">${row[h] || ""}</td>
+                                title="${this._esc(row[h] || "")}">${this._esc(row[h] || "")}</td>
                             `).join("")}
                         </tr>`).join("")}
                     </tbody>
@@ -334,23 +334,23 @@ window.SIEMModule = {
                 ? subSources.map(([k, v]) => {
                     const n = k.replace(siemType + ":", "");
                     const c = v.events > 0 ? "text-orange-300 bg-orange-500/10 border-orange-500/30" : "text-slate-600 bg-slate-800 border-slate-700";
-                    return `<span class="text-[9px] px-1 py-0.5 rounded border font-mono ${c}">${n}: ${v.events}</span>`;
+                    return `<span class="text-[9px] px-1 py-0.5 rounded border font-mono ${c}">${this._esc(n)}: ${this._esc(v.events)}</span>`;
                   }).join("")
                 : "";
 
             html += `
             <div class="rounded-lg border border-slate-800 bg-slate-900/40 overflow-hidden">
                 <div class="flex items-center gap-2 px-2.5 py-1.5 flex-wrap">
-                    <span class="flex-1 font-mono text-[10px] text-slate-200 truncate min-w-0" title="${ioc}">${ioc}</span>
+                    <span class="flex-1 font-mono text-[10px] text-slate-200 truncate min-w-0" title="${this._esc(ioc)}">${this._esc(ioc)}</span>
                     ${subBadges}
                     <span class="text-[9px] px-1.5 py-0.5 rounded border font-bold shrink-0 ${hitColor}">
-                        ${totalSubHits} hit${totalSubHits !== 1 ? "s" : ""}
+                        ${this._esc(totalSubHits)} hit${totalSubHits !== 1 ? "s" : ""}
                     </span>
-                    ${link ? `<a href="${link}" target="_blank" rel="noopener"
-                                 title="Open in ${siemType}"
+                    ${link ? `<a href="${this._url(link)}" target="_blank" rel="noopener"
+                                 title="Open in ${this._esc(siemType)}"
                                  class="text-slate-600 hover:text-teal-400 transition shrink-0">
                                  <i data-lucide="external-link" class="w-3 h-3"></i></a>` : ""}
-                    ${flowLink ? `<a href="${flowLink}" target="_blank" rel="noopener"
+                    ${flowLink ? `<a href="${this._url(flowLink)}" target="_blank" rel="noopener"
                                      title="Flows"
                                      class="text-slate-600 hover:text-blue-400 transition shrink-0">
                                      <i data-lucide="activity" class="w-3 h-3"></i></a>` : ""}
@@ -372,7 +372,13 @@ window.SIEMModule = {
 
     _esc(str) {
         return String(str ?? "")
-            .replace(/&/g, "&amp;").replace(/"/g, "&quot;")
+            .replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/'/g, "&#39;")
             .replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    },
+
+    // Liens SIEM : uniquement http(s) (bloque javascript:, data:…)
+    _url(str) {
+        const s = String(str ?? "").trim();
+        return /^https?:\/\//i.test(s) ? this._esc(s) : "#";
     },
 };

@@ -43,9 +43,10 @@ window.Tabs = {
         tab.dataset.id = tabId;
         tab.draggable = true;
         tab.innerHTML = `
-            <span class="tab-label truncate max-w-[140px]">${tabData.name}</span>
+            <span class="tab-label truncate max-w-[140px]"></span>
             <span class="ml-1 text-slate-400 hover:text-red-400 cursor-pointer leading-none" data-close="true">×</span>
         `;
+        tab.querySelector(".tab-label").textContent = tabData.name;
         tab.addEventListener("click", e => { if (!e.target.dataset.close) this.activate(tabId); });
         tab.querySelector("[data-close]").addEventListener("click", e => { e.stopPropagation(); this.close(tabId); });
 

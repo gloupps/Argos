@@ -236,7 +236,9 @@ window.JobLog = {
             status === "failed" ? "text-red-400"   : "text-slate-300"
         }`;
         const icon = status === "done" ? "✓" : status === "failed" ? "✗" : "›";
-        line.innerHTML = `<span class="text-slate-500 shrink-0">${icon}</span><span class="break-all">${message}</span>`;
+        // message contient des valeurs d'IOC / erreurs d'API tierces → textContent
+        line.innerHTML = `<span class="text-slate-500 shrink-0">${icon}</span><span class="break-all"></span>`;
+        line.lastElementChild.textContent = message ?? "";
         this.el.appendChild(line);
         this.el.scrollTop = this.el.scrollHeight;
         if (status === "done" || status === "failed") {
