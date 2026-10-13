@@ -935,7 +935,10 @@ class Services:
         if not data.get("url_checkbox", True):
             dict_indicators.pop("Url", None)
         if not data.get("stixfile_checkbox", True):
-            dict_indicators.pop("StixFile", None)
+            # classify_indicators() sépare les hashes par algorithme :
+            # retirer seulement "StixFile" laissait passer tous les hashes.
+            for key in ("StixFile", "StixFile-MD5", "StixFile-SHA1", "StixFile-SHA256"):
+                dict_indicators.pop(key, None)
 
         if not dict_indicators:
             self.job_manager.add_log(
