@@ -213,6 +213,11 @@ async def _resolve_index_pattern(
         return _DV_CACHE[cache_key]
 
     resolved = value  # fallback par défaut : value utilisé tel quel
+    # Ne mettre en cache que si Kibana a effectivement répondu : un échec
+    # transitoire (réseau, 401, timeout) figeait sinon le fallback brut
+    # (ex. un UUID de Data View utilisé comme nom d'index) jusqu'au
+    # redémarrage du process.
+    definitive = False
 
     # 1) Tentative directe par ID (cas le plus courant : l'utilisateur colle
     #    l'ID du Data View copié depuis Kibana → Stack Management → Data Views)
@@ -225,6 +230,7 @@ async def _resolve_index_pattern(
         title = ((data or {}).get("data_view") or {}).get("title")
         if title:
             resolved = title
+            definitive = True
     except Exception:
         pass
 
@@ -232,6 +238,8 @@ async def _resolve_index_pattern(
     if resolved == value:
         try:
             listing = await requester.get(f"{kibana_url}/api/data_views", headers=get_headers)
+            if isinstance(listing, dict):
+                definitive = True  # liste obtenue : "pas de match" est fiable
             for dv in (listing or {}).get("data_view", []):
                 if dv.get("name") == value or dv.get("id") == value:
                     if dv.get("title"):
@@ -240,7 +248,8 @@ async def _resolve_index_pattern(
         except Exception:
             pass
 
-    _DV_CACHE[cache_key] = resolved
+    if definitive:
+        _DV_CACHE[cache_key] = resolved
     return resolved
 
 
