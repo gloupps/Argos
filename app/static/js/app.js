@@ -226,9 +226,15 @@ const App = {
 
 window.JobLog = {
     el: null, _timer: null,
-    init() { this.el = document.getElementById("job-log"); },
+    init() { this._resolveEl(); },
+    // #job-log vit dans ongoing_case.html, injecté APRÈS init() et remplacé
+    // à chaque loadView : on re-résout l'élément s'il est absent ou détaché.
+    _resolveEl() {
+        if (!this.el || !this.el.isConnected) this.el = document.getElementById("job-log");
+        return this.el;
+    },
     push({ message, status }) {
-        if (!this.el) return;
+        if (!this._resolveEl()) return;
         this.el.classList.remove("hidden");
         const line = document.createElement("div");
         line.className = `text-[10px] font-mono flex gap-2 ${
