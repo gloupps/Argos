@@ -2311,13 +2311,15 @@ window.EnrichPanel = {
 
         EnrichPanel._selectAllCompareMods = function(selectAll) {
             document.querySelectorAll(".compare-mod-pill").forEach(btn => {
+                // Style actif (violet) = sélectionné ; était inversé par rapport
+                // à data-active (et à _toggleCompareMod).
                 btn.dataset.active = selectAll ? "true" : "false";
-                btn.classList.toggle("bg-violet-600/30", !selectAll);
-                btn.classList.toggle("border-violet-500/60", !selectAll);
-                btn.classList.toggle("text-violet-300", !selectAll);
-                btn.classList.toggle("bg-slate-800", selectAll);
-                btn.classList.toggle("border-slate-700", selectAll);
-                btn.classList.toggle("text-slate-400", selectAll);
+                btn.classList.toggle("bg-violet-600/30", selectAll);
+                btn.classList.toggle("border-violet-500/60", selectAll);
+                btn.classList.toggle("text-violet-300", selectAll);
+                btn.classList.toggle("bg-slate-800", !selectAll);
+                btn.classList.toggle("border-slate-700", !selectAll);
+                btn.classList.toggle("text-slate-400", !selectAll);
             });
             EnrichPanel._applyCompareModFilter();
         };
